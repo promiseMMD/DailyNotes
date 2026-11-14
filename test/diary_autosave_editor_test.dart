@@ -64,7 +64,7 @@ void main() {
 
     expect(find.text('本机已保存'), findsOneWidget);
     expect(find.textContaining('WebDAV 未同步'), findsOneWidget);
-    expect((await journal.readDiary('widget-diary'))?.body, 'test text');
+    expect((await tester.runAsync(() => journal.readDiary('widget-diary')))?.body, 'test text');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -91,7 +91,7 @@ void main() {
     expect(find.byKey(const Key('experimental-retry')), findsOneWidget);
     expect(find.byKey(const Key('experimental-copy')), findsOneWidget);
     expect(find.text('本机已保存'), findsNothing);
-    expect(await journal.readDiary('widget-diary'), isNull);
+    expect(await tester.runAsync(() => journal.readDiary('widget-diary')), isNull);
 
     failing = false;
     await tester.tap(find.byKey(const Key('experimental-retry')));
@@ -100,7 +100,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('本机已保存'), findsOneWidget);
-    expect((await journal.readDiary('widget-diary'))?.body,
+    expect((await tester.runAsync(() => journal.readDiary('widget-diary')))?.body,
         'unsaved user typing');
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -145,7 +145,7 @@ void main() {
     expect(find.text('存在未完成的本机保存'), findsOneWidget);
     expect(find.byKey(const Key('experimental-diary-input')), findsOneWidget);
     expect(session!.text, 'keep it in the editor');
-    expect(await journal.readDiary('widget-diary'), isNull);
+    expect(await tester.runAsync(() => journal.readDiary('widget-diary')), isNull);
 
     await tester.tap(find.text('继续编辑'));
     await tester.pumpAndSettle();
