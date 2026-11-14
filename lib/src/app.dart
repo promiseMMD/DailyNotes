@@ -814,7 +814,7 @@ class MyPage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              '本机实验日记 ${previewDiaryCount} 篇（非正式统计）',
+              '本机实验日记 $previewDiaryCount 篇（非正式统计）',
               style: const TextStyle(color: previewMuted, fontSize: 11),
             ),
             const SizedBox(height: 24),
