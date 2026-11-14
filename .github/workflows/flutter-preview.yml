@@ -1,0 +1,37 @@
+name: Flutter UI preview
+
+on:
+  push:
+    branches:
+      - "feat/**"
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate missing Android embedding
+        run: flutter create --platforms=android --project-name dailynotes .
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze
+      - name: Widget tests
+        run: flutter test
+      - name: Debug preview APK (not a data-safe release)
+        run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dailynotes-ui-preview-not-for-real-data
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
