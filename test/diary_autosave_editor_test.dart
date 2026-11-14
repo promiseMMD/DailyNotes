@@ -58,7 +58,8 @@ void main() {
       find.byKey(const Key('experimental-diary-input')),
       'test text',
     );
-    await session!.waitForIdle();
+    await tester.pump();
+    await tester.runAsync(() => session!.waitForIdle());
     await tester.pump();
 
     expect(find.text('本机已保存'), findsOneWidget);
@@ -82,7 +83,8 @@ void main() {
       find.byKey(const Key('experimental-diary-input')),
       'unsaved user typing',
     );
-    await session!.waitForIdle();
+    await tester.pump();
+    await tester.runAsync(() => session!.waitForIdle());
     await tester.pump();
 
     expect(find.textContaining('本机保存失败'), findsOneWidget);
@@ -93,7 +95,8 @@ void main() {
 
     failing = false;
     await tester.tap(find.byKey(const Key('experimental-retry')));
-    await session!.waitForIdle();
+    await tester.pump();
+    await tester.runAsync(() => session!.waitForIdle());
     await tester.pump();
 
     expect(find.text('本机已保存'), findsOneWidget);
@@ -133,7 +136,8 @@ void main() {
       find.byKey(const Key('experimental-diary-input')),
       'keep it in the editor',
     );
-    await session!.waitForIdle();
+    await tester.pump();
+    await tester.runAsync(() => session!.waitForIdle());
     await tester.pump();
 
     await tester.pageBack();
