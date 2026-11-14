@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'preview/soft_components.dart';
+
 /// Navigation-only proof of concept. This app deliberately performs NO writes.
 class DailyNotesApp extends StatelessWidget {
   const DailyNotesApp({super.key});
@@ -11,7 +13,16 @@ class DailyNotesApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6D7B69)),
+        colorScheme: ColorScheme.fromSeed(seedColor: previewSage),
+        scaffoldBackgroundColor: previewCanvas,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: previewCanvas,
+          foregroundColor: previewInk,
+          centerTitle: false,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
       ),
       home: const DailyNotesShell(),
     );
@@ -116,34 +127,98 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   }
 
   Widget _buildDrawer() {
+    const menuIcons = [
+      Icons.person_outline,
+      Icons.cloud_sync_outlined,
+      Icons.palette_outlined,
+      Icons.category_outlined,
+      Icons.inventory_2_outlined,
+      Icons.calendar_month_outlined,
+      Icons.fact_check_outlined,
+      Icons.history_outlined,
+      Icons.lock_outline,
+      Icons.import_export_outlined,
+    ];
     return Drawer(
       width: MediaQuery.sizeOf(context).width * .76,
+      backgroundColor: previewCanvas,
       child: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ListTile(
-              title: Text('DailyNotes', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('结构预览 · 未接入真实数据'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 21, 16, 19),
+              child: Row(
+                children: [
+                  Container(
+                    height: 41,
+                    width: 41,
+                    decoration: BoxDecoration(
+                      color: previewSoftSage,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: const Icon(Icons.menu_book_outlined, color: previewSage),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('DailyNotes', style: TextStyle(
+                          fontSize: 17,
+                          color: previewInk,
+                          fontWeight: FontWeight.w700,
+                        )),
+                        SizedBox(height: 3),
+                        Text('一切都从记录开始', style: TextStyle(
+                          fontSize: 11, color: previewMuted,
+                        )),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const Divider(height: 1),
+            const PreviewThinDivider(),
             Expanded(
               child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 itemCount: _drawerItems.length,
                 itemBuilder: (_, index) {
-                  final title = _drawerItems[index];
-                  return ListTile(
-                    dense: true,
-                    title: Text(title),
-                    onTap: () => _openDrawerDestination(title),
+                  final name = _drawerItems[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    child: ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 13),
+                      minLeadingWidth: 20,
+                      horizontalTitleGap: 13,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      leading: Icon(menuIcons[index], color: previewSage, size: 19),
+                      title: Text(name, style: const TextStyle(
+                        color: previewInk, fontSize: 13,
+                      )),
+                      onTap: () => _openDrawerDestination(name),
+                    ),
                   );
                 },
               ),
             ),
-            const Divider(height: 1),
-            ListTile(
-              title: const Text('设置'),
-              leading: const Icon(Icons.settings_outlined),
-              onTap: () => _openDrawerDestination('设置'),
+            const PreviewThinDivider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(7, 4, 7, 5),
+              child: ListTile(
+                leading: const Icon(Icons.settings_outlined, color: previewSage),
+                title: const Text('设置', style: TextStyle(
+                  color: previewInk,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                )),
+                onTap: () => _openDrawerDestination('设置'),
+              ),
             ),
           ],
         ),
@@ -151,55 +226,85 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
     );
   }
 
-  Widget _buildSubtabs(List<String> titles, int selected, ValueChanged<int> onSelect) {
-    return Row(
-      children: [
-        for (var i = 0; i < titles.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: TextButton(
-              onPressed: () => onSelect(i),
-              child: Text(
-                titles[i],
-                style: TextStyle(
-                  fontWeight: selected == i ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-            ),
-          ),
-      ],
+  Widget _buildSubtabs(
+    List<String> titles,
+    int selected,
+    ValueChanged<int> onSelect,
+  ) {
+    return PreviewTabStrip(
+      labels: titles,
+      activeIndex: selected,
+      onSelect: onSelect,
     );
   }
 
   Widget _section(String title, String emptyMessage, {String? subtitle}) {
+    final icon = switch (title) {
+      '常用文件夹' || '文件夹目录' => Icons.folder_open_outlined,
+      '最近笔记' => Icons.sticky_note_2_outlined,
+      '一级知识主题' => Icons.account_tree_outlined,
+      '当天任务' || '按时间分组' => Icons.check_circle_outline,
+      '助手' => Icons.auto_awesome_outlined,
+      _ => Icons.description_outlined,
+    };
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.only(top: 17),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          if (subtitle != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Text(emptyMessage, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          PreviewSectionHeader(title: title, subtitle: subtitle),
+          PreviewEmptyState(
+            icon: icon,
+            title: emptyMessage,
+            description: '当前为结构预览，尚未接入真实内容。',
+            compact: true,
           ),
-          const Divider(height: 1),
+          const PreviewThinDivider(),
         ],
       ),
     );
   }
 
   Widget _diaryPage() {
+    final now = DateTime.now();
+    final month = '${now.year}年${now.month}月';
     return ListView(
       key: const Key('diary-page'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
       children: [
-        _section('长期记录', '暂无可读取的长期记录', subtitle: '每条长期记录的独立「追加」入口将在数据层完成后出现'),
-        _section('最近日记', '暂无可读取的日记', subtitle: '普通日记按主分类筛选；长期记录不参与该筛选'),
+        PreviewPageIntro(
+          kicker: 'DAILYNOTES  ·  $month',
+          title: '好好记录，慢慢生活',
+          subtitle: '日记是留给自己的时间，不必写得完美。',
+        ),
+        const PreviewSectionHeader(
+          title: '长期记录',
+          subtitle: '长期观察独立于普通日记；每条记录保留自己的追加入口',
+        ),
+        const PreviewEmptyState(
+          icon: Icons.auto_stories_outlined,
+          title: '暂无可读取的长期记录',
+          description: '未来可持续记录饮食、健康和生活中的变化。',
+          compact: true,
+        ),
+        const PreviewThinDivider(),
+        const SizedBox(height: 24),
+        const PreviewSectionHeader(
+          title: '最近日记',
+          subtitle: '按时间连续阅读，避免大卡片打断内容',
+        ),
+        const PreviewEmptyState(
+          icon: Icons.event_note_outlined,
+          title: '暂无可读取的日记',
+          description: '这里将展示真实日记的日期与正文预览。',
+        ),
+        const PreviewThinDivider(),
+        const SizedBox(height: 21),
+        const Text(
+          '仅界面预览 · 尚未接入正式日记保存',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: previewMuted, fontSize: 11),
+        ),
       ],
     );
   }
@@ -207,13 +312,24 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   Widget _todoPage() {
     return ListView(
       key: const Key('todo-page'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
       children: [
-        _buildSubtabs(['当天待办', '分组待办'], _todoSubtab, (value) => setState(() => _todoSubtab = value)),
+        const PreviewPageIntro(
+          kicker: 'YOUR DAY',
+          title: '把今天留给重要的事',
+          subtitle: '简洁地查看任务，专注于接下来的一步。',
+        ),
+        _buildSubtabs(
+          ['当天待办', '分组待办'],
+          _todoSubtab,
+          (value) => setState(() => _todoSubtab = value),
+        ),
         if (_todoSubtab == 0)
-          _section('当天任务', '暂无可读取的待办记录')
+          _section('当天任务', '暂无可读取的待办记录',
+              subtitle: '当天任务集中在这里呈现')
         else
-          _section('按时间分组', '任务分组规则仍待确认；不会创建重复任务'),
+          _section('按时间分组', '尚无可读取的分组任务',
+              subtitle: '逾期、今天与未来任务将共享同一数据源'),
       ],
     );
   }
@@ -221,15 +337,46 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   Widget _notePage() {
     return ListView(
       key: const Key('notes-page'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
       children: [
-        _buildSubtabs(['普通笔记', '知识库'], _noteSubtab, (value) => setState(() => _noteSubtab = value)),
+        const PreviewPageIntro(
+          kicker: 'THOUGHTS & KNOWLEDGE',
+          title: '想法，都有自己的位置',
+          subtitle: '笔记留住灵感，知识库负责建立联系。',
+        ),
+        _buildSubtabs(
+          ['普通笔记', '知识库'],
+          _noteSubtab,
+          (value) => setState(() => _noteSubtab = value),
+        ),
         if (_noteSubtab == 0) ...[
-          _section('常用文件夹', '暂无可读取的文件夹', subtitle: '正式首页展示最多 4 个常用文件夹，并提供查看全部入口'),
-          _section('文件夹目录', '树形导航将在文件夹数据层完成后接入'),
-          _section('最近笔记', '暂无可读取的笔记'),
+          Padding(
+            padding: const EdgeInsets.only(top: 17),
+            child: PreviewSectionHeader(
+              title: '常用文件夹',
+              subtitle: '正式版本展示 4 个常用文件夹',
+              trailing: TextButton(
+                onPressed: () => _notImplemented('查看全部文件夹'),
+                child: const Text('查看全部', style: TextStyle(
+                  color: previewSage, fontSize: 12,
+                )),
+              ),
+            ),
+          ),
+          const PreviewEmptyState(
+            icon: Icons.folder_open_outlined,
+            title: '暂无可读取的文件夹',
+            description: '文件夹将按实际使用情况排列，不展示虚构示例。',
+            compact: true,
+          ),
+          const PreviewThinDivider(),
+          _section('文件夹目录', '尚未连接文件夹目录',
+              subtitle: '保留树形导航入口，按需进入完整目录'),
+          _section('最近笔记', '暂无可读取的笔记',
+              subtitle: '近期编辑的标题、摘要及标签将在此展示'),
         ] else
-          _section('一级知识主题', '暂无可读取的知识主题', subtitle: '按主题逐级进入，不复制关联笔记正文'),
+          _section('一级知识主题', '暂无可读取的知识主题',
+              subtitle: '逐级进入主题，关联原始笔记而不复制正文'),
       ],
     );
   }
@@ -237,9 +384,20 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   Widget _assistantPage() {
     return ListView(
       key: const Key('assistant-page'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
       children: [
-        _section('助手', '尚未接入 AI 服务', subtitle: '目前不会读取或向外部服务发送任何日记和笔记内容'),
+        const PreviewPageIntro(
+          kicker: 'ASSISTANT',
+          title: '整理思绪的另一种方式',
+          subtitle: '助手将来可以协助检索与梳理你的记录。',
+        ),
+        const PreviewSectionHeader(title: '助手'),
+        const PreviewEmptyState(
+          icon: Icons.auto_awesome_outlined,
+          title: '尚未接入 AI 服务',
+          description: '目前不会读取、同步或向外部服务发送日记与笔记。',
+        ),
+        const PreviewThinDivider(),
       ],
     );
   }
@@ -256,7 +414,14 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(_tabNames[_selectedTab]),
+        title: Text(
+          _tabNames[_selectedTab],
+          style: const TextStyle(
+            fontSize: 17,
+            color: previewInk,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         leading: _selectedTab == 0
             ? IconButton(
                 tooltip: '打开侧边栏',
@@ -276,6 +441,9 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
       drawer: _selectedTab == 0 ? _buildDrawer() : null,
       body: SafeArea(child: content),
       bottomNavigationBar: NavigationBar(
+        height: 75,
+        backgroundColor: previewCanvas,
+        indicatorColor: previewSoftSage,
         selectedIndex: _selectedTab,
         onDestinationSelected: (index) {
           if (index == 4) {
@@ -289,7 +457,7 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
           NavigationDestination(icon: Icon(Icons.checklist_outlined), label: '待办'),
           NavigationDestination(icon: Icon(Icons.note_outlined), label: '笔记'),
           NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: '助手'),
-          NavigationDestination(icon: Icon(Icons.add_circle_outline), label: '新建'),
+          NavigationDestination(icon: PreviewCreateGlyph(), label: '新建'),
         ],
       ),
     );
