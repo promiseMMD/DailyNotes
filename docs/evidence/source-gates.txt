@@ -1,0 +1,33 @@
+PASS: each of four missing signing secrets fails early and is named
+PASS: four present values pass presence-only preflight
+PASS: no signing secret values are written to output
+Certificate fingerprint and keystore validation remain in the later signer step
+PASS: test_clone_v3dev_suffix_to_v3safe
+PASS: test_clone_explicit_v3dev_id_to_permanent_v3safe_id
+PASS: test_existing_exact_permanent_id_is_accepted
+PASS: test_existing_wrong_explicit_id_fails_closed
+PASS: test_patch_is_idempotent
+PASS: test_wrong_existing_safe_identity_fails_closed
+PASS: test_missing_v3dev_fails_closed
+PASS: test_version_bump_is_idempotent
+All 8 safe-install patch tests passed
+Permanent applicationId is fixed; formal release remains blocked by independent acceptance gates.
+test_candidate_is_not_a_formal_release (__main__.CandidateEvidenceTest.test_candidate_is_not_a_formal_release) ... ok
+test_duplicate_provenance_lines_fail_closed (__main__.CandidateEvidenceTest.test_duplicate_provenance_lines_fail_closed) ... ok
+test_matching_evidence (__main__.CandidateEvidenceTest.test_matching_evidence) ... ok
+test_qa_branch_cannot_fake_main_source (__main__.CandidateEvidenceTest.test_qa_branch_cannot_fake_main_source) ... ok
+test_review_branch_qa_evidence_is_accepted_without_releasing (__main__.CandidateEvidenceTest.test_review_branch_qa_evidence_is_accepted_without_releasing) ... ok
+test_sha256_does_not_match_actual_bytes (__main__.CandidateEvidenceTest.test_sha256_does_not_match_actual_bytes) ... ok
+test_unrelated_branch_is_rejected_even_if_provenance_matches (__main__.CandidateEvidenceTest.test_unrelated_branch_is_rejected_even_if_provenance_matches) ... ok
+test_wrong_apk_report_package_is_rejected (__main__.CandidateEvidenceTest.test_wrong_apk_report_package_is_rejected) ... ok
+test_wrong_build_commit_is_rejected (__main__.CandidateEvidenceTest.test_wrong_build_commit_is_rejected) ... ok
+test_wrong_candidate_source_branch_is_rejected (__main__.CandidateEvidenceTest.test_wrong_candidate_source_branch_is_rejected) ... ok
+test_wrong_current_commit_is_rejected (__main__.CandidateEvidenceTest.test_wrong_current_commit_is_rejected) ... ok
+test_wrong_report_signer_is_rejected (__main__.CandidateEvidenceTest.test_wrong_report_signer_is_rejected) ... ok
+test_wrong_workflow_run_is_rejected (__main__.CandidateEvidenceTest.test_wrong_workflow_run_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.010s
+
+OK
+All CI contracts verified: quick, full coverage, APK SHA and device QA

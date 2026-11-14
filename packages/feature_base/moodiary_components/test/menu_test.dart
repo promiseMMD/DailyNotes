@@ -1,0 +1,188 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:moodiary_components/moodiary_components.dart';
+import 'package:moodiary_di/moodiary_di.dart';
+import 'package:moodiary_storage/moodiary_storage.dart';
+import 'package:moodiary_storage/testing.dart';
+
+import 'support/pump.dart';
+
+void main() {
+  Widget host({
+    required ValueChanged<String> onSelected,
+    String? selected,
+    List<MMenuEntry<String>>? entries,
+  }) {
+    return muiTestApp(
+      Center(
+        child: MMenuButton<String>(
+          tooltip: 'more',
+          selected: selected,
+          onSelected: onSelected,
+          entries:
+              entries ??
+              const [
+                MMenuEntry(value: 'a', label: 'Apple'),
+                MMenuEntry(value: 'b', label: 'Banana'),
+                MMenuEntry(
+                  value: 'c',
+                  label: 'Cherry',
+                  icon: LucideIcons.trash2,
+                  isDestructive: true,
+                ),
+              ],
+          child: const Padding(
+            padding: .all(12),
+            child: Icon(LucideIcons.ellipsisVertical),
+          ),
+        ),
+      ),
+    );
+  }
+
+  testWidgets('opens on tap and shows all entries', (tester) async {
+    await tester.pumpWidget(host(onSelected: (_) {}));
+    expect(find.text('Apple'), findsNothing);
+
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apple'), findsOneWidget);
+    expect(find.text('Banana'), findsOneWidget);
+    expect(find.text('Cherry'), findsOneWidget);
+  });
+
+  testWidgets('selecting an entry fires onSelected and closes', (tester) async {
+    String? picked;
+    await tester.pumpWidget(host(onSelected: (v) => picked = v));
+
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Banana'));
+    await tester.pumpAndSettle();
+
+    expect(picked, 'b');
+    expect(find.text('Banana'), findsNothing);
+  });
+
+  testWidgets('barrier dismiss does not fire onSelected', (tester) async {
+    var fired = false;
+    await tester.pumpWidget(host(onSelected: (_) => fired = true));
+
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    expect(fired, isFalse);
+    expect(find.text('Apple'), findsNothing);
+  });
+
+  testWidgets('selected entry shows a check mark', (tester) async {
+    await tester.pumpWidget(host(onSelected: (_) {}, selected: 'b'));
+
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(LucideIcons.check), findsOneWidget);
+  });
+
+  testWidgets('disabled entry does not fire onSelected', (tester) async {
+    String? picked;
+    await tester.pumpWidget(
+      host(
+        onSelected: (v) => picked = v,
+        entries: const [
+          MMenuEntry(value: 'a', label: 'Apple'),
+          MMenuEntry(value: 'b', label: 'Banana', enabled: false),
+        ],
+      ),
+    );
+
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Banana'));
+    await tester.pumpAndSettle();
+
+    expect(picked, isNull);
+    expect(find.text('Apple'), findsOneWidget);
+  });
+
+  group('AppAuth', () {
+    late List<String> log;
+
+    setUp(() async {
+      log = [];
+      getIt.pushNewScope(
+        init: (gi) {
+          gi.registerSingleton<IKVStorage>(MemoryKVStorage());
+          gi.registerSingleton<ISecureKVStorage>(MemorySecureKVStorage());
+        },
+      );
+      AppLockPin.hasher = (pin) async => r'$argon2id$' + pin;
+      AppLockPin.verifier = (hash, pin) async => hash == r'$argon2id$' + pin;
+    });
+
+    tearDown(() async {
+      await AppLockPin.clear();
+      await getIt.popScope();
+    });
+
+    Widget guardHost() => muiTestApp(
+      Builder(
+        builder: (context) => TextButton(
+          onPressed: () => AppAuth.guard(context, .syncCloudReset, () async {
+            log.add('outer');
+            if (await AppAuth.verify(context, .syncKeyDisable)) {
+              log.add('inner');
+            }
+          }),
+          child: const Text('go'),
+        ),
+      ),
+    );
+
+    Future<void> enter(WidgetTester t, String pin) async {
+      for (final d in pin.split('')) {
+        await t.tap(find.text(d));
+        await t.pump();
+      }
+      await t.pump(const Duration(milliseconds: 200));
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('没开访问密码直接放行，不弹验证', (t) async {
+      await t.pumpWidget(guardHost());
+      await t.tap(find.text('go'));
+      await t.pumpAndSettle();
+      expect(find.byType(PasscodeGate), findsNothing);
+      expect(log, ['outer', 'inner']);
+    });
+
+    testWidgets('guard 内整组操作只验证一次；错误不执行', (t) async {
+      await AppLockPin.set('1234');
+      await t.pumpWidget(guardHost());
+
+      await t.tap(find.text('go'));
+      await t.pumpAndSettle();
+      expect(find.byType(PasscodeGate), findsOneWidget);
+      await enter(t, '0000');
+      expect(log, isEmpty);
+      expect(find.textContaining('还剩 4 次'), findsOneWidget);
+
+      await enter(t, '1234');
+      expect(find.byType(PasscodeGate), findsNothing);
+      expect(log, ['outer', 'inner']);
+    });
+
+    testWidgets('取消验证则不执行', (t) async {
+      await AppLockPin.set('1234');
+      await t.pumpWidget(guardHost());
+      await t.tap(find.text('go'));
+      await t.pumpAndSettle();
+      await t.tapAt(const Offset(10, 10));
+      await t.pumpAndSettle();
+      expect(find.byType(PasscodeGate), findsNothing);
+      expect(log, isEmpty);
+    });
+  });
+}

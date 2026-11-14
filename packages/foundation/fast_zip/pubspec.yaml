@@ -1,0 +1,22 @@
+name: fast_zip
+description: "Zip writing with optional AES encryption and cancellable extraction in Rust (libfastzip)."
+version: 0.0.1
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ">=3.13.0"
+  flutter: ">=3.47.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_rust_bridge: 2.13.0
+  rust_hook: 0.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  ffigen: 21.0.0
+  moodiary_lint: 0.0.1

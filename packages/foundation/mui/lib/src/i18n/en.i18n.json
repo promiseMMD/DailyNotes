@@ -1,0 +1,15 @@
+{
+  "ok": "OK",
+  "cancel": "Cancel",
+  "back": "Back",
+  "colorPickerTitle": "Pick a color",
+  "toastLoading": "Loading",
+  "toastSuccess": "Success",
+  "toastError": "Error",
+  "configured": "Configured",
+  "notConfigured": "Not configured",
+  "input": "Enter",
+  "save": "Save",
+  "moveUp": "Move up",
+  "moveDown": "Move down"
+}

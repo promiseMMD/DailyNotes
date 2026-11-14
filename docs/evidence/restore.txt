@@ -1,0 +1,294 @@
+=== W1 ModDiary classifier source ===
+17: class ModDiary {
+18:   static const topicTag = '__moodiary_mod_topic_v1';
+19:   static const entryPrefix = '__moodiary_mod_entry_v1:';
+20:   static const pinTag = '__moodiary_mod_pin_v1';
+21:   static const rankPrefix = '__moodiary_mod_pin_order_v1:';
+22:   static const creationPrefix = '__moodiary_mod_created_utc_v1:';
+23: 
+24:   static bool isTopic(Diary d) => d.tags.contains(topicTag);
+25:   static bool isChild(Diary d) => d.tags.any((t) => t.startsWith(entryPrefix));
+26:   static bool isPinned(Diary d) => d.tags.contains(pinTag);
+27:   static String? topicIdOf(Diary d) {
+28:     for (final tag in d.tags) {
+29:       if (tag.startsWith(entryPrefix)) return tag.substring(entryPrefix.length);
+30:     }
+31:     return null;
+32:   }
+33:   static int rank(Diary d) {
+34:     for (final tag in d.tags) {
+35:       if (tag.startsWith(rankPrefix)) {
+36:         return int.tryParse(tag.substring(rankPrefix.length)) ?? 999999;
+37:       }
+38:     }
+39:     return 999999;
+40:   }
+41:   static DateTime? createdAtOf(Diary d) {
+42:     for (final tag in d.tags) {
+43:       if (tag.startsWith(creationPrefix)) {
+44:         return DateTime.tryParse(tag.substring(creationPrefix.length))?.toLocal();
+45:       }
+46:     }
+47:     return null;
+48:   }
+49: 
+50:   static bool hideFromOrdinaryList(Diary d) => isTopic(d) || isChild(d);
+51: 
+52:   /// Read-only: never repairs, deletes, or rewrites any diary or cloud data.
+53:   static ModSafetyReport audit(List<Diary> all) {
+54:     final visible = all.where((d) => d.show).toList();
+55:     final topicIds = {for (final d in visible.where(isTopic)) d.id};
+56:     final children = visible.where(isChild).toList();
+57:     final pins = pinned(visible);
+58:     final duplicates = <int, int>{};
+59:     var orphan = 0;
+60:     var invalidRanks = 0;
+61:     var invalidCreation = 0;
+62:     var invalidAssociation = 0;
+63:     for (final child in children) {
+64:       final associations = child.tags.where((t) => t.startsWith(entryPrefix));
+65:       if (associations.length != 1 || topicIdOf(child)?.isEmpty != false) {
+66:         invalidAssociation++;
+67:       } else if (!topicIds.contains(topicIdOf(child))) {
+68:         orphan++;
+69:       }
+70:       for (final tag in child.tags.where((t) => t.startsWith(creationPrefix))) {
+71:         if (DateTime.tryParse(tag.substring(creationPrefix.length)) == null) {
+72:           invalidCreation++;
+73:         }
+74:       }
+75:     }
+76:     for (final pin in pins) {
+77:       final rankTags = pin.tags.where((t) => t.startsWith(rankPrefix)).toList();
+78:       if (rankTags.length != 1 ||
+79:           int.tryParse(rankTags.singleOrNull?.substring(rankPrefix.length) ?? '') == null) {
+80:         invalidRanks++;
+81:         continue;
+82:       }
+83:       duplicates.update(rank(pin), (v) => v + 1, ifAbsent: () => 1);
+84:     }
+85:     final duplicateRanks = duplicates.values.where((count) => count > 1)
+86:         .fold<int>(0, (a, count) => a + count - 1);
+87:     return ModSafetyReport(
+88:       totalDiaries: visible.length,
+89:       topics: topicIds.length,
+90:       entries: children.length,
+91:       pins: pins.length,
+92:       orphanEntries: orphan,
+93:       invalidAssociations: invalidAssociation,
+94:       invalidCreationTimes: invalidCreation,
+95:       invalidPinRanks: invalidRanks,
+96:       duplicatePinRanks: duplicateRanks,
+97:     );
+98:   }
+99: 
+100:   static List<Diary> pinned(List<Diary> all) =>
+101:       all.where((d) => d.show && isPinned(d) && !isChild(d)).toList()
+102:         ..sort((a, b) {
+103:           final r = rank(a).compareTo(rank(b));
+104:           return r != 0 ? r : a.time.compareTo(b.time);
+105:         });
+106: 
+107:   static DiaryRepository get repo => getIt<DiaryRepository>();
+108: 
+109:   static Future<Diary> createTopic(String title) async {
+110:     final all = await repo.getAllDiaries();
+111:     final rank = pinned(all).length;
+112:     final topic = Diary.create(
+113:       title: title.trim(),
+114:       content: MarkdownToTiptap.convert('长期记录主题：$title') ?? '',
+115:       contentText: '长期记录主题：$title',
+116:       imageName: const [], audioName: const [], videoName: const [],
+117:       tags: [topicTag, pinTag, '$rankPrefix$rank'],
+118:       type: DiaryType.tiptap,
+119:     );
+120:     await repo.insertADiary(topic);
+121:     return topic;
+122:   }
+123: 
+124:   static Future<Diary> addEntry(
+125:     Diary topic, String text, DateTime eventTime, {
+126:     required String stableEntryId,
+127:     required DateTime createdAt,
+128:   }) async {
+129:     final clean = text.trim();
+130:     if (clean.isEmpty) throw ArgumentError('记录内容不能为空');
+131:     // A removed topic must not silently receive an orphaned child record.
+132:     final freshTopic = await repo.getDiaryByBusinessId(topic.id);
+133:     if (freshTopic == null || !freshTopic.show || !isTopic(freshTopic)) {
+134:       throw StateError('长期主题已经删除或类型已改变，未保存任何新记录');
+135:     }
+136:     // A failed UI acknowledgement or repeated Save must not produce duplicates.
+137:     final existing = await repo.getDiaryByBusinessId(stableEntryId);
+138:     if (existing != null) {
+139:       if (existing.show && topicIdOf(existing) == topic.id &&
+140:           existing.contentText == clean &&
+141:           existing.time.millisecondsSinceEpoch == eventTime.millisecondsSinceEpoch) {
+142:         return existing;
+143:       }
+144:       throw StateError('记录 ID 已存在且内容不同，已停止保存以避免覆盖');
+145:     }
+146:     final rich = MarkdownToTiptap.convert(clean);
+147:     if (rich == null) throw StateError('记录格式转换失败');
+148:     final entry = Diary.create(
+149:       title: '${freshTopic.title} · ${_dateTime(eventTime)}',
+150:       content: rich,
+151:       contentText: clean,
+152:       imageName: const [], audioName: const [], videoName: const [],
+153:       tags: ['$entryPrefix${topic.id}',
+154:         '$creationPrefix${createdAt.toUtc().toIso8601String()}'],
+155:       type: DiaryType.tiptap,
+156:     ).copyWith(id: stableEntryId, time: eventTime);
+157:     // Same object semantics as original Diary: upstream WebDAV already knows
+158:     // how to sync diary/<uuid>.json, ZIP exports and encrypted media metadata.
+159:     await repo.insertADiary(entry);
+160:     return entry;
+161:   }
+162: 
+163:   static Future<void> togglePin(Diary diary) async {
+164:     final tags = [...diary.tags]..removeWhere((tag) => tag == pinTag || tag.startsWith(rankPrefix));
+165:     if (!isPinned(diary)) {
+166:       final pinnedCount = pinned(await repo.getAllDiaries()).length;
+167:       tags.addAll([pinTag, '$rankPrefix$pinnedCount']);
+168:     }
+169:     await repo.updateADiary(newDiary: diary.copyWith(tags: tags, lastModified: DateTime.timestamp()), index: IndexMode.skip);
+170:   }
+171: 
+172:   static Future<void> movePinned(Diary diary, int direction) async {
+173:     final pins = pinned(await repo.getAllDiaries());
+174:     final i = pins.indexWhere((p) => p.id == diary.id);
+175:     final j = i + direction;
+176:     if (i < 0 || j < 0 || j >= pins.length) return;
+177:     final moving = pins.removeAt(i);
+178:     pins.insert(j, moving);
+179:     // Different records have separate sync identifiers; deterministic ranks.
+180:     // On errors an existing rank is retained and reordering can be retried.
+181:     for (var n = 0; n < pins.length; n++) {
+182:       final current = pins[n];
+183:       if (rank(current) == n) continue;
+184:       final tags = [...current.tags]..removeWhere((t) => t.startsWith(rankPrefix));
+185:       tags.add('$rankPrefix$n');
+186:       await repo.updateADiary(newDiary: current.copyWith(tags: tags, lastModified: DateTime.timestamp()), index: IndexMode.skip);
+187:     }
+188:   }
+189: }
+190: 
+191: /// A local-only audit. Cloud consistency requires separate WebDAV validation.
+192: class ModSafetyReport {
+193:   final int totalDiaries, topics, entries, pins, orphanEntries;
+194:   final int invalidAssociations, invalidCreationTimes, invalidPinRanks, duplicatePinRanks;
+195:   const ModSafetyReport({
+196:     required this.totalDiaries, required this.topics, required this.entries,
+=== end ModDiary classifier source ===
+W1 source-kit static integrity check passed
+Cloning into 'upstream'...
+Note: switching to '2c552ddd7939a054122380397fb914cf000824b0'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 2c552dd chore(release): 2.9.2 (#379)
+PATCHED: mobile/lib/app/home/diary_home_page.dart
+PATCHED: mobile/lib/app/home/diary_home_page.dart
+PATCHED: mobile/lib/app/home/diary_home_page.dart
+PATCHED: packages/feature/moodiary_diary/lib/src/presentation/widget/feed_view.dart
+PATCHED: packages/feature/moodiary_diary/lib/src/presentation/widget/timeline_view.dart
+PATCHED: packages/feature/moodiary_sync/lib/src/data/incremental_engine.dart
+PATCHED: packages/feature/moodiary_sync/test/sync/data/incremental_engine_test.dart
+PATCHED: mobile/android/app/build.gradle.kts
+ADDED: /workspace/work/codex-learning/upstream/mobile/lib/app/home/mod_continuous.dart
+ADDED: /workspace/work/codex-learning/upstream/mobile/test/mod_continuous_safety_test.dart
+ADDED: mobile/lib/app/home/mod_lan_service.dart
+ADDED: mobile/lib/app/home/mod_lan_page.dart
+ADDED: mobile/lib/app/home/mod_monthly_index.dart
+ADDED: mobile/test/mod_monthly_index_test.dart
+ADDED: mobile/test/mod_lan_policy_test.dart
+ADDED: mobile/android/app/src/main/kotlin/cn/yooss/moodiary/ModLanForegroundService.kt
+PATCHED: mobile/lib/app/home/mod_continuous.dart
+PATCHED: mobile/lib/app/home/mod_continuous.dart
+PATCHED: mobile/lib/app/home/mod_continuous.dart
+PATCHED: mobile/android/app/src/main/kotlin/cn/yooss/moodiary/MainActivity.kt
+PATCHED: mobile/android/app/src/main/kotlin/cn/yooss/moodiary/MainActivity.kt
+PATCHED: mobile/android/app/src/main/AndroidManifest.xml
+PATCHED: mobile/android/app/src/main/AndroidManifest.xml
+PATCHED: mobile/android/app/build.gradle.kts
+W3 cursor replay patch applied
+PATCHED packages/feature_base/moodiary_data/lib/src/diary_repository.dart
+PATCHED packages/feature_base/moodiary_editor/lib/src/application/edit_controller.dart
+PATCHED mobile/pubspec.yaml
+W5 safe editor persistence patch applied to mobile/lib/app/home/mod_lan_service.dart
+W6 rich data API overlay applied (schema-checked CAS only, no rich UI)
+/workspace/work/codex-learning/upstream/../moodiary-v3-w7/apply_w7.py:54: SyntaxWarning: invalid escape sequence '\.'
+  RegExp(r'^/lan-editor/lan-chunk-[a-zA-Z0-9_-]+\.js$').hasMatch(path))) {
+W7 LAN editor files staged; compile assets with pnpm Vite before Flutter pub get
+W8 native staging and decoder foundation copied; HTTP image writes stay disabled
+W8.4 HTTP temporary staging API installed with same-origin, CSRF, session checks
+W8.5 CAS-protected append-image API installed; W7 UI remains read-only for image diaries.
+W9.1 schema v4: fresh install, old v3 upgrade, and full-reset hooks installed
+W9.2 monthly HTTP revision API installed after session/origin gates
+W9.3 PC month workspace and read-only topic discovery installed
+Applied W9.4 native workspace; no native Diary projection or sync format change
+W9.5.1 applied: read-only day previews and 6 regressions; no Diary writes, no cloud claim
+Applied W9.5.2 daily routes and created-time ordering; no Diary projection or sync-format change
+W9.6 archive safety gate applied; legacy data untouched
+W9.7.1: graph exporter/validator and isolated restore test API installed
+W9.7.2: verified native/W9 bundle staging contract installed; no live backup or restore routes enabled
+W9.7.3 streaming staging and receipt refactor applied; backup/sync gates retained
+W9.7.4: ZIP preflight, quarantined readback and tests installed; user-facing backup and WebDAV unchanged
+W9.7.5 isolated ZIP/SQLite + media restore installed; no real backup, WebDAV or live data paths activated
+W9.7.6 private generation slot staged; no user-facing backup, restore, or WebDAV changes
+W9.7.7 read-only orphan inspector installed. No real user data paths enabled.
+W9.7.7.2 real SIGKILL crash harness added; no production app restore code changed.
+W9.7.7.4 Flutter-engine SIGKILL harness ready
+W9.7.8 Nutstore URL, listing and file-size guards applied
+W9.7.8.3 Rust WebDAV per-directory listing safety gate installed
+W9.7.8.4 Rust listing completeness patch applied
+W9.8.1 SQLite v5 day map, export safety and migration tests installed
+W9.8.2 home daily cards and protected dedicated route installed
+W9.8.3 V2 graph and isolated recovery overlay staged; legacy gates unchanged
+W9.8.4.1 V2 native/day graph/media closure and stream staging installed
+W9.8.4.2 sealed V2 ZIP + isolated V2 native, day graph and media cold restore staged
+W9.8.4.3 V2 isolated slot and SIGKILL suite installed
+PATCHED VERIFIED W9.8.4.2 TEST BASELINE: packages/feature/moodiary_sync/test/sync/data/mod_month_isolated_restore_v2_test.dart
+ADDED: packages/feature/moodiary_sync/lib/src/data/mod_month_zip_generation_install_v2.dart
+W9.8.4.4 ZIP -> isolated V2 generation integration staged
+W9.8.4.5: five ZIP-to-generation failure-path tests installed
+W9.8.4.5 ZIP -> generation failure matrix staged
+PATCHED: packages/feature/moodiary_sync/lib/src/data/mod_month_zip_generation_install_v2.dart
+W9.8.4.6: three preview ownership regression cases installed
+W9.8.4.6 preview disposal hardening staged; production restore unchanged
+PATCHED: packages/feature/moodiary_sync/lib/src/data/mod_month_zip_generation_install_v2.dart
+W9.8.4.7: three path isolation regression tests installed
+W9.8.4.7 preview-slot path fence staged
+ADDED: packages/feature/moodiary_sync/lib/src/data/mod_month_private_restore_workspace_v2.dart
+W9.8.4.8: six isolated private-workspace tests installed
+W9.8.4.8 workspace staged; live restore remains disabled
+ADDED: packages/feature/moodiary_sync/lib/src/data/mod_month_android_restore_root_v2.dart
+W9.8.4.9: eight binding and file-preservation cases installed
+W9.8.4.9 Android platform binding staged; production restore still disabled
+ADDED: packages/feature/moodiary_sync/lib/src/data/mod_month_restore_inventory_v2.dart
+W9.8.4.10: eight recovery inventory retention tests installed
+W9.8.4.10 immutable inventory applied; no production restore or deletion
+ADDED: mobile/lib/app/settings/storage/recovery_inventory_controller.dart
+ADDED: mobile/lib/app/settings/storage/recovery_inventory_panel.dart
+ADDED: mobile/test/app/settings/recovery_inventory_panel_test.dart
+ADDED: packages/feature/moodiary_sync/test/sync/data/mod_month_android_restore_root_v2_test.dart
+W9.8.4.11 read-only inventory UI applied; no delete, repair, or live restore
+W9.8.4.13 applied: permanent applicationId is cn.yooss.moodiary.v3safe
+Standard native Diary ZIP export/import contract verified; old app remains untouched
+IMPORTANT: W9 custom monthly/day graph migration is NOT production-wired; do not claim full migration readiness
+W9.8.4.15 applied: complete native + W9 history + media backup/import path
+Migration requires a full V2 graph; legacy snapshot-only ZIPs fail closed
+Native source timestamps and tombstones are preserved; old app is untouched

@@ -1,0 +1,11 @@
+@use 'tokens';
+@use 'base';
+@use 'meta';
+@use 'document';
+@use 'blocks';
+@use 'links';
+@use 'overlay';
+@use 'highlight';
+
+/* Structured bodies have no independent diary title or metadata. */
+[data-body-only="true"] :is(.md-title, .md-meta, .md-links) { display: none !important; }

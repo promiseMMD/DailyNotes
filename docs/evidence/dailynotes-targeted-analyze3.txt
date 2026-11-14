@@ -1,0 +1,27 @@
+Analyzing dailynotes, root_shell.dart, daily_notes_sort_sheet.dart, mod_month_composer.dart, dailynotes_preview_policy.dart, rig_assistant.dart, assistant_page.dart...
+
+   info - mobile/lib/app/dailynotes/data/daily_notes_store.dart:508:7 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/data/daily_notes_store.dart:674:9 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/data/daily_notes_store.dart:694:17 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/data/daily_notes_store.dart:738:11 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/data/daily_notes_store.dart:748:9 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/notes/notes_page.dart:92:17 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/notes/notes_page.dart:133:7 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/notes/notes_page.dart:147:11 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/dailynotes/notes/notes_page.dart:581:19 - Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?'. - use_null_aware_elements
+   info - mobile/lib/app/home/mod_month_composer.dart:12:1 - Sort directive sections alphabetically. Try sorting the directives. - directives_ordering
+   info - mobile/lib/app/home/mod_month_composer.dart:13:1 - Sort directive sections alphabetically. Try sorting the directives. - directives_ordering
+   info - mobile/lib/app/home/mod_month_composer.dart:50:9 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/home/mod_month_composer.dart:67:7 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/home/mod_month_composer.dart:122:7 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/home/mod_month_composer.dart:227:7 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/home/mod_month_composer.dart:354:7 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/home/mod_month_composer.dart:436:15 - Statements in an if should be enclosed in a block. Try wrapping the statement in a block. - curly_braces_in_flow_control_structures
+   info - mobile/lib/app/shell/root_shell.dart:7:1 - Sort directive sections alphabetically. Try sorting the directives. - directives_ordering
+   info - mobile/lib/app/shell/root_shell.dart:13:1 - Sort directive sections alphabetically. Try sorting the directives. - directives_ordering
+   info - mobile/lib/app/shell/root_shell.dart:15:1 - Place 'package:' imports before relative imports. Try sorting the directives. - directives_ordering
+   info - mobile/lib/app/shell/root_shell.dart:17:1 - Place 'package:' imports before relative imports. Try sorting the directives. - directives_ordering
+   info - mobile/lib/app/shell/root_shell.dart:18:1 - Place 'package:' imports before relative imports. Try sorting the directives. - directives_ordering
+   info - packages/feature/moodiary_assistant/lib/src/presentation/assistant_page.dart:17:1 - Sort directive sections alphabetically. Try sorting the directives. - directives_ordering
+
+23 issues found.

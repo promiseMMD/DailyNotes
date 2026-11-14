@@ -1,0 +1,75 @@
+name: DailyNotes preview APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [bootstrap/moodiary-baseline]
+permissions:
+  contents: read
+concurrency:
+  group: dailynotes-preview-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_INCREMENTAL: 0
+      RUSTUP_TOOLCHAIN: 1.99.1
+      DAILYNOTES_PREVIEW_KEYSTORE: ${{ github.workspace }}/work/preview.jks
+      DAILYNOTES_PREVIEW_STORE_PASSWORD: android
+      DAILYNOTES_PREVIEW_KEY_PASSWORD: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8'
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned native tools
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup target add aarch64-linux-android --toolchain 1.99.1
+          cargo install cargo-about --version 0.9.2 --locked
+          corepack enable
+      - name: Prepare preview identity and build settings
+        run: |
+          mkdir -p work "$HOME/.gradle"
+          keytool -genkeypair -keystore "$DAILYNOTES_PREVIEW_KEYSTORE" -storepass android -keypass android -alias dailynotes-preview -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=DailyNotes Preview,OU=Development,O=DailyNotes,C=CN'
+          printf 'org.gradle.jvmargs=-Xmx3G -XX:MaxMetaspaceSize=1G\norg.gradle.workers.max=2\norg.gradle.parallel=false\n' > "$HOME/.gradle/gradle.properties"
+          flutter pub get
+      - name: Generate translations
+        working-directory: packages/foundation/moodiary_i18n
+        run: dart run slang
+      - name: Build Android arm64 preview
+        working-directory: mobile
+        run: flutter build apk --flavor dailynotes --release --target-platform android-arm64 --dart-define=DAILYNOTES_PREVIEW=true
+      - name: Verify and package preview
+        run: |
+          cp mobile/build/app/outputs/flutter-apk/app-dailynotes-release.apk work/DailyNotes-0.1.0-preview-arm64.apk
+          sha256sum work/*.apk > work/SHA256SUMS.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs work/DailyNotes-0.1.0-preview-arm64.apk > work/SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging work/DailyNotes-0.1.0-preview-arm64.apk > work/APK-METADATA.txt
+          grep -q "name='io.github.promisemmd.dailynotes'" work/APK-METADATA.txt
+          printf 'source_commit=%s\npreview=true\n' "$GITHUB_SHA" > work/BUILD-PROVENANCE.txt
+          cp docs/PREVIEW.md work/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DailyNotes-preview-arm64
+          path: |
+            work/*.apk
+            work/SHA256SUMS.txt
+            work/SIGNATURE.txt
+            work/APK-METADATA.txt
+            work/BUILD-PROVENANCE.txt
+            work/PREVIEW.md
+          retention-days: 30

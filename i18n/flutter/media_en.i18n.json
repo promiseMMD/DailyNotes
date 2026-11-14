@@ -1,0 +1,23 @@
+{
+  "title": "Media",
+  "typeImage": "Image",
+  "typeFile": "Attachment",
+  "empty": "No media yet",
+  "rename": "Rename",
+  "imageCount(plural, param=count)": {
+    "one": "{count} Photo",
+    "other": "{count} Photos"
+  },
+  "audioCount(plural, param=count)": {
+    "one": "{count} Audio",
+    "other": "{count} Audios"
+  },
+  "videoCount(plural, param=count)": {
+    "one": "{count} Video",
+    "other": "{count} Videos"
+  },
+  "fileCount(plural, param=count)": {
+    "one": "{count} Attachment",
+    "other": "{count} Attachments"
+  }
+}

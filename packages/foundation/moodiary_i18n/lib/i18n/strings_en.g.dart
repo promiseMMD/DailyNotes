@@ -1,0 +1,1867 @@
+///
+/// Generated file. Do not edit.
+///
+// coverage:ignore-file
+// ignore_for_file: type=lint, unused_import
+// dart format off
+
+import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
+import 'package:slang/generated.dart';
+import 'strings.g.dart';
+
+// Path: <root>
+class TranslationsEn extends Translations with BaseTranslations<AppLocale, Translations> {
+	/// You can call this constructor and build your own translation instance of this locale.
+	/// Constructing via the enum [AppLocale.build] is preferred.
+	TranslationsEn({Map<String, Node>? overrides, PluralResolver? cardinalResolver, PluralResolver? ordinalResolver, TranslationMetadata<AppLocale, Translations>? meta})
+		: assert(overrides == null, 'Set "translation_overrides: true" in order to enable this feature.'),
+		  _meta = meta ?? TranslationMetadata(
+		    locale: AppLocale.en,
+		    overrides: overrides ?? {},
+		    cardinalResolver: cardinalResolver,
+		    ordinalResolver: ordinalResolver,
+		  ),
+		  super(cardinalResolver: cardinalResolver, ordinalResolver: ordinalResolver);
+
+	/// Metadata for the translations of <en>.
+	final TranslationMetadata<AppLocale, Translations> _meta;
+	@override TranslationMetadata<AppLocale, Translations> get $meta => _meta;
+
+	late final TranslationsEn _root = this; // ignore: unused_field
+
+	@override 
+	TranslationsEn $copyWith({TranslationMetadata<AppLocale, Translations>? meta}) => TranslationsEn(meta: meta ?? this.$meta);
+
+	// Translations
+	@override late final _Translations$app$en app = _Translations$app$en._(_root);
+	@override late final _Translations$assistant$en assistant = _Translations$assistant$en._(_root);
+	@override late final _Translations$common$en common = _Translations$common$en._(_root);
+	@override late final _Translations$dailynotes$en dailynotes = _Translations$dailynotes$en._(_root);
+	@override late final _Translations$dailynotesNavigation$en dailynotesNavigation = _Translations$dailynotesNavigation$en._(_root);
+	@override late final _Translations$diary$en diary = _Translations$diary$en._(_root);
+	@override late final _Translations$editor$en editor = _Translations$editor$en._(_root);
+	@override late final _Translations$export$en export = _Translations$export$en._(_root);
+	@override late final _Translations$insights$en insights = _Translations$insights$en._(_root);
+	@override late final _Translations$lock$en lock = _Translations$lock$en._(_root);
+	@override late final _Translations$media$en media = _Translations$media$en._(_root);
+	@override late final _Translations$month$en month = _Translations$month$en._(_root);
+	@override late final _Translations$picker$en picker = _Translations$picker$en._(_root);
+	@override late final _Translations$share$en share = _Translations$share$en._(_root);
+	@override late final _Translations$storage$en storage = _Translations$storage$en._(_root);
+	@override late final _Translations$sync$en sync = _Translations$sync$en._(_root);
+	@override late final _Translations$ui$en ui = _Translations$ui$en._(_root);
+}
+
+// Path: app
+class _Translations$app$en extends Translations$app$zh {
+	_Translations$app$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get moodColors => 'Mood colors';
+	@override String get moodPaletteClassic => 'Classic';
+	@override String get moodPaletteDefault => 'Default';
+	@override String get moodPaletteBlueOrange => 'Blue–orange';
+	@override String get moodPaletteColorblind => 'Colorblind friendly';
+	@override String get accentTitle => 'Accent color';
+	@override String get accentNeutral => 'Default';
+	@override String get accentSystem => 'From wallpaper';
+	@override String get accentCustomTitle => 'Custom accent';
+	@override String get accentGroupAccent => 'Accent';
+	@override String get accentGroupSurface => 'Surface';
+	@override String get accentGroupSemantic => 'Semantic';
+	@override String get accentSeed => 'Picked';
+	@override String get language => 'Language';
+	@override String get homeNavigatorDiary => 'Diary';
+	@override String get homeNavigatorAssistant => 'Assistant';
+	@override String get homePageAddDiaryButton => 'Create a diary';
+	@override String get categoryDeletedReset => 'Category deleted, showing all diaries';
+	@override String get homeNavigatorSetting => 'Setting';
+	@override String get languageSystem => 'Follow System';
+	@override String get languageSimplifiedChinese => '简体中文';
+	@override String get languageEnglish => 'English';
+	@override String get settingsTitle => 'Settings';
+	@override String get sectionData => 'Data';
+	@override String get recycle => 'Recycle bin';
+	@override String get syncBackup => 'Sync and backup';
+	@override String get categoryManager => 'Categories';
+	@override String get placeManager => 'Places';
+	@override String get mapTitle => 'Footprints';
+	@override String get sectionDisplay => 'Display';
+	@override String get diarySettings => 'Entry preferences';
+	@override String get themeMode => 'Theme';
+	@override String get fontStyle => 'Font';
+	@override String get sectionPrivacy => 'Privacy';
+	@override String get backgroundPrivacy => 'Hide content in the app switcher';
+	@override String get backgroundPrivacySubtitle => 'Blur the screen when the app goes to the background';
+	@override String get sectionMore => 'More';
+	@override String get about => 'About';
+	@override String get services => 'Third-party services';
+	@override String get themeModeSystem => 'Follow the system';
+	@override String get themeModeLight => 'Light';
+	@override String get themeModeDark => 'Dark';
+	@override String homeSelected({required Object count}) => '${count} selected';
+	@override String get homeDeleteTitle => 'Delete the selected entries?';
+	@override String homeDeleteMessage({required Object count}) => '${count} entries will be moved to the recycle bin, where you can restore them.';
+	@override String get homeNothingToDelete => 'Nothing to delete';
+	@override String homeMovedToRecycle({required Object count}) => 'Moved ${count} entries to the recycle bin';
+	@override String get aboutCheckUpdate => 'Check for updates';
+	@override String get aboutUpToDate => 'You are on the latest version';
+	@override String aboutUpdateAvailable({required Object version}) => 'Version ${version} is available';
+	@override String get aboutUpdateDownload => 'Download';
+	@override String get aboutUpdateFailed => 'Could not check for updates, try again later';
+	@override String get aboutSource => 'Source code';
+	@override String get aboutLicenses => 'Open source licenses';
+	@override String get aboutPrivacy => 'Privacy policy';
+	@override String get fontTitle => 'Fonts';
+	@override String get fontImportSubtitle => 'Import a ttf / otf font; long-press to remove one';
+	@override String get fontPreview => 'Preview';
+	@override String get fontPreviewSubtitle => 'Text size follows your system setting — the app no longer has its own';
+	@override String get fontSystem => 'System';
+	@override String get fontDeleteTitle => 'Remove this font';
+	@override String fontDeleteMessage({required Object name}) => 'Remove the font “${name}”?';
+	@override String get fontVariable => 'Variable';
+	@override String get fontAdd => 'Add';
+	@override String get fontPreviewTitle => 'Pangrams';
+	@override String get fontPreviewText => 'The quick brown fox jumps over the lazy dog.\nPack my box with five dozen liquor jugs.\nHow vexingly quick daft zebras jump!\nSphinx of black quartz, judge my vow.\nWaltz, bad nymph, for quick jigs vex.\nThe five boxing wizards jump quickly.';
+	@override String get diaryPrefsEditor => 'Editor';
+	@override String get firstLineIndent => 'Indent the first line';
+	@override String get showWritingTime => 'Show writing time';
+	@override String get showWordCount => 'Show word count';
+	@override String get diaryPrefsWeather => 'Weather & location';
+	@override String get autoWeather => 'Record the weather';
+	@override String get autoWeatherSubtitle => 'Fetched from QWeather when you start an entry';
+	@override String get autoPosition => 'Record the location';
+	@override String get autoPositionSubtitle => 'City looked up via QWeather when you start an entry';
+	@override String get autoNearestPlace => 'Match saved places';
+	@override String get autoNearestPlaceSubtitle => 'When you start an entry near a saved place, use it instead of the city';
+	@override String get qweatherRequired => 'Set up QWeather first';
+	@override String get servicesIntro => 'Add your own third-party credentials here to enable the AI assistant, weather and maps. Credentials are stored on this device only.';
+	@override String get servicesAssistant => 'AI assistant';
+	@override String get servicesModelDownload => 'Model downloads';
+	@override String get servicesHfEndpoint => 'Hugging Face endpoint';
+	@override String get servicesHfOfficial => 'Official';
+	@override String get servicesHfCustomAddress => 'Custom address';
+	@override String get servicesHfCustomHint => 'Enter a Hugging Face-compatible site';
+	@override String get servicesHfEndpointHelp => 'Enter only the base URL. Model paths are added automatically.';
+	@override String get servicesModelDownloadFailed => 'Download failed. Try changing the endpoint in “Model downloads”.';
+	@override String get servicesQweather => 'QWeather';
+	@override String get servicesQweatherHostHint => 'devapi.qweather.com, or your own';
+	@override String get servicesMap => 'Map';
+	@override String get servicesSaved => 'Saved';
+	@override String get servicesSaveFailed => 'Could not save, please try again';
+	@override String get semanticTitle => 'Semantic search';
+	@override String get semanticModelTitle => 'Embedding model';
+	@override String get semanticStateOff => 'Not enabled';
+	@override String semanticDownloading({required Object percent}) => 'Downloading ${percent}%';
+	@override String get semanticVerifying => 'Verifying model…';
+	@override String get semanticEnableTitle => 'Enable semantic search';
+	@override String get semanticEnableConfirm => 'Download & enable';
+	@override String get semanticEnabled => 'Enabled — index building in background';
+	@override String get semanticEnableFailed => 'Failed to enable';
+	@override String get semanticDisableTitle => 'Disable semantic search';
+	@override String get semanticDisableMessage => 'Disabling clears the semantic index data. Downloaded model files are kept and can be re-enabled anytime.';
+	@override String get semanticDisableConfirm => 'Disable';
+	@override String get semanticRebuildTitle => 'Rebuild semantic index';
+	@override String get semanticRebuildSubtitle => 'Use when the index looks wrong or outdated';
+	@override String semanticRebuildDone({required Object count}) => 'Re-embedded ${count} entries';
+	@override String get semanticPickTitle => 'Choose embedding model';
+	@override String semanticActivateDownloadMessage({required Object size}) => 'Downloads a ${size} model file and rebuilds the semantic index. All inference and indexing happen on this device; your diaries are never uploaded.';
+	@override String get semanticActivateLocalMessage => 'Enabling will rebuild the semantic index.';
+	@override String get semanticDeleteTitle => 'Delete model file';
+	@override String get semanticDeleteMessage => 'Deletes the downloaded model file. You can download it again later.';
+	@override String get semanticDeleteConfirm => 'Delete';
+	@override String get semanticDescQwen3 => 'Multilingual, recalls subtle phrasing';
+	@override String get dashJournalDays => 'Days journaling';
+	@override String get dashWordCount => 'Words';
+	@override String get dashCategoryCount => 'Categories';
+	@override String get dashTagCount => 'Tags';
+	@override String get homeNavigatorMe => 'Me';
+	@override String get meTitle => 'Me';
+	@override String get meYearLabel => 'Past year';
+	@override String meThisMonth({required Object count}) => '${count} this month';
+	@override String meStreak({required Object count}) => '${count}-day streak';
+	@override String get meHeatmapHint => 'Tap a square to see that day';
+	@override String get meHeatmapEmpty => 'Write your first entry to light up a square';
+	@override String get meHeatmapSemantics => 'Writing heatmap';
+	@override String get meDayNothing => 'Nothing written';
+	@override String get meLegendLess => 'Less';
+	@override String get meLegendMore => 'More';
+	@override String get meSectionRecall => 'Revisit';
+	@override String get meSectionManage => 'Manage';
+	@override String get meCalendar => 'Calendar';
+	@override String get sectionFeature => 'Features';
+	@override String get assistantEntry => 'AI assistant';
+	@override String get stressTitle => 'Stress-test data (debug)';
+	@override String get stressSubtitle => 'Generate or remove randomly linked entries for graph performance tests';
+	@override String get stressDialogTitle => 'Stress-test data';
+	@override String stressDialogMessage({required Object min, required Object max, required Object prefix}) => 'For pushing the knowledge graph and friends to their limits. Each entry links to ${min}–${max} random others and its title starts with “${prefix}”, so they can all be removed in one go.';
+	@override String get stressClear => 'Remove';
+	@override String get stressGenerate => 'Generate';
+	@override String get stressCountTitle => 'How many';
+	@override String stressCountRange({required Object min, required Object max}) => 'Pick a number between ${min} and ${max}';
+	@override String get stressGenerating => 'Generating';
+	@override String get stressGenerateFailed => 'Could not generate them';
+	@override String stressGenerated({required Object count}) => 'Generated ${count} linked entries';
+	@override String get stressEmpty => 'No stress-test entries';
+	@override String get stressClearing => 'Removing';
+	@override String get stressClearFailed => 'Could not remove them';
+	@override String stressCleared({required Object count}) => 'Removed ${count} stress-test entries';
+	@override String get repairTitle => 'Repair data';
+	@override String get repairSubtitle => 'Check and repair derived entry data';
+	@override String get repairMessage => 'Scans every entry to regenerate card previews and media references, clear dangling categories and rebuild the search index. Your text is never modified.';
+	@override String get repairStart => 'Start';
+	@override String get repairRunning => 'Repairing…';
+	@override String get repairFailed => 'The repair failed';
+	@override String repairScanned({required Object count}) => 'Scanned ${count} entries.';
+	@override String get repairAllGood => 'Everything checks out — nothing to repair.';
+	@override String repairFixed({required Object count}) => 'Repaired ${count} entries:';
+	@override String repairFixedPreview({required Object count}) => '· card preview: ${count}';
+	@override String repairFixedMedia({required Object count}) => '· media references: ${count}';
+	@override String repairFixedOrphan({required Object count}) => '· dangling categories: ${count}';
+	@override String repairReindexed({required Object count}) => 'Search index rebuilt (${count} entries).';
+	@override String get repairDoneTitle => 'Repair finished';
+	@override String get repairOk => 'Got it';
+	@override String get imageOptimizeTitle => 'Optimise images';
+	@override String get imageOptimizeSubtitle => 'Convert legacy HEIC photos and build missing thumbnails';
+	@override String get imageOptimizeMessage => 'HEIC photos in your entries will be converted to JPG (the original file is removed and references updated), then thumbnails are built for every image. This can take a few minutes with a large library; please keep the app open.';
+	@override String get imageOptimizeStart => 'Start';
+	@override String get imageOptimizeRunning => 'Processing images';
+	@override String get imageOptimizeDoneTitle => 'Done';
+	@override String imageOptimizeScanned({required Object count}) => 'Checked ${count} images.';
+	@override String imageOptimizeConverted({required Object count}) => 'Converted ${count} HEIC photos to JPG.';
+	@override String imageOptimizeConvertFailed({required Object count}) => '${count} could not be converted (damaged or unreadable) and were left as is.';
+	@override String get imageOptimizeThumbs => 'Thumbnails are ready.';
+	@override String get imageOptimizeFailed => 'Image optimisation failed';
+	@override String get imageOptimizeOk => 'OK';
+	@override String get fontNameFailed => 'Could not read the font name';
+	@override String get fontExists => 'That font is already installed';
+	@override String get routeErrorTitle => 'Page not found';
+	@override String get routeErrorBackHome => 'Back to home';
+}
+
+// Path: assistant
+class _Translations$assistant$en extends Translations$assistant$zh {
+	_Translations$assistant$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get settingFunctionAIAssistant => 'AI Assistant';
+	@override String get diaryEdit => 'Edit';
+	@override String get inputHint => 'Say something...';
+	@override String get scrollToBottom => 'Scroll to bottom';
+	@override String get send => 'Send';
+	@override String get notConfiguredBanner => 'No model provider configured yet. Tap to set up.';
+	@override String get needProvider => 'Please add and select an available provider in Model Providers first.';
+	@override String get needApiKey => 'Please set the API Key in Model Providers first.';
+	@override String get settingTitle => 'AI Assistant Settings';
+	@override String modelSwitched({required Object model}) => 'Switched to ${model}';
+	@override String get providerEntryLoading => 'Loading…';
+	@override String get providerEntryEmpty => 'No provider yet, tap to add one';
+	@override String get copied => 'Copied';
+	@override String get copyTooltip => 'Copy';
+	@override String get newChat => 'New chat';
+	@override String get menuCompactNow => 'Compact history';
+	@override String get menuSettings => 'Assistant settings';
+	@override String get compactedNow => 'Earlier messages compacted';
+	@override String get compactNothing => 'Nothing to compact';
+	@override String get compactFailed => 'Compaction failed, try again later';
+	@override String providerKeyMissingBanner({required Object name}) => '"${name}" has no API key. Tap to add one';
+	@override String providerMissingBanner({required Object name}) => 'The original provider was deleted; answering with "${name}". Tap to pick another';
+	@override String get modelSwitchTitle => 'Switch model';
+	@override String modelSwitchNoImages({required Object count}) => 'This model cannot read images; ${count} images in the history will be skipped.';
+	@override String get modelSwitchDropPending => 'The selected image will be removed.';
+	@override String get modelSwitchSmallerContext => 'This model has a smaller context; the history will be compacted before sending.';
+	@override String get modelSwitchConfirm => 'Switch anyway';
+	@override String get historyEmpty => 'No chat history yet';
+	@override String get historyToday => 'Today';
+	@override String get historyLast7 => 'Last 7 days';
+	@override String get historyEarlier => 'Earlier';
+	@override String get historyModelUnset => 'Not set';
+	@override String get stop => 'Stop generating';
+	@override String get regenerate => 'Regenerate';
+	@override String get thinking => 'Thinking…';
+	@override String get protocolTitle => 'Protocol';
+	@override String get protocolOpenAiCompletions => 'OpenAI /chat/completions';
+	@override String get protocolOpenAiResponses => 'OpenAI /responses';
+	@override String get protocolAnthropicMessages => 'Anthropic /messages';
+	@override String get modelListFetch => 'Fetch models from endpoint';
+	@override String get modelListNeedKey => 'Enter an API key first';
+	@override String get modelListManualHint => 'You can enter a model id by hand';
+	@override String modelListFetched({required Object count}) => 'Found ${count} models';
+	@override String get netTimeout => 'Connection timed out';
+	@override String get netUnreachable => 'Network unavailable — check your connection';
+	@override String netStatus({required Object code}) => 'Server returned ${code}';
+	@override String get netDecode => 'Couldn\'t read the response';
+	@override String get netUnknown => 'Request failed';
+	@override String get reasoningOff => 'No thinking';
+	@override String get reasoningLevelMinimal => 'Minimal';
+	@override String get reasoningLevelLow => 'Low';
+	@override String get reasoningLevelMedium => 'Medium';
+	@override String get reasoningLevelHigh => 'High';
+	@override String get reasoningLevelMax => 'Max';
+	@override String thoughtFor({required Object duration}) => 'Thought for ${duration}s';
+	@override String get tool => 'Tools';
+	@override String get toolSectionNote => 'Tools follow the permission mode: reads run at once, writes ask according to the mode. Note what deletion does: a diary goes to the recycle bin, a saved fact is gone for good.';
+	@override String get personalSectionTitle => 'Personalisation';
+	@override String get notesTitle => 'Notes for the assistant';
+	@override String get notesEmpty => 'Not set';
+	@override String get notesLede => 'Notes the assistant reads in every conversation: how to address you, preferences, things to avoid.';
+	@override String get notesFieldLabel => 'Notes';
+	@override String get notesSaved => 'Saved';
+	@override String get memoryTitle => 'Assistant memory';
+	@override String get memoryTileSubtitle => 'When on, the assistant keeps what you tell it, on this device only';
+	@override String get memoryLede => 'What the assistant saved about you. It lives only on this device, and never leaves in a sync or an export.';
+	@override String get memorySearchHint => 'Search memories';
+	@override String memoryMeta({required Object date, required Object source}) => '${date} · ${source}';
+	@override String get memorySourceSaid => 'you said it';
+	@override String get memorySourceAsked => 'you asked me to';
+	@override String get memoryKindPreference => 'Preference';
+	@override String get memoryKindTheme => 'Theme';
+	@override String get memoryKindGoal => 'Goal';
+	@override String get memoryKindFact => 'Fact';
+	@override String get memoryDeleteTitle => 'Delete this memory?';
+	@override String memoryDeleteMessage({required Object text}) => '“${text}” is deleted for good and the assistant will not recall it again.';
+	@override String get memoryClearTitle => 'Clear every memory?';
+	@override String get memoryClearMessage => 'Everything the assistant saved is deleted for good. This cannot be undone.';
+	@override String get memoryClearConfirm => 'Clear all';
+	@override String get memoryEdit => 'Edit';
+	@override String get memoryEditTitle => 'Edit memory';
+	@override String get memoryFieldText => 'Text';
+	@override String get memoryFieldKind => 'Kind';
+	@override String get memoryEmpty => 'Nothing saved yet';
+	@override String get memoryEmptyDes => 'Say “remember that…” in a chat, or tell the assistant about a habit, and it saves it.';
+	@override String get memoryNoMatch => 'No memory matches';
+	@override String get toolSearchTitle => 'Search diaries';
+	@override String get toolSearchDes => 'Find your local diaries by keyword or by meaning, or browse them by date and category. The meaning path needs the local semantic index enabled in settings.';
+	@override String get toolGetTitle => 'Read full diary';
+	@override String get toolGetDes => 'Read the full text of diaries by id, several at a time.';
+	@override String get toolOverviewTitle => 'Diary overview';
+	@override String get toolOverviewDes => 'Counts your diaries in total and per category, and their date span.';
+	@override String get toolCreateTitle => 'Create diary';
+	@override String get toolCreateDes => 'Saves content as a new local diary entry when you ask.';
+	@override String get toolUpdateTitle => 'Edit diary';
+	@override String get toolUpdateDes => 'Change the title, body, mood or category of diaries, several at a time.';
+	@override String get toolDeleteTitle => 'Delete diary';
+	@override String get toolDeleteDes => 'Move diaries to the recycle bin, where you can restore them.';
+	@override String get toolListCategoriesTitle => 'View categories';
+	@override String get toolListCategoriesDes => 'Lists all of your diary categories.';
+	@override String get toolCreateCategoryTitle => 'Create category';
+	@override String get toolCreateCategoryDes => 'Add diary categories.';
+	@override String get toolUpdateCategoryTitle => 'Rename category';
+	@override String get toolUpdateCategoryDes => 'Rename categories.';
+	@override String get toolDeleteCategoryTitle => 'Delete category';
+	@override String get toolDeleteCategoryDes => 'Delete categories, only while they hold no diaries.';
+	@override String get toolRecallMemoryTitle => 'Recall memory';
+	@override String get toolRecallMemoryDes => 'Look up saved long-term facts about you when they are needed.';
+	@override String get toolRememberTitle => 'Remember a fact';
+	@override String get toolRememberDes => 'Save durable facts about you — lasting preferences, recurring themes, ongoing goals — so they can be recalled in later chats.';
+	@override String get toolForgetTitle => 'Forget a memory';
+	@override String get toolForgetDes => 'Delete saved memories.';
+	@override String get toolJsTitle => 'Run script';
+	@override String get toolJsDes => 'Run a short piece of JavaScript in isolation to compute something. No network, no access to your diaries.';
+	@override String get toolJsEmpty => 'No value returned';
+	@override String get compactionNotice => 'Earlier messages summarized to save context';
+	@override String get compactionSheetTitle => 'Context summary';
+	@override String get compactionSheetNote => 'To save context, earlier messages are folded into the summary below before being sent to the model. The full messages are kept in this conversation and you can still scroll back to them.';
+	@override String get compactionRestore => 'Send full history again';
+	@override String get disclaimerTitle => 'Before you start';
+	@override String get disclaimerContent => 'The Moodiary assistant is powered by third-party large language models. Please be aware:\n\n• AI-generated content may be inaccurate, incomplete, or even misleading. Do not rely on it as professional (medical, psychological, legal, or financial) advice, or as the basis for any important decision.\n\n• When you send a message, your input is sent to the model provider you configured. When the assistant uses the diary tools, relevant local diary excerpts are sent as well in order to generate a reply. It is up to you to decide whether to trust that provider.\n\n• Your API key is stored only in local secure storage and is never uploaded to Moodiary\'s servers.\n\nBy continuing, you acknowledge and accept the risks above.';
+	@override String get disclaimerAgree => 'Agree & continue';
+	@override String get disclaimerDecline => 'Not now';
+	@override String get disclaimerGateTitle => 'Accept the disclaimer to use the assistant';
+	@override String get disclaimerGateAction => 'View disclaimer';
+	@override String get toolSendImage => 'Send an image';
+	@override String get imageMessageLabel => '[Image]';
+	@override String get citationRead => 'View diaries';
+	@override String get citationCreated => 'Create diary';
+	@override String get citationUpdated => 'Edit diary';
+	@override String get citationDeleted => 'Delete diary';
+	@override String citationCount({required Object count}) => '${count}';
+	@override String get emptyGreetingMorning => 'Good morning';
+	@override String get emptyGreetingAfternoon => 'Good afternoon';
+	@override String get emptyGreetingEvening => 'Good evening';
+	@override String get emptySubtitle => 'What do you want to write down?';
+	@override String get modelProviderTitle => 'Model Providers';
+	@override String get modelProviderAdd => 'Add';
+	@override String get modelProviderNoKey => 'No key';
+	@override String get modelProviderEmptyTitle => 'No model providers yet';
+	@override String get modelProviderEmptyHint => 'Tap Add at the bottom right to create one';
+	@override String get modelProviderDeleteTitle => 'Delete provider';
+	@override String modelProviderDeleteContent({required Object name}) => 'Delete "${name}"? Its API Key will be removed too.';
+	@override String modelProviderDeleteAffects({required Object count}) => '${count} conversations use it; they will answer with the default provider afterwards.';
+	@override String get modelProviderDeleted => 'Deleted';
+	@override String get modelProviderEditNew => 'Add provider';
+	@override String get modelProviderEditEdit => 'Edit provider';
+	@override String get modelProviderNameHint => 'e.g. DeepSeek / local Ollama';
+	@override String get modelProviderBaseUrl => 'baseUrl';
+	@override String get modelProviderBaseUrlHint => 'Leave empty to use the official endpoint';
+	@override String get modelProviderApiKey => 'API Key';
+	@override String get modelProviderApiKeyHintSet => 'Configured, leave empty to keep unchanged';
+	@override String get modelProviderApiKeyHintUnset => 'Paste API Key';
+	@override String get modelProviderModel => 'Model';
+	@override String get modelProviderNeedName => 'Please enter a name';
+	@override String get modelProviderNeedModel => 'Please enter a model';
+	@override String get modelProviderSaved => 'Saved';
+	@override String get modelProviderGetApiKey => 'Get API Key';
+	@override String get llmPickerTitle => 'Choose provider';
+	@override String get llmPickerCustomDes => 'Configure a provider manually';
+	@override String get llmPickerRefresh => 'Refresh';
+	@override String get llmPickerRefreshed => 'Updated';
+	@override String get llmPickerLoadFailed => 'Failed to load';
+	@override String llmPickerModelCount({required Object count}) => '${count} models';
+	@override String llmPickerUpdatedAt({required Object time}) => 'Updated ${time}';
+	@override String get llmPickerEmpty => 'No preset providers available';
+	@override String get llmPickerDataSource => 'Data from models.dev';
+	@override String get llmPickerSearchHint => 'Search providers';
+	@override String get modelProviderPickModel => 'Choose a model';
+	@override String get modelProviderBadgeReasoning => 'Reasoning';
+	@override String get modelProviderBadgeVision => 'Vision';
+	@override String get modelProviderCapabilities => 'Model capabilities';
+	@override String get modelProviderCapabilitiesHint => 'Enable what this model supports — controls tools, thinking, and image sending.';
+	@override String get modelProviderSearchModelHint => 'Search models';
+	@override String get modelProviderNoModelMatch => 'No matching models';
+	@override String get modelProviderFillKey => 'Add key';
+	@override String get modelProviderManage => 'Manage providers';
+	@override String get modelCatalogMissing => 'No model catalogue yet';
+	@override String get modelCatalogDownload => 'Download model catalogue';
+	@override String modelCatalogUpdatedAt({required Object time}) => 'Catalogue updated ${time}';
+	@override String get modelNotInCatalog => 'Not in catalogue';
+	@override String get summaryLoading => 'Loading…';
+	@override String get summaryNoProvider => 'No model provider configured';
+	@override String get summaryKeySet => 'Key set';
+	@override String get summaryKeyUnset => 'No key';
+	@override String get summaryTitle => 'AI assistant setup';
+	@override String streamError({required Object error}) => '\n(error: ${error})';
+	@override String requestFailed({required Object error}) => '(request failed: ${error})';
+	@override String get modelProviderDefault => 'Default';
+	@override String get modelProviderDefaultModel => 'Default model';
+	@override String modelListCount({required Object count}) => '${count} models';
+	@override String get modelListUpdate => 'Update list';
+	@override String get modelListAdd => 'Add manually';
+	@override String get modelListEmpty => 'No models available yet';
+	@override String get modelDeprecated => 'Retired';
+	@override String get composerFullscreen => 'Full-screen editor';
+	@override String get toolArgs => 'Arguments';
+	@override String get toolResult => 'Result';
+	@override String get permissionTitle => 'Permissions';
+	@override String get permissionConfirm => 'Ask before changes';
+	@override String get permissionConfirmDes => 'Asks before creating, editing or deleting';
+	@override String get permissionAuto => 'Auto edit';
+	@override String get permissionAutoDes => 'Asks only before overwriting text or deleting for good';
+	@override String get permissionFull => 'Full access';
+	@override String get permissionFullDes => 'Runs everything without asking';
+	@override String get permissionSessionOnly => 'Only for this conversation';
+	@override String get approvalSkip => 'Skip';
+	@override String get approvalOrReply => 'or just reply';
+	@override String get approvalConfirmCreate => 'Create';
+	@override String get approvalConfirmUpdate => 'Apply';
+	@override String approvalConfirmUpdateCount({required Object count}) => 'Apply to ${count}';
+	@override String get approvalOverwrite => 'Overwrite text';
+	@override String get approvalConfirmTrash => 'Move to recycle bin';
+	@override String get approvalConfirmDelete => 'Delete';
+	@override String get approvalConfirmRemember => 'Remember';
+	@override String get approvalFieldTitle => 'Title';
+	@override String get approvalFieldCategory => 'Category';
+	@override String get approvalFieldContent => 'Text';
+	@override String get approvalFieldName => 'Name';
+	@override String get approvalNoCategory => 'Uncategorised';
+	@override String approvalContentNew({required Object count}) => 'about ${count} characters';
+	@override String approvalContentRewrite({required Object from, required Object to}) => 'Full rewrite, about ${from} → ${to} characters';
+	@override String get approvalOverwriteWarning => 'Overwrites the current text; there is no version history to go back to';
+	@override String get approvalIrreversible => 'Cannot be undone';
+	@override String approvalDiaryCount({required Object count}) => '${count} entries';
+	@override String approvalItemCount({required Object count}) => '${count} items';
+	@override String approvalCategoryTo({required Object name}) => 'category → ${name}';
+	@override String approvalMore({required Object count}) => '${count} more';
+	@override String get toolAwaitingConfirm => 'Waiting for you';
+	@override String get toolSkipped => 'Skipped';
+	@override String get truncatedNotice => 'Reply was cut short';
+	@override String get continueTurn => 'Continue';
+	@override String get errorMaxTurns => 'Ran out of tool turns — try a narrower question';
+	@override String get errorUnknownTool => 'The model called a tool that does not exist';
+	@override String get errorCancelled => 'Stopped';
+	@override String get toolDone => 'Done';
+	@override String get toolFailed => 'Failed';
+	@override String get toolNoMatch => 'No matches';
+	@override String toolMatched({required Object count}) => '${count} entries';
+	@override String toolRead({required Object count}) => '${count} in full';
+	@override String toolListed({required Object count}) => '${count} items';
+	@override String get toolUntitled => 'Untitled';
+	@override String get toolUpdated => 'Updated';
+	@override String get toolTrashed => 'Moved to recycle bin';
+	@override String toolTrashedCount({required Object count}) => '${count} moved to recycle bin';
+	@override String toolBatchDiaries({required Object count}) => '${count} entries';
+	@override String toolBatchItems({required Object count}) => '${count} items';
+	@override String get toolDeleted => 'Deleted';
+	@override String get dailyNotesPreviewNotice => 'The preview assistant sends only text entered in this conversation and its chat history. It cannot read diaries, notes, tasks or memory, or change app data. Knowledge retrieval and reviewed organization are not available yet.';
+}
+
+// Path: common
+class _Translations$common$en extends Translations$common$zh {
+	_Translations$common$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get ok => 'OK';
+	@override String get weatherSunny => 'Sunny';
+	@override String get weatherCloudy => 'Cloudy';
+	@override String get weatherOvercast => 'Overcast';
+	@override String get weatherShowerRain => 'Showers';
+	@override String get weatherLightRain => 'Light rain';
+	@override String get weatherModerateRain => 'Moderate rain';
+	@override String get weatherHeavyRain => 'Heavy rain';
+	@override String get weatherStorm => 'Storm';
+	@override String get weatherThundershower => 'Thundershower';
+	@override String get weatherLightSnow => 'Light snow';
+	@override String get weatherHeavySnow => 'Heavy snow';
+	@override String get weatherSleet => 'Sleet';
+	@override String get weatherFoggy => 'Fog';
+	@override String get weatherHaze => 'Haze';
+	@override String get weatherHot => 'Hot';
+	@override String get weatherCold => 'Cold';
+	@override String get cancel => 'Cancel';
+	@override String get more => 'More';
+	@override String get custom => 'Custom';
+	@override String get save => 'Save';
+	@override String get media => 'Media';
+	@override String get audio => 'Audio';
+	@override String get video => 'Video';
+	@override String get category => 'Category';
+	@override String get name => 'Name';
+	@override String get delete => 'Delete';
+	@override String get loadFailed => 'Something went wrong';
+	@override String get untitled => 'Untitled';
+	@override String get retry => 'Retry';
+	@override String categoryCount({required Object count}) => '${count} categories';
+	@override String get fileName => 'File name';
+	@override String get close => 'Close';
+	@override String get appName => 'DailyNotes';
+	@override String get configured => 'Configured';
+	@override String get notConfigured => 'Not configured';
+	@override String get copied => 'Copied to clipboard';
+	@override String get legacySceneStudy => 'Studying';
+	@override String get legacySceneWork => 'Working';
+	@override String get legacySceneTravel => 'Traveling';
+	@override String get legacySceneSports => 'Workout';
+	@override String get legacySceneFood => 'Yummy';
+	@override String get legacySceneSlacking => 'Slacking';
+	@override String get moodAwful => 'Awful';
+	@override String get moodBad => 'Bad';
+	@override String get moodOkay => 'Okay';
+	@override String get moodGood => 'Good';
+	@override String get moodGreat => 'Great';
+	@override String get moodUnset => 'Not recorded';
+}
+
+// Path: dailynotes
+class _Translations$dailynotes$en extends Translations$dailynotes$zh {
+	_Translations$dailynotes$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get notesTitle => 'Notes';
+	@override String get ordinaryNotes => 'Notes';
+	@override String get knowledgeBase => 'Knowledge';
+	@override String get frequentFolders => 'Frequent folders';
+	@override String get allFolders => 'View all';
+	@override String get folderTree => 'Folder tree';
+	@override String get recentNotes => 'Recent notes';
+	@override String get allNotes => 'All notes';
+	@override String get uncategorized => 'Uncategorized';
+	@override String get newFolder => 'New folder';
+	@override String get folderName => 'Folder name';
+	@override String get newNote => 'New note';
+	@override String get noteTitle => 'Title (optional)';
+	@override String get noteBodyHint => 'Start writing here…';
+	@override String get noteTags => 'Tags';
+	@override String get tagsHint => 'Separate tags with commas';
+	@override String get noNotes => 'No notes yet';
+	@override String get noNotesHint => 'Tap the bottom action to capture an idea.';
+	@override String get noFolders => 'No folders yet';
+	@override String get noFoldersHint => 'Create a folder to organize notes.';
+	@override String get newTopic => 'New topic';
+	@override String get newSubtopic => 'New subtopic';
+	@override String get topicName => 'Topic name';
+	@override String get noTopics => 'No knowledge topics yet';
+	@override String get noTopicsHint => 'Create a topic with the bottom action, then link existing notes.';
+	@override String get subtopics => 'Subtopics';
+	@override String get linkedNotes => 'Linked notes';
+	@override String get linkNotes => 'Link existing notes';
+	@override String get noLinkedNotes => 'No linked notes yet';
+	@override String get linkNotesHint => 'Link original notes to read the same content in different topics.';
+	@override String get unlink => 'Unlink';
+	@override String get unlinkConfirm => 'Remove the link to this topic? The original note will be kept.';
+	@override String get chooseFolder => 'Choose a folder';
+	@override String get moveNote => 'Move note';
+	@override String get moveConfirm => 'Move this note to the selected folder? Its content and topic links will be preserved.';
+	@override String get manage => 'Manage';
+	@override String get rename => 'Rename';
+	@override String get confirm => 'Confirm';
+	@override String get noMatches => 'No matching notes';
+	@override String get searchNotes => 'Search notes';
+	@override String get untitledNote => 'Untitled note';
+	@override String get unsaved => 'Not saved yet';
+	@override String get saving => 'Saving…';
+	@override String get savedLocally => 'Saved locally';
+	@override String get saveFailed => 'Could not save. Please retry.';
+	@override String get localOnly => 'Stored locally, not synced yet';
+	@override String get unsavedExitTitle => 'Unsaved changes';
+	@override String get unsavedExitHint => 'Local saving has not succeeded. Retry or copy your content and keep this page open to avoid losing it.';
+	@override String get keepEditing => 'Keep editing';
+	@override String get copyContent => 'Copy content';
+	@override String get retry => 'Retry';
+	@override String get copied => 'Copied to clipboard';
+	@override String get emptyName => 'Please enter a name';
+	@override String get deleteNote => 'Delete this note?';
+	@override String get deleteNoteHint => 'The note will move to the recycle bin and its topic links will be hidden.';
+	@override String get deleteTopic => 'Delete topic';
+	@override String get deleteTopicOnly => 'Delete this topic only';
+	@override String get deleteTopicTree => 'Delete this topic tree';
+	@override String get deleteTopicHint => 'Deleting only this topic promotes its children. Deleting the tree moves all descendant topics to the recycle bin. Original notes are preserved.';
+	@override String get nameAlreadyExists => 'This name already exists';
+	@override String get notesCount => 'notes';
+	@override String get selectNotes => 'Select notes to link';
+	@override String get linked => 'Linked';
+	@override String get selected => 'Selected';
+	@override String get noneAvailable => 'There are no notes to link. Create a note first.';
+	@override String get folder => 'Folder';
+	@override String get rootTopics => 'Root topics';
+	@override String get todosTitle => 'To-dos';
+	@override String get todayTodos => 'Today';
+	@override String get groupedTodos => 'Grouped';
+	@override String get overdue => 'Overdue';
+	@override String get today => 'Today';
+	@override String get nextSevenDays => 'Next seven days';
+	@override String get later => 'Later';
+	@override String get noDate => 'No date';
+	@override String get completed => 'Completed';
+	@override String get noTodos => 'No to-dos yet';
+	@override String get noTodosHint => 'Tap the bottom action to add your next task';
+	@override String get newTodo => 'New to-do';
+	@override String get editTodo => 'Edit to-do';
+	@override String get todoTitle => 'Task';
+	@override String get todoDetails => 'Notes';
+	@override String get dueDate => 'Planned date';
+	@override String get chooseDate => 'Choose date';
+	@override String get clearDate => 'Clear date';
+	@override String get save => 'Save';
+	@override String get cancel => 'Cancel';
+	@override String get titleRequired => 'Please enter a task';
+	@override String get notificationsOff => 'Reminders are off by default';
+	@override String get markComplete => 'Mark completed';
+	@override String get markIncomplete => 'Mark incomplete';
+	@override String get delete => 'Delete';
+	@override String get deleteTodo => 'Delete this to-do?';
+	@override String get deleteTodoHint => 'The to-do will move to the recycle bin.';
+	@override String get addTask => 'New to-do';
+	@override String get create => 'Create';
+	@override String get storeOpenFailed => 'Could not load local data. Please retry.';
+	@override String get unsavedChanges => 'Unsaved changes';
+	@override String get discardChanges => 'Discard changes';
+	@override String get unsavedChangesHint => 'Going back will discard unsaved changes to this to-do.';
+	@override String get defaultTaskList => 'Default list';
+}
+
+// Path: dailynotesNavigation
+class _Translations$dailynotesNavigation$en extends Translations$dailynotesNavigation$zh {
+	_Translations$dailynotesNavigation$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get preview => 'Development preview';
+	@override String get profile => 'My records';
+	@override String get sync => 'Sync & backup';
+	@override String get customize => 'Customize';
+	@override String get categories => 'Categories';
+	@override String get categoryFilter => 'Filter diary categories';
+	@override String get archive => 'Archives';
+	@override String get calendar => 'Calendar';
+	@override String get health => 'Data health';
+	@override String get recent => 'Recent visits';
+	@override String get privacy => 'Privacy & security';
+	@override String get importExport => 'Import & export';
+	@override String get settings => 'Settings';
+	@override String get planned => 'This feature is in the specification and is not implemented in this preview yet.';
+	@override String get localOnlyWarning => 'New notes, knowledge topics and tasks are local only in this preview; WebDAV and export backup are not connected yet.';
+	@override String get diaryViewMode => 'Diary display';
+	@override String get readOnlyCheck => 'This inspection is read-only. It does not repair, overwrite or delete data.';
+	@override String get checking => 'Checking';
+	@override String get checkFailed => 'Inspection failed or found an issue';
+	@override String get quickCheckPassed => 'Local database quick check passed';
+	@override String get notChecked => 'Not checked';
+	@override String get localDatabase => 'Local database';
+	@override String get databaseScope => 'Scope: SQLite quick_check on the open database. This does not validate attachments, backups or remote sync.';
+	@override String get attachments => 'Attachment integrity';
+	@override String get backups => 'Backup validity';
+	@override String get syncConsistency => 'Sync consistency';
+	@override String get unverified => 'Not verified';
+	@override String get unverifiedDetail => 'This preview has not implemented a complete check for this category. There is insufficient evidence to report a healthy state.';
+	@override String get runLocalCheck => 'Check local database';
+	@override String get healthLimits => 'Inspection time and results are shown for this page session. Persistent inspection history and complete diagnostics remain in development.';
+	@override String get footprint => 'Writing footprint';
+	@override String get refresh => 'Refresh';
+	@override String get statsUnavailable => 'Unable to read statistics. Please retry.';
+	@override String get heatmapScope => 'Diary and long-record activity over the last 84 days. Ordinary note editing history is not included.';
+	@override String get notAvailable => 'Unavailable';
+	@override String get diaryWords => 'Diary characters';
+	@override String get noteWords => 'Note characters';
+	@override String get longWords => 'Long-record characters';
+	@override String get totalWords => 'Total characters';
+	@override String get diaries => 'Diaries';
+	@override String get notes => 'Notes';
+	@override String get longRecords => 'Long records';
+	@override String get topics => 'Knowledge topics';
+	@override String get tasks => 'Tasks';
+	@override String get tasksCompleted => 'Completed tasks';
+	@override String get reviewPending => 'Category trends, yearly review and usage duration are in development. Character counts exclude deleted content.';
+	@override String get recycle => 'Recycle bin';
+	@override String get originalReview => 'Existing diary insights & management';
+	@override String get restoreFailed => 'Restore failed; content retained';
+	@override String get untitled => 'Untitled';
+	@override String get restore => 'Restore';
+	@override String get diaryRecycle => 'Diary recycle bin';
+	@override String get recycleScope => 'The notes, tasks and knowledge topics below are retained until you act. This preview supports restore; permanent deletion and emptying are not available yet.';
+	@override String get recycleEmpty => 'No deleted notes, tasks or knowledge topics';
+}
+
+// Path: diary
+class _Translations$diary$en extends Translations$diary$zh {
+	_Translations$diary$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get tabViewEmpty => 'Nothing here yet';
+	@override String get pageViewModeButton => 'View mode';
+	@override String get categoryNoCategory => 'No category';
+	@override String get allCategories => 'All categories';
+	@override String get categoryAll => 'All';
+	@override String get categoryColorLabel => 'Color';
+	@override String get search => 'Search';
+	@override String searchResult({required Object count}) => 'Total ${count} diaries';
+	@override String searchTime({required Object ms}) => '${ms}ms';
+	@override String get rangeAll => 'All time';
+	@override String get rangeLast30 => 'Last 30 days';
+	@override String get rangeThisYear => 'This year';
+	@override String get searchSortRelevance => 'Relevance';
+	@override String get searchSortNewest => 'Newest';
+	@override String get searchSortOldest => 'Oldest';
+	@override String get searchNoResult => 'No matching diaries';
+	@override String get searchHistory => 'Search history';
+	@override String get searchHistoryClear => 'Clear';
+	@override String get searchHistoryEmpty => 'No search history yet';
+	@override String get viewModeTimeline => 'Timeline';
+	@override String get viewModeFeed => 'Feed';
+	@override String get linkNotFound => 'Diary not found or deleted';
+	@override String get knowledgeGraph => 'Knowledge Graph';
+	@override String graphCount({required Object nodes, required Object edges}) => '${nodes} notes · ${edges} links';
+	@override String get graphTimeLast365 => 'Last 12 months';
+	@override String get graphOpenDiary => 'Open diary';
+	@override String get graphStyle => 'Layout style';
+	@override String get graphStyleSparse => 'Sparse';
+	@override String get graphStyleNormal => 'Standard';
+	@override String get graphStyleDense => 'Dense';
+	@override String get graphView => 'View';
+	@override String get graphColorBy => 'Color by';
+	@override String get graphColorByTime => 'Time';
+	@override String get graphColorByPlain => 'Plain';
+	@override String get graphShowLabels => 'Show titles';
+	@override String get graphResetCamera => 'Fit to view';
+	@override String get graphEmptyTitle => 'No links yet';
+	@override String get graphEmptyDesc => 'Type [[ in a diary to reference another one, and they\'ll show up here';
+	@override String get graphEmptyAction => 'Write a diary';
+	@override String get graphFilterEmpty => 'No links match these filters';
+	@override String get graphClearFilter => 'Clear filters';
+	@override String get graphLocal => 'Local graph';
+	@override String get graphOutgoing => 'Outgoing';
+	@override String get graphIncoming => 'Incoming';
+	@override String graphOutgoingCount({required Object count}) => '${count} outgoing';
+	@override String graphIncomingCount({required Object count}) => '${count} incoming';
+	@override String get graphSetAsCenter => 'Center on this';
+	@override String get graphBackToCenter => 'Recenter';
+	@override String get graphLinks => 'Links';
+	@override String get graphNoLocalLinks => 'This diary has no links yet';
+	@override String get categorySearchHint => 'Search categories';
+	@override String get categoryAllDiary => 'All diaries';
+	@override String get categoryNoMatch => 'No matching categories';
+	@override String get categorySyncingPlaceholder => 'Syncing category…';
+	@override String get categoryManageEntry => 'Manage categories';
+	@override String get sortTitle => 'Sort';
+	@override String get sortNewestFirst => 'Newest first';
+	@override String get sortOldestFirst => 'Oldest first';
+	@override String get sortModifiedFirst => 'Recently edited first';
+	@override String timelineMonthCount({required num count}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(count,
+		one: '1 entry',
+		other: '${count} entries',
+	);
+	@override String get rangeLast7 => 'Last 7 days';
+	@override String get categoryManagerTitle => 'Categories';
+	@override String categoryCreated({required Object name}) => 'Created “${name}”';
+	@override String get categoryCreateFailed => 'Could not create it';
+	@override String categoryRenamed({required Object name}) => 'Renamed to “${name}”';
+	@override String get categoryRenameFailed => 'Could not rename it';
+	@override String get categoryDeleteTitle => 'Delete this category?';
+	@override String categoryDeleteMessage({required Object name}) => '“${name}” can’t be deleted while entries (even in the recycle bin) are filed under it. Entries are kept.';
+	@override String get categoryDeleted => 'Deleted';
+	@override String get categoryDeleteBlocked => 'Still has entries (check the recycle bin)';
+	@override String get categoryEmpty => 'No categories yet';
+	@override String get categoryNew => 'New category';
+	@override String categoryDiaryCount({required Object count}) => '${count} entries';
+	@override String get categoryNoDiary => 'No entries';
+	@override String get rename => 'Rename';
+	@override String get categoryNameHint => 'Category name';
+	@override String get categoryNameEmpty => 'The name cannot be empty';
+	@override String get recycleTitle => 'Recycle bin';
+	@override String get recycleClear => 'Empty the bin';
+	@override String get recycleRestored => 'Restored';
+	@override String get recycleRestoreFailed => 'Could not restore it';
+	@override String get recyclePurgeTitle => 'Delete for good?';
+	@override String get recyclePurgeMessage => 'This cannot be undone — the entry is gone for good.';
+	@override String get recyclePurgeConfirm => 'Delete for good';
+	@override String get recyclePurged => 'Deleted for good';
+	@override String get recyclePurgeFailed => 'Could not delete it';
+	@override String get recycleClearTitle => 'Empty the recycle bin?';
+	@override String recycleClearMessage({required Object count}) => '${count} entries will be deleted for good. This cannot be undone.';
+	@override String get recycleClearConfirm => 'Empty';
+	@override String recycleCleared({required Object count}) => 'Deleted ${count} entries';
+	@override String get recycleEmpty => 'The recycle bin is empty';
+	@override String get recycleRestore => 'Restore';
+	@override String get managerTitle => 'Manage entries';
+	@override String managerSelected({required Object count}) => '${count} selected';
+	@override String get managerBatchRecycle => 'Move to the recycle bin';
+	@override String get managerEmpty => 'No entries match this filter';
+	@override String get managerRecycleTitle => 'Move to the recycle bin?';
+	@override String managerRecycleMessage({required Object count}) => '${count} entries will be moved to the recycle bin, where you can restore them.';
+	@override String get managerRecycleConfirm => 'Move';
+	@override String managerRecycled({required Object done, required Object total}) => 'Moved ${done} / ${total} to the recycle bin';
+	@override String get managerAll => 'All';
+	@override String get mapTitle => 'Footprints';
+	@override String get mapPlaces => 'Places';
+	@override String get mapEmpty => 'No footprints yet';
+	@override String get mapExpand => 'Full screen';
+	@override String get mapFitAll => 'Show all';
+	@override String get mapSource => 'Map source';
+	@override String get mapChooseSource => 'Choose a map source';
+	@override String get mapSourceTianditu => 'Tianditu';
+	@override String get mapTiandituKey => 'Tianditu key';
+	@override String get mapTiandituNoKey => 'Tianditu needs a key';
+	@override String get mapLoadFailed => 'Map failed to load';
+	@override String get addTag => 'Add a tag';
+	@override String get tagNameHint => 'Tag name';
+	@override String get add => 'Add';
+	@override String get weatherFailed => 'Could not fetch the weather — try again later';
+	@override String weatherFetched({required Object weather}) => 'Weather: ${weather}';
+	@override String get weatherAuto => 'Fetch automatically';
+	@override String get weatherClear => 'Clear weather';
+	@override String get positionFailed => 'Could not fetch the location — try again later';
+	@override String get qweatherNotConfigured => 'QWeather is not set up yet — add your key under Settings › Third-party services';
+	@override String get positionPermissionDenied => 'Location permission was not granted';
+	@override String get positionPermissionForever => 'Location permission is denied — enable it in system settings';
+	@override String get positionServiceOff => 'Location services are turned off';
+	@override String get positionLocating => 'Locating';
+	@override String get positionAuto => 'Fetch automatically';
+	@override String get positionNewPlace => 'New place';
+	@override String get positionManagePlaces => 'Manage places';
+	@override String get positionClear => 'Clear location';
+	@override String get placeManagerTitle => 'Places';
+	@override String get placeSearchHint => 'Search places';
+	@override String get placeNoMatch => 'No matching place';
+	@override String get placeEmpty => 'No places yet';
+	@override String get placeNew => 'New place';
+	@override String get placeCreateTitle => 'New place';
+	@override String get placeEditTitle => 'Edit place';
+	@override String get placeNameLabel => 'Name';
+	@override String get placeNameEmpty => 'Name cannot be empty';
+	@override String get placeRelocate => 'Update to current location';
+	@override String get placeIconLabel => 'Icon';
+	@override String placeDistanceMeters({required Object meters}) => '${meters} m';
+	@override String placeDistanceKilometers({required Object km}) => '${km} km';
+	@override String placeDiaryCount({required Object count}) => '${count} entries';
+	@override String get placeNoDiary => 'No entries';
+	@override String placeDeleteTitle({required Object name}) => 'Delete "${name}"?';
+	@override String placeDeleteMessage({required Object name}) => '"${name}" can’t be deleted while entries (even in the recycle bin) use it. Entries are kept.';
+	@override String get placeDeleteBlocked => 'Still used by entries (check the recycle bin)';
+	@override String placeCreated({required Object name}) => 'Added "${name}"';
+	@override String get placeSaved => 'Saved';
+	@override String get placeDeleted => 'Deleted';
+	@override String get placeSaveFailed => 'Could not save';
+	@override String placeDistanceAway({required Object distance}) => '${distance} away';
+	@override String get home => 'Home';
+	@override String get goBack => 'Back';
+	@override String get goForward => 'Forward';
+	@override String get edit => 'Edit';
+	@override String get share => 'Share';
+	@override String get askAssistant => 'Ask the assistant';
+	@override String get citationRecycled => 'In the recycle bin';
+	@override String get outline => 'Outline';
+	@override String wordCount({required Object count}) => '${count} characters';
+	@override String get saving => 'Saving';
+	@override String get saved => 'Saved';
+	@override String get unsaved => 'Unsaved';
+	@override String get saveFailed => 'Could not save';
+	@override String get unknownCategory => 'Unknown category';
+	@override String get searchReindexHint => 'Rebuild the index after upgrading so older entries become searchable';
+	@override String get searchReindex => 'Rebuild';
+	@override String get autoSaved => 'Autosaved';
+	@override String get calendarBackToToday => 'Today';
+	@override String get calendarEmptyDay => 'Nothing written that day';
+	@override String get calendarYearView => 'Year view';
+	@override String get calendarMonthView => 'Month view';
+}
+
+// Path: editor
+class _Translations$editor$en extends Translations$editor$zh {
+	_Translations$editor$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get audioFileError => 'Audio file error';
+	@override String get unsupportedPlatform => 'The editor is not supported on this platform';
+	@override String loadFailed({required Object error}) => 'Failed to load the editor\n${error}';
+	@override String get pickCategory => 'Pick a category';
+	@override String get noCategory => 'No category';
+	@override String get migrationTitle => 'Upgrade data migration';
+	@override String get migrationIntro => 'Version 2.8.0 uses a new data engine and editor. A one-time migration is required before you can continue.';
+	@override String get migrationStepEngine => 'Database engine upgrade';
+	@override String get migrationStepEngineDesc => 'Moves diaries, categories, fonts and all other data into the new database';
+	@override String get migrationStepEditor => 'Diary format conversion';
+	@override String get migrationStepEditorDesc => 'Converts old-format content to the new editor format; originals are backed up first';
+	@override String get migrationContentIntro => 'The new editor needs your diaries upgraded to a new format before you can continue.';
+	@override String get migrationStepContent => 'Diary format upgrade';
+	@override String get migrationStepContentDesc => 'Upgrades to the new editor format; all diaries are backed up first';
+	@override String get migrationContentDoneSubtitle => 'All diaries now use the new format';
+	@override String get migrationStart => 'Start migration';
+	@override String get migrationExit => 'Exit app';
+	@override String get migrationLandingNote => 'Do not exit the app during migration. No old data is deleted until migration succeeds.';
+	@override String get migrationRunningTitle => 'Migrating data';
+	@override String get migrationRunningSubtitle => 'Keep the app in the foreground and do not close it';
+	@override String get migrationStageDone => 'Done';
+	@override String get migrationStagePending => 'Not started';
+	@override String get migrationStageFailed => 'Failed';
+	@override String migrationStageFailedCount({required Object count}) => '${count} failed';
+	@override String get migrationDataSafeNote => 'No old data is deleted until migration succeeds';
+	@override String get migrationFailedTitle => 'Some entries failed to migrate';
+	@override String migrationFailedSubtitle({required Object count}) => '${count} entries failed to migrate; the rest are done. Originals are backed up — retrying loses nothing.';
+	@override String get migrationErrorTitle => 'Migration hit an error';
+	@override String get migrationErrorSubtitle => 'An error occurred during migration. Originals are backed up — retrying loses nothing.';
+	@override String get migrationRetry => 'Retry';
+	@override String get migrationShareLog => 'Share failure log';
+	@override String get migrationFailedNote => 'The log contains only error details, never diary content. No old data is deleted until migration succeeds.';
+	@override String get migrationDoneTitle => 'Migration complete';
+	@override String get migrationDoneSubtitle => 'All data has been moved to the new engine; old data is kept as a backup';
+	@override String get migrationSummaryDiaries => 'Diaries';
+	@override String migrationSummaryDiariesCount({required Object count}) => '${count}';
+	@override String get migrationSummaryCategories => 'Categories';
+	@override String migrationSummaryCategoriesCount({required Object count}) => '${count}';
+	@override String get migrationSummaryMedia => 'Media & fonts';
+	@override String get migrationSummaryMigrated => 'Migrated';
+	@override String get migrationEnter => 'Get started';
+	@override late final _Translations$editor$toolbar$en toolbar = _Translations$editor$toolbar$en._(_root);
+}
+
+// Path: export
+class _Translations$export$en extends Translations$export$zh {
+	_Translations$export$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get pageTitle => 'Import & export';
+	@override String get sectionExport => 'Export';
+	@override String get sectionImport => 'Import';
+	@override String get sectionBackup => 'Backup';
+	@override String get formatDocx => 'DOCX';
+	@override String get backupExport => 'Export backup';
+	@override String get backupExportSubtitle => 'Packs all entries and media';
+	@override String get restoreFromBackup => 'Restore from backup';
+	@override String get backupRestoreSubtitle => 'Merged by modification time';
+	@override String get restoreConfirmMessage => 'The backup and your local data are merged by last modified time; newer entries win.';
+	@override String get restoreConfirmLabel => 'Restore';
+	@override String get restoring => 'Restoring…';
+	@override String restoreDone({required Object summary}) => 'Restored: ${summary}';
+	@override String restoreSummary({required Object diary, required Object category, required Object media}) => '${diary} diaries / ${category} categories / ${media} media files';
+	@override String restoreSummarySkipped({required Object base, required Object skipped}) => '${base}, ${skipped} skipped (this device has newer content)';
+	@override String restoreSummaryFailed({required Object base, required Object failed}) => '${base}, ${failed} failed';
+	@override String restorePartial({required Object summary}) => 'Restore did not fully succeed: ${summary}. Check storage space and connection, then retry — don\'t delete the old device\'s data yet';
+	@override String restoreStopped({required Object summary}) => 'Restore stopped (incomplete): ${summary}';
+	@override String restoreFailed({required Object error}) => 'Restore failed: ${error}';
+	@override String get packingBackup => 'Packing backup…';
+	@override String get backupReady => 'Backup created';
+	@override String failed({required Object error}) => 'Export failed: ${error}';
+	@override String get artifactMissing => 'The exported file is gone. Please try again.';
+	@override String get generated => 'Exported';
+	@override String get titleMarkdown => 'Export to Markdown';
+	@override String get titleDocx => 'Export to DOCX';
+	@override String get titlePdf => 'Export to PDF';
+	@override String get sectionScope => 'Scope';
+	@override String get selectDiaries => 'Select entries';
+	@override String get counting => 'Counting…';
+	@override String entryCount({required Object count}) => '${count} entries';
+	@override String get mergeIntoOneFile => 'Merge into one file';
+	@override String get mergeSubtitle => 'When off, one file per entry';
+	@override String get fileNameTemplate => 'File name template';
+	@override String fileNameTemplateHint({required Object date, required Object title, required Object id}) => 'Available placeholders: ${date} date, ${title} title, ${id} entry id';
+	@override String get templateEmpty => 'Template can\'t be empty';
+	@override String get sectionContent => 'Content';
+	@override String get includeTitle => 'Title';
+	@override String get includeMeta => 'Date and weather';
+	@override String get mediaEmbed => 'Embed images';
+	@override String get mediaPlaceholder => 'Placeholder text only';
+	@override String get mediaNone => 'No media';
+	@override String get sectionLayout => 'Layout';
+	@override String get font => 'Font';
+	@override String get eastAsiaFont => 'Chinese font';
+	@override String get asciiFont => 'Latin font';
+	@override String get noFontSelected => 'No font selected yet';
+	@override String get fontSize => 'Font size';
+	@override String fontSizeValue({required Object size}) => '${size} pt';
+	@override String get lineSpacing => 'Line spacing';
+	@override String lineSpacingValue({required Object value}) => '${value}×';
+	@override String get firstLineIndent => 'Indent first line by two characters';
+	@override String get paper => 'Paper size';
+	@override String get fontNameHint => 'Enter a font name, e.g. "SimSun" or "Georgia".';
+	@override String get fontNameEmpty => 'Font name can\'t be empty';
+	@override String get scopeEmpty => 'No entries in this scope';
+	@override String get cancelled => 'Export cancelled';
+	@override String get pickFontFirst => 'Pick a font first';
+	@override String runButton({required Object count}) => 'Export ${count} entries';
+	@override String get partialTitle => 'Exported, but a few things were left out';
+	@override String skippedMedia({required Object count}) => '${count} media files were missing and were skipped';
+	@override String unsupportedNodes({required Object count, required Object types}) => '${count} kinds of content can\'t be exported in this version yet: ${types}';
+	@override String get scopeAll => 'All entries';
+	@override String get scopeByCategory => 'By category';
+	@override String get scopeByDate => 'By date';
+	@override String get scopePicked => 'Pick manually';
+	@override String scopePickedLabel({required Object count}) => '${count} selected';
+	@override String get dateRange => 'Date range';
+	@override String get tapToPick => 'Tap to choose';
+	@override String dateRangeValue({required Object from, required Object to}) => '${from} – ${to}';
+	@override String get selectAll => 'Select all';
+	@override String get nothingSelected => 'Nothing selected';
+	@override String get confirm => 'Done';
+	@override String get uncategorized => 'Uncategorized';
+	@override String get deletedCategory => 'Deleted category';
+	@override String get pdfFontPageTitle => 'PDF font';
+	@override String get importedFonts => 'Imported fonts';
+	@override String get importFont => 'Import font';
+	@override String get importingFont => 'Importing…';
+	@override String importFailed({required Object error}) => 'Import failed: ${error}';
+	@override String get fontNameUnreadable => 'Can\'t read the font name; the file may be damaged';
+	@override String get noPdfFontTitle => 'No fonts available for PDF yet';
+	@override String get noPdfFontMessage => 'Import a .ttf font to pick it here.';
+	@override String progressConverting({required Object done, required Object total}) => 'Converting ${done}/${total}';
+	@override String get progressWriting => 'Laying out…';
+	@override String progressWritingCount({required Object done, required Object total}) => 'Laying out ${done}/${total}';
+	@override String get progressSerializing => 'Writing file…';
+	@override String get mediaVideo => 'Video';
+	@override String get mediaAudio => 'Audio';
+	@override String get mediaAttachment => 'Attachment';
+	@override String get formatImage => 'Image';
+	@override String get titleImage => 'Export as image';
+	@override String get sectionImage => 'Image';
+	@override String get includePosition => 'Include location';
+	@override String get includePositionSubtitle => 'Off by default — exported files are meant to be shared';
+	@override String get imageBrightness => 'Appearance';
+	@override String get imageBrightnessSystem => 'Follow app';
+	@override String get imageBrightnessLight => 'Light';
+	@override String get imageBrightnessDark => 'Dark';
+	@override String get imageSize => 'Size and sharpness';
+	@override String imageSizeValue({required Object width, required Object scale, required Object pixels}) => '${width} dp · ${scale}× (${pixels} px wide)';
+	@override String get imageWatermark => 'Show Moodiary mark';
+	@override String get imageMerge => 'Merge into one long image';
+	@override String get imageMergeSubtitle => 'Off means one image per entry; over 9 are zipped';
+	@override String get previewSample => 'Preview sample';
+	@override String get importMarkdown => 'Import from Markdown';
+	@override String get importMarkdownSubtitle => 'A zip package or a single .md file';
+	@override String get importTitle => 'Import from Markdown';
+	@override String get importSectionFile => 'File';
+	@override String get importPickFile => 'Choose file';
+	@override String get importNoFile => 'Nothing chosen yet';
+	@override String get importScanning => 'Reading…';
+	@override String importDetected({required Object count}) => '${count} entries';
+	@override String get importSpec => 'Format';
+	@override String get importSpecEntries => 'Every .md file at the top level of the zip is one entry; a single .md file also works.';
+	@override String get importSpecAssets => 'Put images, videos and audio under assets/ (subfolders allowed) and reference them with relative paths.';
+	@override String get importSpecFrontMatter => 'An optional front matter at the top may set title, time, mood, category, tags, weather and position. Without it, the title comes from the first level-1 heading or the file name, and the time from a date at the start of the file name.';
+	@override String get importSpecRoundTrip => 'Markdown exported by this app without merging can be imported back directly; merged single-file exports are not supported.';
+	@override String get importSpecExample => 'diaries.zip\n├── 2026-09-06-sunny.md\n├── 2026-09-07-walk.md\n└── assets/\n    ├── image/a.jpg\n    └── video/b.mp4\n\n2026-09-06-sunny.md\n---\ntitle: "Sunny"\ntime: 2026-09-06T10:30:00+08:00\nmood: good\ncategory: "Life"\ntags: ["weekend"]\n---\n\nWent out for a walk today.\n![](assets/image/a.jpg)';
+	@override String importRunButton({required Object count}) => 'Import ${count} entries';
+	@override String importProgress({required Object done, required Object total}) => 'Importing ${done}/${total}';
+	@override String importSummary({required Object diary, required Object category, required Object place}) => '${diary} entries / ${category} new categories / ${place} new places';
+	@override String importSummarySkipped({required Object base, required Object skipped}) => '${base}, ${skipped} skipped (already exist)';
+	@override String importSummaryFailed({required Object base, required Object failed}) => '${base}, ${failed} failed';
+	@override String importDone({required Object summary}) => 'Imported: ${summary}';
+	@override String importPartial({required Object summary}) => 'Import did not fully succeed: ${summary}';
+	@override String importStopped({required Object summary}) => 'Import stopped (incomplete): ${summary}';
+	@override String importRunFailed({required Object error}) => 'Import failed: ${error}';
+	@override String get importEmpty => 'No .md files found in the package';
+	@override String importMissingMedia({required Object count}) => '${count} media files could not be imported (missing or unreadable) and were kept as plain links';
+}
+
+// Path: insights
+class _Translations$insights$en extends Translations$insights$zh {
+	_Translations$insights$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => 'Mood insights';
+	@override String get week => 'Week';
+	@override String get month => 'Month';
+	@override String get year => 'Year';
+	@override String get selectMonth => 'Choose month';
+	@override String get selectYear => 'Choose year';
+	@override String get selectWeek => 'Choose week';
+	@override String pickerYear({required Object year}) => '${year}';
+	@override String yearTitle({required Object year}) => '${year}';
+	@override String weekTitle({required Object start, required Object end}) => '${start} – ${end}';
+	@override String get recordedDays => 'Days recorded';
+	@override String get entries => 'Entries';
+	@override String get bestDay => 'Best day';
+	@override String get empty => 'No moods yet';
+	@override String get calendar => 'Calendar';
+	@override String get trend => 'Trend';
+	@override String get distribution => 'Distribution';
+	@override String get weekdayPattern => 'By weekday';
+	@override String get view => 'View';
+	@override String get unrecorded => 'Not recorded';
+	@override String get today => 'Today';
+	@override String get weekDiaries => 'This week’s entries';
+	@override String get yearPixels => 'Full year';
+	@override String get monthlyTrend => 'By month';
+	@override String monthMood({required Object level}) => 'This month’s mood · ${level}';
+	@override String get noticeTitle => 'Mood tracking has changed';
+	@override String noticeSubtitle({required Object version}) => 'New in ${version}';
+	@override String get noticeCaption => 'Mood captures how you feel today. You can also leave it blank.';
+	@override String get noticeTagsTitle => 'Scenes are now tags';
+	@override String get noticeTagsBody => 'Previous choices like Study and Travel have been added as tags to their diary entries.';
+	@override String get noticeLevelsTitle => 'Past moods have been converted';
+	@override String get noticeLevelsBody => 'Moods like Happy and Fulfilled now use similar levels. Entries without a choice stay unrecorded.';
+	@override String get noticeInsightsTitle => 'Introducing mood insights';
+	@override String get noticeInsightsBody => 'Find your mood calendar and trends in Me.';
+	@override String get noticeExplore => 'Take a look';
+	@override String get noticeDone => 'Got it';
+	@override String get loadError => 'Couldn’t load';
+	@override String get retry => 'Retry';
+	@override String get previousPeriod => 'Previous period';
+	@override String get nextPeriod => 'Next period';
+	@override String countPercent({required Object count, required Object percent}) => '${count} · ${percent}%';
+	@override String signedDelta({required Object sign, required Object value}) => '${sign}${value}';
+	@override String dayHeader({required Object date, required Object weekday}) => '${date} · ${weekday}';
+	@override String recordedWeek({required Object count}) => '${count} / 7';
+	@override String get streak => 'Good-mood streak';
+	@override String streakDays({required num count}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(count,
+		one: '1 day',
+		other: '${count} days',
+	);
+	@override String dayDetail({required Object date, required Object level}) => '${date} · ${level}';
+	@override String yearRange({required Object start, required Object end}) => '${start} – ${end}';
+	@override String weekDays({required Object start, required Object end}) => '${start} – ${end}';
+}
+
+// Path: lock
+class _Translations$lock$en extends Translations$lock$zh {
+	_Translations$lock$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => 'Passcode';
+	@override String get subtitle => 'Verify on launch and sensitive actions';
+	@override String get changePassword => 'Change passcode';
+	@override String get lockNow => 'Lock on leave';
+	@override String get lockNowSubtitle => 'Verify again when you return';
+	@override String get biometric => 'Biometrics';
+	@override String get biometricSubtitle => 'Use instead of the passcode';
+	@override String get turnedOn => 'Passcode on';
+	@override String get turnedOff => 'Passcode off';
+	@override String get passwordChanged => 'Passcode changed';
+	@override String get setPassword => 'Set passcode';
+	@override String get confirmPassword => 'Enter again';
+	@override String get mismatch => 'Didn\'t match, try again';
+	@override String get saveFailed => 'Could not save, try again';
+	@override String get enterNew => 'Enter new passcode';
+	@override String get confirmNew => 'Enter again';
+	@override String get prompt => 'Enter passcode';
+	@override String attemptsLeft({required Object count}) => 'Wrong passcode, ${count} tries left';
+	@override String cooldown({required Object seconds}) => 'Too many tries, retry in ${seconds}s';
+	@override String get biometricTitle => 'Verify your identity';
+	@override String get biometricReason => 'Use biometrics to continue';
+	@override String get biometricUsePasscode => 'Use passcode';
+	@override String get authSubtitle => 'Verification required';
+	@override String get actionSyncKeyChange => 'Change encryption password';
+	@override String get actionSyncKeyDisable => 'Turn off encryption';
+	@override String get actionSyncCloudReset => 'Reset cloud';
+	@override String get actionPasscodeDisable => 'Turn off passcode';
+	@override String get actionPasscodeChange => 'Change passcode';
+	@override String get actionDataExport => 'Export data';
+	@override String get actionBiometricEnable => 'Turn on biometrics';
+	@override String get actionLanSend => 'LAN send';
+	@override String get actionSyncConfig => 'Edit sync settings';
+}
+
+// Path: media
+class _Translations$media$en extends Translations$media$zh {
+	_Translations$media$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => 'Media';
+	@override String get typeImage => 'Image';
+	@override String get typeFile => 'Attachment';
+	@override String get empty => 'No media yet';
+	@override String get rename => 'Rename';
+	@override String imageCount({required num count}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(count,
+		one: '${count} Photo',
+		other: '${count} Photos',
+	);
+	@override String audioCount({required num count}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(count,
+		one: '${count} Audio',
+		other: '${count} Audios',
+	);
+	@override String videoCount({required num count}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(count,
+		one: '${count} Video',
+		other: '${count} Videos',
+	);
+	@override String fileCount({required num count}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(count,
+		one: '${count} Attachment',
+		other: '${count} Attachments',
+	);
+}
+
+// Path: month
+class _Translations$month$en extends Translations$month$zh {
+	_Translations$month$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => 'Monthly records';
+	@override String get record => 'Record body';
+	@override String get append => 'Add record';
+	@override String get summary => 'Monthly summary';
+	@override String get summaryEmpty => 'No summary yet. A deleted summary can be restored with the same identity.';
+	@override String get localOnly => 'New monthly records are stored on this phone only. WebDAV and complete backup are not connected yet.';
+	@override String get savedLocal => 'Saved on phone; not synced to cloud';
+	@override String get timezone => 'The selected date determines the archive day. Times use the phone\'s current timezone. Body-only edits preserve the original event time.';
+	@override String get search => 'Search this month\'s body text';
+	@override String legacy({required Object count}) => 'View legacy records (${count}, not migrated)';
+	@override String get refresh => 'Refresh';
+	@override String get pickMonth => 'Choose month';
+	@override String get empty => 'No matching records in this month.';
+	@override String get loadMore => 'Show 50 more';
+	@override String get readOnly => 'Reading or format validation failed. Cached content is read-only until verification succeeds.';
+	@override String get snapshotFailed => 'No acknowledged editor document was received, or the document contains unsupported formatting. The draft remains in the editor. Retry or copy its JSON.';
+	@override String get emptyBody => 'The record body cannot be empty.';
+	@override String get conflict => 'This block changed elsewhere, was deleted, or has a summary identity conflict. No newer version was overwritten. Copy the draft, leave, refresh and edit again.';
+	@override String get topicUnavailable => 'This topic was deleted or changed type. No new revision was saved to it. Copy your draft.';
+	@override String get uncertain => 'The save result is unconfirmed. The body and request are locked. Retry the identical request instead of creating another record.';
+	@override String get retrySame => 'Retry identical request';
+	@override String get copyDraft => 'Copy draft JSON';
+	@override String get leaveTitle => 'Leave this draft?';
+	@override String get leaveMessage => 'Leaving discards unsaved changes. To retain them, cancel and copy the draft JSON first.';
+	@override String get leaveUncertain => 'The request may already be saved. Leaving will not undo it. Cancel and retry the same request, or copy the draft JSON and inspect the original record.';
+	@override String get keepEditing => 'Stay here';
+	@override String get discard => 'Confirm leaving';
+	@override String get deleteTitle => 'Move this block to recycle bin';
+	@override String get heading => 'Level 2 heading';
+	@override String get paragraph => 'Paragraph';
+	@override String dayTitle({required Object title, required Object day}) => '${title} · ${day}';
+	@override String dayCount({required Object count}) => '${count} records';
+	@override String get openDay => 'Open this day’s timeline';
+	@override String get pickDay => 'Choose archive date';
+	@override String get searchDay => 'Search this day’s body text';
+	@override String get draftLoadFailed => 'Could not load the long-record draft. It has been kept; please retry.';
+	@override String get retainDraftMessage => 'You have unsubmitted content. Keep a local draft and leave, or continue editing.';
+	@override String get retainUncertain => 'The save result is unconfirmed. The draft keeps the exact request. Reopen it to retry that request without creating a duplicate.';
+	@override String get retainAndLeave => 'Keep draft and leave';
+	@override String get draftSaveFailed => 'Could not keep the draft or read the editor. Your content remains here. Retry or copy the draft before leaving.';
+}
+
+// Path: picker
+class _Translations$picker$en extends Translations$picker$zh {
+	_Translations$picker$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get recentAlbum => 'Recent';
+	@override String get done => 'Done';
+	@override String doneCount({required Object count, required Object max}) => 'Done ${count}/${max}';
+	@override String get limitedTip => 'The app can only access selected photos and videos';
+	@override String get limitedManage => 'Manage';
+	@override String get limitedEmptyImages => 'No accessible photos. Tap Manage to select photos to allow access to.';
+	@override String get limitedEmptyVideos => 'No accessible videos. Tap Manage to select videos to allow access to.';
+	@override String get permissionDenied => 'Grant photo library access in Settings';
+	@override String get a11ySelect => 'Select';
+	@override String get a11yUnselect => 'Deselect';
+	@override String get capture => 'Camera';
+	@override String get record => 'Record';
+	@override String get captureFailed => 'Capture failed';
+}
+
+// Path: share
+class _Translations$share$en extends Translations$share$zh {
+	_Translations$share$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get sheetTitle => 'Share this entry';
+	@override String get sheetSubtitle => 'Export as an image or a document — this entry only';
+	@override String get optionImage => 'Image';
+	@override String get optionImageSubtitle => 'Long image · can be saved to Photos';
+	@override String get optionMarkdownSubtitle => 'Plain text + assets';
+	@override String get optionDocxSubtitle => 'Keep editing in Word';
+	@override String get optionPdfSubtitle => 'Fixed layout';
+	@override String get optionPdfNeedFont => 'Fixed layout · pick a font first';
+	@override String get previewTitle => 'Image preview';
+	@override String get previewSampleTitle => 'Sample · first entry';
+	@override String get rendering => 'Rendering…';
+	@override String renderFailed({required Object error}) => 'Rendering failed: ${error}';
+	@override String get empty => 'Nothing to share';
+	@override String get saveToAlbum => 'Save to Photos';
+	@override String get share => 'Share';
+	@override String get savedToAlbum => 'Saved to Photos';
+	@override String savedToAlbumCount({required Object count}) => 'Saved ${count} images to Photos';
+	@override String get saveToAlbumFailed => 'Could not save — check Photos permission';
+	@override String get subject => 'Shared from Moodiary';
+	@override String generating({required Object format}) => 'Generating ${format}…';
+}
+
+// Path: storage
+class _Translations$storage$en extends Translations$storage$zh {
+	_Translations$storage$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => 'Storage';
+	@override String get used => 'Used';
+	@override String get reclaimable => 'Can free';
+	@override String get model => 'AI models';
+	@override String get media => 'Media';
+	@override String get cache => 'Cache';
+	@override String get database => 'Diary data';
+	@override String get other => 'Other';
+	@override String get font => 'Fonts';
+	@override String get file => 'Attachments';
+	@override String get recommended => 'Recommended';
+	@override String get careful => 'Review first';
+	@override String get retiredMood => 'Old mood suggestion model';
+	@override String get noLongerUsed => 'No longer used';
+	@override String get unusedModel => 'Unused model';
+	@override String get partial => 'Unfinished downloads';
+	@override String get unusedMedia => 'Unused media';
+	@override String get legacy => 'Old database backup';
+	@override String get irreversible => 'Can\'t be undone';
+	@override String get counting => 'Counting';
+	@override String scanning({required Object area}) => 'Counting · ${area}';
+	@override String fileCount({required Object count}) => '${count} files';
+	@override String get complete => 'Counted';
+	@override String cleanable({required Object size}) => 'Can clean ${size}';
+	@override String clean({required Object size}) => 'Free ${size}';
+	@override String get nothingSelected => 'Nothing selected';
+	@override String get allClean => 'All clean';
+	@override String freed({required Object size}) => 'Freed ${size}';
+	@override String confirmTitle({required Object count}) => 'Clean ${count} items?';
+	@override String get total => 'Total';
+	@override String warning({required Object names}) => '${names} will be permanently deleted';
+	@override String get cancel => 'Cancel';
+	@override String get confirm => 'Clean';
+	@override String get syncing => 'Syncing';
+	@override String get failed => 'Could not count storage';
+	@override String get retry => 'Retry';
+	@override String get cleanFailed => 'Could not clean. Try again.';
+	@override String get listSeparator => ', ';
+}
+
+// Path: sync
+class _Translations$sync$en extends Translations$sync$zh {
+	_Translations$sync$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get backupSyncWebdav => 'WebDAV';
+	@override String get backupSyncWebdavNoOption => 'Not Configured';
+	@override String get backupSyncWebdavOption => 'Configured';
+	@override String get webdavOptionServer => 'Server address';
+	@override String get webdavOptionUsername => 'Username';
+	@override String get webdavOptionPassword => 'Password';
+	@override String get backupSyncS3 => 'S3 / MinIO';
+	@override String get s3OptionEndpoint => 'Endpoint';
+	@override String get s3OptionRegion => 'Region';
+	@override String get s3OptionBucket => 'Bucket';
+	@override String get s3OptionAccessKey => 'Access Key';
+	@override String get s3OptionSecretKey => 'Secret Key';
+	@override String get s3OptionUseSsl => 'Use HTTPS';
+	@override String get sectionConnection => 'Connection';
+	@override String get sectionCredentials => 'Credentials';
+	@override String get sectionOptions => 'Options';
+	@override String get configClear => 'Clear settings';
+	@override String get configClearConfirmTitle => 'Clear settings?';
+	@override String get configClearConfirmMessage => 'Syncing with this backend stops. Diaries on this device are untouched.';
+	@override String get configCleared => 'Settings cleared';
+	@override String fieldRequired({required String field}) => '${field} is required';
+	@override String get fieldOptional => 'Optional';
+	@override String get fieldInvalidUrl => 'That address doesn\'t look right';
+	@override String get pageTitle => 'Backup and sync';
+	@override String get cloudSection => 'Cloud sync';
+	@override String get method => 'Backend';
+	@override String methodConfig({required Object name}) => '${name} settings';
+	@override String get notConfiguredTap => 'Not configured — tap to set up';
+	@override String get testConnection => 'Test the connection';
+	@override String get testing => 'Testing the connection…';
+	@override String get connectOk => 'Connected';
+	@override String connectFailed({required Object error}) => 'Could not connect: ${error}';
+	@override String get configureFirst => 'Finish the configuration first';
+	@override String doneToast({required Object message}) => 'Done: ${message}';
+	@override String failedToast({required Object message}) => 'Failed: ${message}';
+	@override String get stopping => 'Stopping…';
+	@override String get stop => 'Stop syncing';
+	@override String get stoppingSubtitle => 'Finishing the current item first';
+	@override String get stopSubtitle => 'Syncing in the background — tap to stop';
+	@override String get willStop => 'Will stop once the current item finishes';
+	@override String get syncNow => 'Sync now';
+	@override String lastSync({required Object time}) => 'Last synced: ${time}';
+	@override String get neverSynced => 'Never synced';
+	@override String get logEntry => 'Sync log';
+	@override String get logEntrySubtitle => 'Browse sync events by date';
+	@override String get lanSection => 'Local network';
+	@override String get lanSend => 'Send';
+	@override String get lanSendSubtitle => 'Send entries to a device on the same Wi-Fi';
+	@override String get lanReceive => 'Receive';
+	@override String get lanReceiveSubtitle => 'Wait for another device to send to this one';
+	@override String get encryptionSection => 'Encryption';
+	@override String get autoSection => 'Automatic sync';
+	@override String get autoSync => 'Sync automatically';
+	@override String get autoSyncSubtitle => 'Push after an entry changes, and pull other devices\' changes on a timer';
+	@override String get pollInterval => 'Polling interval';
+	@override String get pollIntervalSubtitle => 'How often to pull other devices\' changes in the background';
+	@override String get pollIntervalNote => 'How often a full two-way sync runs in the background. A shorter interval picks up other devices\' changes sooner, but every poll takes the remote lock, reads the manifest and makes network requests — too short and you pay for it in traffic and battery, and may hit WebDAV / S3 rate limits or a temporary ban. 30 seconds is a sensible floor.';
+	@override String get networkSection => 'Network';
+	@override String get concurrency => 'Concurrent requests';
+	@override String get concurrencySubtitle => 'Upper bound on parallel network requests while syncing; lower it on a weak connection or against a rate-limited server';
+	@override String get concurrencyNote => '8 by default. Higher is faster, but may trip WebDAV / S3 rate limits or get connections refused.';
+	@override String seconds({required Object count}) => '${count}s';
+	@override String minutes({required Object count}) => '${count} min';
+	@override String minutesSeconds({required Object minutes, required Object seconds}) => '${minutes} min ${seconds}s';
+	@override String get logPickDate => 'Pick a date';
+	@override String get logFilterByDate => 'Filter by date';
+	@override String get logToday => 'Today';
+	@override String get logTodaySuffix => ' (today)';
+	@override String get logClear => 'Clear the log';
+	@override String get logClearMessage => 'This deletes the in-memory event stream and every daily jsonl file. It cannot be undone.';
+	@override String logEventCount({required Object count}) => '${count} events';
+	@override String get logEmpty => 'No sync events on this date';
+	@override String logGroupCount({required Object kind, required Object count}) => '${kind} · ${count}';
+	@override String get logDetail => 'Event details';
+	@override String get logCopy => 'Copy';
+	@override String get kindSyncStart => 'Sync started';
+	@override String get kindSyncEnd => 'Sync finished';
+	@override String get kindManifestRead => 'Manifest read';
+	@override String get kindManifestWrite => 'Manifest written';
+	@override String get kindDiaryUpload => 'Entry uploaded';
+	@override String get kindDiaryDownload => 'Entry downloaded';
+	@override String get kindDiarySkip => 'Entry skipped';
+	@override String get kindDiaryTombstonePush => 'Entry deletion pushed';
+	@override String get kindDiaryTombstonePull => 'Entry deletion pulled';
+	@override String get kindCategoryUpload => 'Category uploaded';
+	@override String get kindCategoryDownload => 'Category downloaded';
+	@override String get kindCategorySkip => 'Category skipped';
+	@override String get kindCategoryTombstonePush => 'Category deletion pushed';
+	@override String get kindCategoryTombstonePull => 'Category deletion pulled';
+	@override String get kindPlaceUpload => 'Place upload';
+	@override String get kindPlaceDownload => 'Place download';
+	@override String get kindPlaceSkip => 'Place skipped';
+	@override String get kindPlaceTombstonePush => 'Place deletion pushed';
+	@override String get kindPlaceTombstonePull => 'Place deletion applied';
+	@override String get kindMediaUpload => 'Media uploaded';
+	@override String get kindMediaDownload => 'Media downloaded';
+	@override String get kindMediaSkip => 'Media skipped';
+	@override String get kindMediaDelete => 'Media deleted';
+	@override String get kindLockAcquire => 'Lock acquired';
+	@override String get kindLockRelease => 'Lock released';
+	@override String get kindKeyfileUpload => 'Keyfile upload';
+	@override String get kindKeyConflict => 'Cloud key conflict';
+	@override String get kindReCipher => 'Re-encryption';
+	@override String get kindError => 'Error';
+	@override String get directionPull => 'Pull';
+	@override String get directionPush => 'Push';
+	@override String get directionRestore => 'Restore';
+	@override String get directionReCipher => 'Re-encryption';
+	@override String get reasonUpToDate => 'Already up to date';
+	@override String get reasonRemoteNewer => 'Remote has newer edits';
+	@override String get reasonLocalNewer => 'Local has newer edits';
+	@override String get reasonOpenDiary => 'Entry is open';
+	@override String get reasonLocalMissing => 'Local file missing';
+	@override String get reasonProbeFailed => 'Remote state unknown';
+	@override String get reasonRemoteExists => 'Already on remote';
+	@override String get reasonLocalExists => 'Already on this device';
+	@override String get reasonRemoteMissing => 'Missing on remote';
+	@override String get reasonTakeover => 'Took over stale lock';
+	@override String get reasonExpiredLock => 'Cleared expired lock';
+	@override String get reasonCasVerified => 'Conditional write verified';
+	@override String get reasonCasUnsupported => 'Server ignores conditional writes';
+	@override String get reasonRenewFailed => 'Lease renewal failed';
+	@override String get reasonReleaseFailed => 'Lock release failed';
+	@override String get reasonDecodeFailed => 'Malformed remote object';
+	@override String get reasonUnknownTombstone => 'Unrecognised deletion record';
+	@override String get reasonStopped => 'Stopped';
+	@override String get reasonAborted => 'Aborted';
+	@override String get statusTitle => 'Sync status';
+	@override String get encrypted => 'encrypted';
+	@override String get notEncrypted => 'not encrypted';
+	@override String get statusFailed => 'Sync failed';
+	@override String get statusNoBackend => 'No sync backend configured';
+	@override String get statusNoBackendDetail => 'Set one up under Backup and sync';
+	@override String get statusSynced => 'Synced';
+	@override String get statusLastSync => 'Last synced ';
+	@override String get statusNever => 'Never synced';
+	@override String get rowDiary => 'Entries';
+	@override String get rowCategory => 'Categories';
+	@override String get rowMedia => 'Media';
+	@override String get statusRunning => 'Syncing';
+	@override String get lanSendTitle => 'Send over the local network';
+	@override String get lanSendIntro => 'Only what the other device is missing gets sent. Changes merge by last-modified time, so sending twice never duplicates anything.';
+	@override String get lanNearbyDevices => 'Nearby devices';
+	@override String lanPeerIncompatible({required Object version}) => 'Incompatible version · peer ${version}';
+	@override String get lanReceiverAddress => 'Receiver address';
+	@override String get lanAddressHint => 'Filled in when you pick a device above';
+	@override String get lanPin => 'Pairing code';
+	@override String get lanPinHint => 'The 6 digits shown on the receiving device';
+	@override String get lanSendAction => 'Send';
+	@override String get lanPickDevice => 'Pick a device to send to first';
+	@override String get lanNeedPin => 'Enter the 6-digit pairing code';
+	@override String get lanBadAddress => 'That address is not valid';
+	@override String get lanSearching => 'Searching — open the Receive page on the other device';
+	@override String get lanConnecting => 'Connecting…';
+	@override String get lanPacking => 'Preparing the data…';
+	@override String get lanUploading => 'Sending';
+	@override String get lanApplying => 'Waiting for the other device to save…';
+	@override String get lanReceiveTitle => 'Receive over the local network';
+	@override String lanStartFailed({required Object error}) => 'Could not start receiving: ${error}';
+	@override String get lanPinCopied => 'Pairing code copied';
+	@override String get lanPinHelp => 'Enter it on the sending device · tap to copy';
+	@override String get lanAddressCopied => 'Address copied';
+	@override String get lanUpToDate => 'Already up to date — nothing changed';
+	@override String lanReceived({required Object diary, required Object category}) => '${diary} entries · ${category} categories';
+	@override String lanReceivedFailed({required Object base, required Object failed}) => '${base} (${failed} failed)';
+	@override String get lanWaiting => 'Waiting for the sender to connect…';
+	@override String get lanReceiving => 'Receiving';
+	@override String get lanSaving => 'Saving…';
+	@override String get lanDone => 'Received';
+	@override String get lanDonePartialHint => 'Some content did not arrive. Check storage space and receive again; don\'t delete the sender\'s data until you\'ve confirmed it\'s complete';
+	@override String get lanDoneHint => 'You can keep receiving — the pairing code stays the same';
+	@override String get lanFailed => 'Receiving failed';
+	@override String get lanFailedHint => 'The pairing code is unchanged, so the sender can just retry';
+	@override String get lanLocalAddress => 'This device';
+	@override String get lanNoWifi => 'Not on Wi-Fi — this device has no address to show';
+	@override String get keyGuardMissing => 'The cloud key file is missing. No password can unlock this data.';
+	@override String get keyGuardTitle => 'Cloud data is encrypted';
+	@override String get keyGuardMessageMismatch => 'This device\'s key doesn\'t match the cloud. Enter the cloud password.';
+	@override String get keyGuardMessage => 'Enter the encryption password to continue syncing.';
+	@override String get keyGuardHint => 'Encryption password';
+	@override String get keyGuardConfirm => 'Unlock';
+	@override String get keyNeedPassword => 'Enter a password';
+	@override String get keyGuardWrong => 'Wrong password';
+	@override String get keyConfigured => 'Unlocked';
+	@override String get e2eTitle => 'End-to-end encryption';
+	@override String get e2eOn => 'On';
+	@override String get e2eOff => 'Off';
+	@override String get e2eManage => 'Manage encryption';
+	@override String get keyMismatch => 'The two passwords do not match';
+	@override String get keyNew => 'New password';
+	@override String get keyPassword => 'Encryption password';
+	@override String get keyConfirm => 'Confirm the password';
+	@override String get keyTurnOff => 'Turn encryption off';
+	@override String get keyChanged => 'Password changed';
+	@override String get keyEncryptCloudTitle => 'Encrypt cloud data?';
+	@override String get keyEncryptCloudMessage => 'Existing diaries, categories and media in the cloud will be encrypted, with the key protected by your password.';
+	@override String get keyContinue => 'Continue';
+	@override String keyWriteFailed({required Object error}) => 'Could not write the key to the cloud: ${error}';
+	@override String keyCloudEncrypted({required Object report}) => 'Remote data encrypted: ${report}';
+	@override String get keyEncryptionOn => 'Encryption is on';
+	@override String get keyDecryptTitle => 'Turn off encryption?';
+	@override String get keyDecryptMessage => 'Cloud data will be decrypted to plain text and the key file removed.';
+	@override String keyDecryptPartial({required Object failed}) => '${failed} files could not be decrypted. Encryption stays on; try again later.';
+	@override String keyEncryptPartial({required Object failed}) => '${failed} files could not be encrypted and remain plain text. Turn encryption off and on again to finish.';
+	@override String get keyEncryptionOff => 'Encryption is off';
+	@override String keyReCipherFailed({required Object error}) => 'Re-encryption failed: ${error}';
+	@override String get keyRemoteEmpty => 'Cloud is empty, key saved';
+	@override String get keyProcessing => 'Working on the remote data';
+	@override String get keyPreparing => 'Preparing';
+	@override String get keyUnlocked => 'Unlocked';
+	@override String get keyChangedLocalOnly => 'Password changed on this device; it syncs once the cloud is unlocked';
+	@override String keyRemoteProbeFailed({required Object error}) => 'Could not read the cloud: ${error}';
+	@override String get keyRemoteMismatchTitle => 'Password does not match';
+	@override String get keyRemoteMismatchMessage => 'This password can\'t unlock the cloud data. Go back and retry, or reset the cloud.';
+	@override String get keyConflictTitle => 'Sync paused';
+	@override String get keyConflictSubtitle => 'Cloud encryption doesn\'t match this device. Tap to resolve';
+	@override String get e2eLocked => 'Locked';
+	@override String get keyLockedNotice => 'Cloud data is encrypted with another password. Sync is paused.';
+	@override String get keyUnlockAction => 'Enter password to unlock';
+	@override String get keyForgotReset => 'Forgot password, reset cloud';
+	@override String get keyForgot => 'Forgot password?';
+	@override String get keyChangeAction => 'Change password';
+	@override String get keyEnableAction => 'Turn on encryption';
+	@override String get keySkipEncryption => 'Not now';
+	@override String get keyMissingTitle => 'Cannot decrypt cloud';
+	@override String get keyResetAction => 'Reset cloud';
+	@override String get keyResetTitle => 'Reset cloud?';
+	@override String get keyResetMessage => 'Clears the cloud; local data is kept.';
+	@override String get keyResetConfirm => 'Clear and reset';
+	@override String get keyWiping => 'Clearing cloud';
+	@override String keyWiped({required Object count}) => 'Cleared ${count} files';
+	@override String keyWipePartial({required Object failed}) => '${failed} files could not be deleted; reset again later';
+	@override String keyWipeFailed({required Object error}) => 'Clearing failed: ${error}';
+	@override String get keyRemoteDecryptedTitle => 'Cloud isn\'t encrypted';
+	@override String get keyRemoteDecryptedMessage => 'End-to-end encryption is on here, but the cloud is plain text. Another device may have turned encryption off or reset the cloud.';
+	@override String get keyRemoteDecryptedEncrypt => 'Encrypt the cloud with this password';
+	@override String get keyRemoteDecryptedTurnOff => 'Turn off encryption here';
+	@override String get keyNotNow => 'Not now';
+	@override String get errRemoteDecrypted => 'The cloud is plain text while encryption is on here. Sync paused; resolve it in sync settings.';
+	@override String get errKeyConflict => 'The remote is encrypted with a different key that this device cannot open. Sync stopped so the remote key file is not overwritten.';
+	@override String get lanReceiveHint => 'The sender usually finds this device on its own; the address above can also be typed in by hand. Keep this page open while receiving.';
+	@override String get errKeyfileCorrupt => 'The remote key file is corrupt (not a JSON object)';
+	@override String get errKeyfileKdfMissing => 'The remote key file is corrupt (KDF parameters missing)';
+	@override String get errKeyfileKdfRange => 'The remote key file\'s KDF parameters are out of the allowed range';
+	@override String errKeyfileParse({required Object error}) => 'Could not parse the remote key file: ${error}';
+	@override String get errKeyfileFields => 'The remote key file is corrupt (fields missing)';
+	@override String errKeyfileVersion({required Object version, required Object supported}) => 'The remote key file is too new (v${version}; this build supports up to v${supported}). Update the app.';
+	@override String errManifestVersion({required Object remote, required Object local}) => 'Backup format version mismatch: the data is v${remote}, this device supports v${local}. Open it with a matching version rather than letting this one overwrite it';
+	@override String get errManifestEntriesCorrupt => 'The backup manifest\'s entries field is corrupt (not an object); stopped to avoid losing entries';
+	@override String get errDecryptFailed => 'Could not decrypt the file — the key may not match';
+	@override String get errManifestCorrupt => 'The remote manifest is corrupt (not a JSON object). Sync was stopped so remote entries are not lost.';
+	@override String get errManifestReCipher => 'The remote manifest is malformed and cannot be re-encrypted';
+	@override String get errManifestRace => 'Another device overwrote the manifest while it was being written; re-encryption was stopped';
+	@override String get errManifestRacePush => 'Another device overwrote the manifest while it was being written, so this push was stopped. Nothing was damaged locally or on the remote — try again.';
+	@override String get errKeyfileOwnerUnknown => 'Could not tell who owns the remote key file (the manifest is unreadable or corrupt). Sync stopped so it is not overwritten.';
+	@override String get errKeyfileNoLocalCache => 'This device has no cached key file (keys.json), so an encrypted remote cannot be initialised. Reset the password in key management and try again.';
+	@override String errMediaNameInvalid({required Object name}) => 'Invalid media name, entry skipped: ${name}';
+	@override String get errNotBackup => 'Not a Moodiary backup file';
+	@override String get errLegacyBackup => 'This backup was created by a version older than 2.8.0 and cannot be imported. Restore it in the old version first, then upgrade.';
+	@override String errBackupParse({required Object error}) => 'Could not parse the backup file: ${error}';
+	@override String get errNotReceiver => 'That host is not a Moodiary receiver';
+	@override String errVersionMismatchDetail({required Object sender, required Object receiver}) => 'Version mismatch: sender ${sender}, receiver ${receiver}. Update Moodiary on both devices to the same version';
+	@override String get errReceiverOffline => 'The other device is not receiving. Make sure its Receive page is open.';
+	@override String get errS3Config => 'Finish the S3 configuration first';
+	@override String get errWebdavConfig => 'Finish the WebDAV configuration first';
+	@override String get errWrongKeyPassword => 'Wrong password — the key file could not be unlocked';
+	@override String errKdf({required Object error}) => 'Key derivation failed: ${error}';
+	@override String get errLocked => 'Another device is syncing right now — try again shortly';
+	@override String get errMediaUpload => 'Some media files failed to upload, so this entry was skipped';
+	@override String get errNoUserKey => 'The remote files are encrypted but no user key is configured';
+	@override String errReadRemote({required Object key, required Object error}) => 'Could not read the remote object (${key}): ${error}';
+	@override String errCreateRemote({required Object key, required Object error}) => 'Could not create the remote object (${key}): ${error}';
+	@override String get errNoBackend => 'No sync backend configured';
+	@override String get errManifestBroken => 'The remote manifest is malformed';
+	@override String uploading({required Object backend}) => 'Uploading / exporting: ${backend}';
+	@override String downloading({required Object backend}) => 'Downloading / importing: ${backend}';
+	@override String syncing({required Object backend}) => 'Syncing: ${backend}';
+	@override String pendingSummary({required Object parts}) => 'Syncing from the cloud: ${parts}';
+	@override String pendingNew({required Object count}) => '${count} to download';
+	@override String pendingUpdate({required Object count}) => '${count} to update';
+	@override String get warnRemoteEmpty => 'The remote is empty — nothing has been uploaded yet';
+	@override String warnFailedSkipped({required Object count}) => '${count} items failed and were skipped';
+	@override String warnMediaFailed({required Object count}) => '${count} media file(s) could not be downloaded; images or audio may be missing from those entries';
+	@override String get warnStopped => 'Stopped by you — the rest will continue on the next sync';
+	@override String warnFailedCount({required Object count}) => '${count} failed';
+	@override String reCipherSummary({required Object diary, required Object category, required Object media, required Object ms}) => '${diary} entries + ${category} categories + ${media} files (${ms}ms)';
+	@override String reCipherFailedSuffix({required Object base, required Object failed}) => '${base}\n${failed} objects failed and were skipped';
+	@override String get stepPrepare => 'Preparing';
+	@override String stepDiary({required Object id}) => 'Entry ${id}';
+	@override String stepCategory({required Object id}) => 'Category ${id}';
+	@override String stepPlace({required Object id}) => 'Place ${id}';
+	@override String stepMediaInfo({required Object id}) => 'Media record ${id}';
+	@override String stepMedia({required Object ref}) => 'Media ${ref}';
+	@override String get stepManifest => 'Writing the manifest';
+	@override String get statusPartial => 'Sync incomplete';
+	@override String get summaryUpToDate => 'Nothing to sync';
+	@override String summaryUploadedDiaries({required Object count}) => '${count} diaries uploaded';
+	@override String summaryUploadedCategories({required Object count}) => '${count} categories uploaded';
+	@override String summaryDownloadedDiaries({required Object count}) => '${count} diaries downloaded';
+	@override String summaryDownloadedCategories({required Object count}) => '${count} categories downloaded';
+	@override String summaryMedia({required Object count}) => '${count} media files';
+	@override String get lanAuthLocked => 'Too many incorrect pairing codes. This session is locked — start receiving again to get a new code.';
+	@override String errWriteRemote({required Object key, required Object error}) => 'Failed to write remote object (${key}): ${error}';
+	@override String errDeleteRemote({required Object key, required Object error}) => 'Failed to delete remote object (${key}): ${error}';
+	@override String errListRemote({required Object error}) => 'Failed to list remote objects: ${error}';
+	@override String errStatRemote({required Object key, required Object error}) => 'Failed to query remote object (${key}): ${error}';
+	@override String errBucketMissing({required Object bucket}) => 'Bucket "${bucket}" does not exist';
+	@override String syncingAuto({required Object backend}) => 'Auto-syncing: ${backend}';
+	@override String get triggerManual => 'manual';
+	@override String get triggerChange => 'change';
+	@override String get triggerClose => 'diary closed';
+	@override String get triggerPoll => 'poll';
+	@override String get triggerResume => 'resumed';
+	@override String get triggerNetwork => 'back online';
+	@override String elapsedSeconds({required Object seconds}) => '${seconds} s';
+	@override String pendingLocal({required Object count}) => '${count} diaries waiting to upload';
+	@override String get healthConnected => 'Connected';
+	@override String healthUnreachable({required Object backend}) => 'Cannot reach ${backend}';
+	@override String get healthAuthFailed => 'Username or password no longer works';
+	@override String get healthKeyConflict => 'Remote key differs from this device';
+	@override String get healthUnreachableShort => 'unreachable';
+	@override String get healthAuthFailedShort => 'credentials rejected';
+	@override String get healthKeyConflictShort => 'key conflict';
+	@override String healthSince({required Object time}) => 'since ${time}';
+	@override String autoSyncSubtitleDetail({required Object interval}) => 'Pushes a few seconds after you close a diary; checks other devices every ${interval}';
+	@override String get reasonRecovered => 'Remote reachable again';
+	@override String get logFilterProblems => 'Problems only';
+	@override String get logRunStopped => 'Stopped';
+	@override String get logRunFailed => 'Failed';
+	@override String get logRunPartial => 'Incomplete';
+	@override String get logRunUpToDate => 'Up to date';
+	@override String get directionSync => 'Sync';
+	@override String elapsedMillis({required Object ms}) => '${ms} ms';
+	@override String get consoleTitle => 'Sync';
+	@override String autoSyncEvery({required Object interval}) => 'Auto sync · every ${interval}';
+	@override String get autoSyncOff => 'Auto sync is off';
+	@override String nextPollIn({required Object minutes, required Object seconds}) => 'in ${minutes} min ${seconds} s';
+	@override String nextPollInSeconds({required Object seconds}) => 'in ${seconds} s';
+	@override String remoteCount({required Object count}) => 'remote ${count}';
+	@override String get logHealth => 'Connection';
+	@override String lastSuccess({required Object time}) => 'last success ${time}';
+}
+
+// Path: ui
+class _Translations$ui$en extends Translations$ui$zh {
+	_Translations$ui$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get imageBrowserSave => 'Save to gallery';
+	@override String get imageBrowserSaved => 'Saved to gallery';
+	@override String get imageBrowserSaveFailed => 'Save failed';
+	@override String get imageBrowserInfo => 'Image info';
+	@override String get imageBrowserInfoUrl => 'URL';
+	@override String get imageBrowserInfoResolution => 'Resolution';
+	@override String get imageBrowserInfoSize => 'Size';
+	@override String get imageBrowserInfoFormat => 'Format';
+	@override String get imageBrowserInfoDecode => 'Decoding';
+	@override String get imageBrowserDecodeTiled => 'Tiled (visible region on demand)';
+	@override String get imageBrowserDecodeTiledBaseline => 'Tiled (via baseline copy)';
+	@override String get imageBrowserDecodeWhole => 'Whole image (longest side capped at 4096)';
+	@override String get imageBrowserDecodeWholeProgressive => 'Whole image (progressive JPEG within 4096, no tiling needed)';
+	@override String get imageBrowserInfoModified => 'Modified';
+	@override String get videoPlayerLoadFailed => 'Couldn\'t load this video';
+	@override String get play => 'Play';
+	@override String get pause => 'Pause';
+	@override String get playbackProgress => 'Playback progress';
+	@override String get videoPlayerReplay => 'Replay';
+	@override String get videoPlayerBrightness => 'Brightness';
+	@override String get videoPlayerVolume => 'Volume';
+	@override String videoPlayerSpeedBoost({required Object speed}) => 'Playing at ${speed}×';
+}
+
+// Path: editor.toolbar
+class _Translations$editor$toolbar$en extends Translations$editor$toolbar$zh {
+	_Translations$editor$toolbar$en._(TranslationsEn root) : this._root = root, super.internal(root);
+
+	final TranslationsEn _root; // ignore: unused_field
+
+	// Translations
+	@override String get insert => 'Insert';
+	@override String get format => 'Format';
+	@override String get task => 'To-do';
+	@override String get image => 'Image';
+	@override String get link => 'Link';
+	@override String get diaryLink => 'Diary link';
+	@override String get showKeyboard => 'Show keyboard';
+	@override String get hideKeyboard => 'Hide keyboard';
+	@override String get bold => 'Bold';
+	@override String get italic => 'Italic';
+	@override String get underline => 'Underline';
+	@override String get strike => 'Strikethrough';
+	@override String get highlight => 'Highlight';
+	@override String get inlineCode => 'Inline code';
+	@override String get paragraph => 'Body';
+	@override String get bulletList => 'Bullets';
+	@override String get orderedList => 'Numbered';
+	@override String get taskList => 'To-do';
+	@override String get outdent => 'Outdent';
+	@override String get indent => 'Indent';
+	@override String get quote => 'Quote';
+	@override String get codeBlock => 'Code block';
+	@override String get clearFormat => 'Clear format';
+	@override String get mediaAndFiles => 'Media and files';
+	@override String get blocks => 'Blocks';
+	@override String get gallery => 'Photos';
+	@override String get camera => 'Camera';
+	@override String get video => 'Video';
+	@override String get record => 'Record';
+	@override String get audio => 'Audio';
+	@override String get attachment => 'File';
+	@override String get table => 'Table';
+	@override String get divider => 'Divider';
+	@override String get view => 'View';
+	@override String get width => 'Width';
+	@override String get originalSize => 'Original size';
+	@override String get original => 'Original';
+	@override String get moveUp => 'Move up';
+	@override String get moveDown => 'Move down';
+	@override String get delete => 'Delete';
+	@override String get open => 'Open';
+	@override String get rename => 'Rename';
+	@override String get style => 'Style';
+	@override String get dividerSolid => 'Solid';
+	@override String get dividerDashed => 'Dashed';
+	@override String get dividerDotted => 'Dotted';
+	@override String get dividerDouble => 'Double';
+	@override String get dividerWavy => 'Wavy';
+	@override String get dividerText => 'With text';
+	@override String get dividerLabel => 'Divider text';
+	@override String get tableAddRow => 'Add row';
+	@override String get tableDeleteRow => 'Delete row';
+	@override String get tableAddColumn => 'Add column';
+	@override String get tableDeleteColumn => 'Delete column';
+	@override String get tableMenu => 'Table';
+	@override String get tableHeaderRow => 'Header row';
+	@override String get tableDelete => 'Delete table';
+	@override String get copyCode => 'Copy code';
+	@override String get exitCode => 'Exit code block';
+	@override String get openLink => 'Open link';
+	@override String get copyLink => 'Copy link';
+	@override String get editLink => 'Edit link';
+	@override String get removeLink => 'Remove link';
+	@override String get addLinkTitle => 'Add link';
+	@override String get editLinkTitle => 'Edit link';
+	@override String get linkText => 'Text';
+	@override String get linkUrl => 'URL';
+	@override String get undo => 'Undo';
+	@override String get redo => 'Redo';
+	@override String get find => 'Find';
+	@override String get findHint => 'Find';
+	@override String get replaceHint => 'Replace with';
+	@override String get replace => 'Replace';
+	@override String get replaceAll => 'Replace all';
+	@override String get toggleReplace => 'Replace';
+	@override String get previousMatch => 'Previous';
+	@override String get nextMatch => 'Next';
+	@override String get closeFind => 'Close find';
+	@override String matchCount({required Object current, required Object total}) => '${current}/${total}';
+	@override String get settingsTitle => 'Editor toolbar';
+	@override String get resetDefault => 'Reset';
+	@override String get preview => 'Preview';
+	@override String get shownSection => 'Toolbar';
+	@override String get availableSection => 'Available';
+	@override String get removeTools => 'Remove tools';
+	@override String selectedCount({required Object count}) => '${count} selected';
+	@override String get remove => 'Remove';
+	@override String get addToToolbar => 'Add to toolbar';
+	@override String get attachmentFailed => 'Could not save the file';
+	@override String get openFailed => 'No app can open this file';
+	@override String get insertFailed => 'Could not insert';
+}
