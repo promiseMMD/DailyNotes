@@ -186,6 +186,55 @@ void main() {
     expect(repo.writeCount, 0);
   });
 
+
+  testWidgets('calendar picker disables empty dates and selects a saved day',
+      (tester) async {
+    final emptyRepo = FakePreviewDiaryRepository();
+    await tester.pumpWidget(DailyNotesApp(previewRepository: emptyRepo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('打开侧边栏'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日历总览'));
+    await tester.pumpAndSettle();
+    // Tooltip wraps the button in Flutter 3.50; inspect the actual
+    // IconButton ancestor rather than casting the tooltip widget.
+    final disabled = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byIcon(Icons.calendar_month_outlined),
+        matching: find.byType(IconButton),
+      ).first,
+    );
+    expect(disabled.onPressed, isNull);
+
+    final repo = FakePreviewDiaryRepository()
+      ..seed('one', '十二号测试', '2026-11-12T08:00:00.000Z')
+      ..seed('two', '十四号测试', '2026-11-14T08:00:00.000Z');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(DailyNotesApp(previewRepository: repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('打开侧边栏'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日历总览'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('选择日期'));
+    await tester.pumpAndSettle();
+    expect(find.text('选择有测试日记的日期'), findsOneWidget);
+    await tester.tap(find.text('12').last);
+    await tester.pumpAndSettle();
+    // Confirm through the dialog action, not a locale-specific label:
+    // CI uses en-US ('OK'), while Chinese devices display '确定'.
+    final confirmAction = find.descendant(
+      of: find.byType(DatePickerDialog),
+      matching: find.byType(TextButton),
+    ).last;
+    expect(confirmAction, findsOneWidget);
+    await tester.tap(confirmAction);
+    await tester.pumpAndSettle();
+    expect(find.text('十二号测试'), findsOneWidget);
+    expect(find.text('十四号测试'), findsNothing);
+    expect(repo.writeCount, 0);
+  });
+
   testWidgets('failed local write stays visible and cannot leave without warning',
       (tester) async {
     final repo = FakePreviewDiaryRepository()..failWrites = true;
