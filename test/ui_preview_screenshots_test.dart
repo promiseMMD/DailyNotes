@@ -17,9 +17,34 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    // Flutter widget tests use block-glyph test fonts by default.
+    // Install a review-only CJK font and Material icons on the CI host.
+    // Never copy these font binaries into the user APK or screenshot artifact.
+    await tester.runAsync(() async {
+      const cjkPath =
+          '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc';
+      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+      if (flutterRoot == null) throw StateError('FLUTTER_ROOT missing');
+      final iconPath =
+          '$flutterRoot/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf';
+      if (!await File(cjkPath).exists()) {
+        throw StateError('Chinese review font missing: $cjkPath');
+      }
+      if (!await File(iconPath).exists()) {
+        throw StateError('Material icon review font missing: $iconPath');
+      }
+      await ui.loadFontFromList(
+        await File(cjkPath).readAsBytes(),
+        fontFamily: 'DailyNotesScreenshotCJK',
+      );
+      await ui.loadFontFromList(
+        await File(iconPath).readAsBytes(),
+        fontFamily: 'MaterialIcons',
+      );
+    });
     await tester.pumpWidget(const RepaintBoundary(
       key: key,
-      child: DailyNotesApp(),
+      child: DailyNotesApp(screenshotFontFamily: 'DailyNotesScreenshotCJK'),
     ));
     await tester.pumpAndSettle();
 
