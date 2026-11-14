@@ -221,7 +221,14 @@ void main() {
     expect(find.text('选择有测试日记的日期'), findsOneWidget);
     await tester.tap(find.text('12').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('确定'));
+    // Confirm through the dialog action, not a locale-specific label:
+    // CI uses en-US ('OK'), while Chinese devices display '确定'.
+    final confirmAction = find.descendant(
+      of: find.byType(DatePickerDialog),
+      matching: find.byType(TextButton),
+    ).last;
+    expect(confirmAction, findsOneWidget);
+    await tester.tap(confirmAction);
     await tester.pumpAndSettle();
     expect(find.text('十二号测试'), findsOneWidget);
     expect(find.text('十四号测试'), findsNothing);
