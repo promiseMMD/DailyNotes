@@ -45,6 +45,22 @@ jobs:
         run: flutter test --timeout 2m test/diary_autosave_editor_test.dart
       - name: Widget tests
         run: flutter test test/app_navigation_test.dart
+      - name: Moodiary-inspired layout regression tests
+        run: flutter test test/moodiary_inspired_ui_test.dart
+      - name: Install CJK font for screenshot rendering only
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
+          test -f /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+          test -f "$FLUTTER_ROOT/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf"
+      - name: Render phone screenshots for design review
+        run: flutter test --timeout 2m test/ui_preview_screenshots_test.dart
+      - name: Upload rendered UI screenshots (candidate only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dailynotes-moodiary-inspired-candidate-screenshots
+          path: build/ui-screenshots/*.png
+          if-no-files-found: error
       - name: Debug preview APK (not a data-safe release)
         run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
