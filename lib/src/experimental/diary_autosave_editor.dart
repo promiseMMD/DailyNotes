@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'diary_autosave_session.dart';
+import '../preview/soft_components.dart';
 
 /// Unrouted experiment: deliberately NOT accessible from the real '+ 日记'
 /// action. Intended for test-harness verification only until data durability,
@@ -35,7 +36,11 @@ class _ExperimentalDiaryEditorState extends State<ExperimentalDiaryEditor> {
     await Clipboard.setData(ClipboardData(text: widget.session.text));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已复制编辑器当前文本；本机保存仍未确认')),
+        SnackBar(content: Text(
+          widget.session.hasUncommittedText
+              ? '已复制未全部保存的文本（复制不等于备份）'
+              : '已复制当前日记文本',
+        )),
       );
     }
   }
@@ -91,23 +96,88 @@ class _ExperimentalDiaryEditorState extends State<ExperimentalDiaryEditor> {
             if (!didPop) _warnOnUnsafeLeave();
           },
           child: Scaffold(
-            appBar: AppBar(title: const Text('实验性日记编辑器')),
+            appBar: AppBar(
+              title: const Text('写日记 · 测试'),
+              actions: [
+                IconButton(
+                  tooltip: '复制当前文本',
+                  onPressed: _copyUnsavedText,
+                  icon: const Icon(Icons.copy_outlined),
+                ),
+              ],
+            ),
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      key: const Key('experimental-warning'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13, vertical: 11,
+                      ),
+                      decoration: BoxDecoration(
+                        color: previewSoftSage,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: previewSage, size: 18),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '当前是独立测试日记，未通过备份与真机验收，'
+                              '请勿记录重要个人信息。',
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.5,
+                                color: previewInk,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Icon(
+                          switch (session.phase) {
+                            ExperimentalSavePhase.savedLocally =>
+                              Icons.check_circle_outline,
+                            ExperimentalSavePhase.failed =>
+                              Icons.error_outline,
+                            ExperimentalSavePhase.writing =>
+                              Icons.sync_outlined,
+                            ExperimentalSavePhase.untouched =>
+                              Icons.radio_button_unchecked,
+                          },
+                          color: session.phase == ExperimentalSavePhase.failed
+                              ? Theme.of(context).colorScheme.error
+                              : previewSage,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            _localStatus(session.phase),
+                            key: const Key('experimental-local-save-status'),
+                            style: const TextStyle(
+                              color: previewInk,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     const Text(
-                      '仅供验证自动保存流程；尚未通过真实数据安全验收，请勿输入重要内容。',
-                      key: Key('experimental-warning'),
+                      'WebDAV 未同步（同步功能未实现）',
+                      style: TextStyle(color: previewMuted, fontSize: 11),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _localStatus(session.phase),
-                      key: const Key('experimental-local-save-status'),
-                    ),
-                    const Text('WebDAV 未同步（同步功能未实现）'),
+                    const SizedBox(height: 8),
                     if (failed) ...[
                       const SizedBox(height: 8),
                       Row(
@@ -126,6 +196,16 @@ class _ExperimentalDiaryEditorState extends State<ExperimentalDiaryEditor> {
                       ),
                     ],
                     const Divider(height: 24),
+                    const Text(
+                      '正文',
+                      style: TextStyle(
+                        color: previewSage,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     Expanded(
                       child: TextField(
                         key: const Key('experimental-diary-input'),
@@ -139,6 +219,14 @@ class _ExperimentalDiaryEditorState extends State<ExperimentalDiaryEditor> {
                           border: InputBorder.none,
                           hintText: '直接输入正文（测试内容）',
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '测试编辑 · ${session.text.runes.length} 字符'
+                      ' · 复制按钮可随时导出当前文本',
+                      style: const TextStyle(
+                        color: previewMuted, fontSize: 11,
                       ),
                     ),
                   ],
