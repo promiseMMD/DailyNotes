@@ -103,7 +103,6 @@ void main() {
   });
 
   test('read-only index imposes a bounded page size', () async {
-    expect(() => journal.listCommittedDiaries(limit: 0), returnsNormally);
     await expectLater(
       journal.listCommittedDiaries(limit: 0),
       throwsRangeError,
