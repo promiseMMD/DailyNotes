@@ -30,7 +30,7 @@ class SqlitePreviewDiaryRepository implements PreviewDiaryRepository {
 
   Future<LocalJournalSpike> _openDatabase() async {
     final dir = await getDatabasesPath();
-    final filename = '${dir}${Platform.pathSeparator}'
+    final filename = '$dir${Platform.pathSeparator}'
         'dailynotes_interaction_preview_v1.db';
     return LocalJournalSpike.open(
       factory: databaseFactory,
