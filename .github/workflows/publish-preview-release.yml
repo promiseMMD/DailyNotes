@@ -1,0 +1,90 @@
+name: Publish verified DailyNotes preview APK to GitHub Releases
+
+# A dedicated delivery branch prevents unapproved features and experimental
+# storage code from being merged into main just to ship a review-only APK.
+on:
+  push:
+    branches:
+      - preview-distribution
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dailynotes-preview-release
+  cancel-in-progress: false
+
+jobs:
+  publish-preview:
+    if: github.repository == 'promiseMMD/DailyNotes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.50.0'
+          cache: true
+      - name: Generate Android project without altering tracked sources
+        run: flutter create --platforms=android --project-name dailynotes .
+      - name: Remove Flutter-generated demo test only
+        run: |
+          if [ -f test/widget_test.dart ] && grep -q 'MyApp' test/widget_test.dart; then
+            rm test/widget_test.dart
+          fi
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Flutter static analysis
+        run: flutter analyze
+      - name: Transaction and fault-injection tests
+        run: flutter test test/local_journal_spike_test.dart
+      - name: Migration and recovery tests
+        run: flutter test test/local_journal_recovery_test.dart
+      - name: Autosave session tests
+        run: flutter test test/diary_autosave_session_test.dart
+      - name: Experimental editor interaction tests
+        run: flutter test --timeout 2m test/diary_autosave_editor_test.dart
+      - name: Original navigation tests
+        run: flutter test test/app_navigation_test.dart
+      - name: Current preview layout regression tests
+        run: flutter test test/moodiary_inspired_ui_test.dart
+      - name: Build review-only Android APK
+        run: flutter build apk --debug
+      - name: Publish immutable pre-release and SHA256 checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:12}"
+          tag="preview-${short_sha}"
+          cp build/app/outputs/flutter-apk/app-debug.apk DailyNotes-preview.apk
+          sha256sum DailyNotes-preview.apk > SHA256SUMS.txt
+          cat > RELEASE_NOTES.md <<EOF
+          # DailyNotes review-only preview ${short_sha}
+
+          Source commit: ${GITHUB_SHA}
+
+          **Do not use for important personal diaries or notes.**
+          This debug APK is an isolated UI and data-safety experiment;
+          it does not deliver production data persistence, WebDAV sync,
+          backup recovery or device acceptance.
+
+          The debug key may change between CI builds; the APK is not
+          guaranteed to install over an earlier preview. Do not uninstall
+          any app containing important data merely to test this preview.
+
+          Includes a SHA-256 checksum in \`SHA256SUMS.txt\`.
+          EOF
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Refusing to replace an existing immutable preview release: $tag"
+            exit 1
+          fi
+          gh release create "$tag" \
+            DailyNotes-preview.apk SHA256SUMS.txt \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "DailyNotes preview ${short_sha} (not for real data)" \
+            --notes-file RELEASE_NOTES.md
+          echo "GitHub APK: https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/DailyNotes-preview.apk"
