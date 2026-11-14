@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:dailynotes/src/experimental/local_journal_spike.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common/sqlite_api.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Frozen V1 fixture: do not alter when changing the experimental V2 schema.
