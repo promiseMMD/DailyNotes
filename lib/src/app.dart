@@ -453,6 +453,30 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
     final month = '${now.year}年${now.month}月';
     final entries = _visibleDiaries;
     DateTime? previousDay;
+    final entryRows = <Widget>[];
+    for (final entry in entries) {
+      final date = previewLocalDate(entry);
+      if (date != null &&
+          (previousDay == null || !previewSameDate(previousDay, date))) {
+        entryRows.add(Padding(
+          padding: const EdgeInsets.only(top: 21, bottom: 4),
+          child: Text(
+            previewDateLabel(date),
+            style: const TextStyle(
+              color: previewSage,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ));
+        previousDay = date;
+      }
+      entryRows.add(PreviewDiaryEntryRow(
+        entry: entry,
+        onOpen: () => _openDiary(entry.entityId),
+      ));
+      entryRows.add(const PreviewThinDivider());
+    }
     return ListView(
       key: const Key('diary-page'),
       padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
@@ -534,30 +558,7 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
             description: '可修改搜索词、日期，或者清除筛选。',
           )
         else
-          for (final entry in entries) ...[
-            if (previewLocalDate(entry) case final DateTime date)
-              if (previousDay == null || !previewSameDate(previousDay, date)) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: 21, bottom: 4),
-                  child: Text(
-                    previewDateLabel(date),
-                    style: const TextStyle(
-                      color: previewSage,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                // Note the effective first/last editing date shown is the
-                // committed revision timestamp, not the original create date.
-                ...[Builder(builder: (_) {
-                  previousDay = date;
-                  return const SizedBox.shrink();
-                })],
-              ],
-            PreviewDiaryEntryRow(entry: entry, onOpen: () => _openDiary(entry.entityId)),
-            const PreviewThinDivider(),
-          ],
+          ...entryRows,
         const SizedBox(height: 21),
         const Text(
           '测试数据区 · 无 WebDAV 同步与可恢复备份 · 请勿记录重要信息',
@@ -774,7 +775,9 @@ class PlaceholderPage extends StatelessWidget {
 }
 
 class MyPage extends StatelessWidget {
-  const MyPage({super.key});
+  const MyPage({super.key, this.previewDiaryCount = 0});
+
+  final int previewDiaryCount;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -808,6 +811,11 @@ class MyPage extends StatelessWidget {
                   ListTile(title: Text('长期记录'), trailing: Text('未统计')),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '本机实验日记 ${previewDiaryCount} 篇（非正式统计）',
+              style: const TextStyle(color: previewMuted, fontSize: 11),
             ),
             const SizedBox(height: 24),
             const PreviewSectionHeader(title: '记录足迹'),
