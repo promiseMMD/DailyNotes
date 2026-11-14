@@ -91,7 +91,7 @@ class PreviewSectionHeader extends StatelessWidget {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w650,
+                    fontWeight: FontWeight.w600,
                     color: previewInk,
                     fontSize: 16,
                   ),
