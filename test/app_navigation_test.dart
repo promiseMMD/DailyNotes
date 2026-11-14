@@ -58,4 +58,24 @@ void main() {
     expect(find.text('日记排序'), findsOneWidget);
     expect(find.textContaining('排序字段与默认顺序尚未确认'), findsOneWidget);
   });
+  testWidgets('393px phone layout does not overflow or fabricate status', (tester) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const DailyNotesApp());
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('排序菜单'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('打开侧边栏'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
 }
