@@ -133,6 +133,41 @@ void main() {
     expect(repo.writeCount, 0);
   });
 
+  testWidgets('clear search resets visible text and restores all committed rows',
+      (tester) async {
+    final repo = FakePreviewDiaryRepository()
+      ..seed('one', 'Stage 故障记录', '2026-11-14T10:00:00.000Z')
+      ..seed('two', 'Overlay 调整记录', '2026-11-14T11:00:00.000Z');
+    await tester.pumpWidget(DailyNotesApp(previewRepository: repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('搜索菜单'));
+    await tester.pumpAndSettle();
+    final field = find.byKey(const Key('preview-diary-search'));
+    await tester.enterText(field, 'Stage');
+    await tester.pumpAndSettle();
+    expect(find.text('Overlay 调整记录'), findsNothing);
+    expect(tester.widget<TextField>(field).controller!.text, 'Stage');
+
+    await tester.tap(find.byTooltip('清除搜索'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    expect(find.text('Stage 故障记录'), findsOneWidget);
+    expect(find.text('Overlay 调整记录'), findsOneWidget);
+    expect(repo.writeCount, 0);
+
+    await tester.enterText(field, 'Overlay');
+    await tester.pumpAndSettle();
+    expect(find.text('Stage 故障记录'), findsNothing);
+    await tester.tap(find.byTooltip('搜索菜单'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('搜索菜单'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    expect(find.text('Stage 故障记录'), findsOneWidget);
+    expect(find.text('Overlay 调整记录'), findsOneWidget);
+    expect(repo.writeCount, 0);
+  });
+
   testWidgets('sort choices change visible order but never change DB',
       (tester) async {
     final repo = FakePreviewDiaryRepository()
