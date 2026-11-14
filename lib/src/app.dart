@@ -4,7 +4,11 @@ import 'preview/soft_components.dart';
 
 /// Navigation-only proof of concept. This app deliberately performs NO writes.
 class DailyNotesApp extends StatelessWidget {
-  const DailyNotesApp({super.key});
+  const DailyNotesApp({super.key, this.screenshotFontFamily});
+
+  /// Non-production override used only by deterministic screenshot tests.
+  /// Normal Android rendering continues to use the system text font.
+  final String? screenshotFontFamily;
 
   @override
   Widget build(BuildContext context) {
@@ -13,6 +17,7 @@ class DailyNotesApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
+        fontFamily: screenshotFontFamily,
         colorScheme: ColorScheme.fromSeed(seedColor: previewSage),
         scaffoldBackgroundColor: previewCanvas,
         appBarTheme: const AppBarTheme(
