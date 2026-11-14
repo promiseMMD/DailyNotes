@@ -22,6 +22,11 @@ jobs:
           cache: true
       - name: Generate missing Android embedding
         run: flutter create --platforms=android --project-name dailynotes .
+      - name: Remove Flutter-generated demo test only
+        run: |
+          if [ -f test/widget_test.dart ] && grep -q 'MyApp' test/widget_test.dart; then
+            rm test/widget_test.dart
+          fi
       - name: Resolve dependencies
         run: flutter pub get
       - name: Static analysis
