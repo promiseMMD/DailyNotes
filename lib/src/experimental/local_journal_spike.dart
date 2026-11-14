@@ -15,16 +15,21 @@ class LocalJournalSpike {
   ///
   /// [afterRevisionWrittenForTest] injects failure *within* a transaction
   /// after content was staged but before the corresponding outbox event.
+  /// [afterMigrationMarkerForTest] simulates a failure in v1 -> v2 migration.
+  /// Only isolated tests should set [singleInstance] to false.
   static Future<LocalJournalSpike> open({
     required DatabaseFactory factory,
     required String path,
     DateTime Function()? clock,
     Future<void> Function()? afterRevisionWrittenForTest,
+    Future<void> Function()? afterMigrationMarkerForTest,
+    bool singleInstance = true,
   }) async {
     final db = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
+        singleInstance: singleInstance,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -59,6 +64,17 @@ CREATE TABLE local_outbox (
   FOREIGN KEY(entity_id, revision)
     REFERENCES diary_revisions(entity_id, revision)
 )''');
+          await _createMigrationEvidence(db, 'created_v2');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion != 1 || newVersion != 2) {
+            throw StateError('Unsupported experimental migration: $oldVersion -> $newVersion');
+          }
+          // sqflite invokes onUpgrade inside a transaction.
+          await _createMigrationEvidence(db, 'upgraded_v1_to_v2');
+          if (afterMigrationMarkerForTest != null) {
+            await afterMigrationMarkerForTest();
+          }
         },
       ),
     );
@@ -67,6 +83,19 @@ CREATE TABLE local_outbox (
       clock ?? DateTime.now,
       afterRevisionWrittenForTest,
     );
+  }
+
+  static Future<void> _createMigrationEvidence(DatabaseExecutor db, String marker) async {
+    // Additive probe only: existing entities/revisions/outbox remain untouched.
+    await db.execute('''
+CREATE TABLE spike_migration_evidence (
+  marker TEXT PRIMARY KEY,
+  schema_version INTEGER NOT NULL CHECK(schema_version = 2)
+)''');
+    await db.insert('spike_migration_evidence', {
+      'marker': marker,
+      'schema_version': 2,
+    });
   }
 
   /// Persists a *complete* diary body as a new local revision.
@@ -213,6 +242,73 @@ WHERE r.entity_id = ?''', [entityId]);
         .toList(growable: false);
   }
 
+  /// Read-only consistency evidence, NEVER a claim that a backup is restorable.
+  /// Runs without repair, mutations or networking. Callers must not treat a
+  /// clean result as proof against power loss, filesystem errors or corruption.
+  Future<SpikeAuditResult> auditLocalState() async {
+    final issues = <String>[];
+    final integrity = await _db.rawQuery('PRAGMA quick_check');
+    if (integrity.length != 1 || integrity.first.values.first != 'ok') {
+      issues.add('SQLite quick_check failed');
+    }
+    final foreignKeys = await _db.rawQuery('PRAGMA foreign_key_check');
+    if (foreignKeys.isNotEmpty) {
+      issues.add('Broken foreign key references: ${foreignKeys.length}');
+    }
+
+    final missingHeads = await _db.rawQuery('''
+SELECT e.id
+FROM entities e LEFT JOIN diary_revisions r
+  ON r.entity_id = e.id AND r.revision = e.revision
+WHERE r.entity_id IS NULL''');
+    if (missingHeads.isNotEmpty) {
+      issues.add('Entity current revision has no historical row');
+    }
+
+    final rows = await _db.rawQuery('''
+SELECT r.entity_id, r.revision, r.body, r.saved_utc,
+       o.event_key, o.operation, o.payload_json
+FROM diary_revisions r
+LEFT JOIN local_outbox o
+  ON o.entity_id = r.entity_id AND o.revision = r.revision
+ORDER BY r.entity_id, r.revision''');
+
+    final seenRevisions = <String>{};
+    for (final row in rows) {
+      final id = row['entity_id'] as String;
+      final revision = row['revision'] as int;
+      final key = '$id:$revision';
+      if (!seenRevisions.add(key)) {
+        issues.add('Duplicate outbox operation for revision $key');
+      }
+      if (row['event_key'] == null) {
+        issues.add('Missing outbox operation for revision $key');
+        continue;
+      }
+      if (row['event_key'] != 'diary:$id:$revision' ||
+          row['operation'] != 'diary.upsert.spike') {
+        issues.add('Unexpected outbox identity or operation for $key');
+      }
+      try {
+        final parsed = jsonDecode(row['payload_json'] as String);
+        if (parsed is! Map<String, dynamic> ||
+            parsed['entityId'] != id ||
+            parsed['revision'] != revision ||
+            parsed['body'] != row['body'] ||
+            parsed['savedUtc'] != row['saved_utc']) {
+          issues.add('Payload mismatch for $key');
+        }
+      } catch (_) {
+        issues.add('Invalid outbox JSON for $key');
+      }
+    }
+
+    return SpikeAuditResult(
+      revisionCount: seenRevisions.length,
+      issues: List.unmodifiable(issues),
+    );
+  }
+
   DiaryVersion _versionFromRow(Map<String, Object?> row) {
     return DiaryVersion(
       entityId: row['entity_id'] as String,
@@ -223,6 +319,15 @@ WHERE r.entity_id = ?''', [entityId]);
   }
 
   Future<void> close() => _db.close();
+}
+
+/// Limited, experimental, read-only audit; not the production data-health UI.
+class SpikeAuditResult {
+  const SpikeAuditResult({required this.revisionCount, required this.issues});
+
+  final int revisionCount;
+  final List<String> issues;
+  bool get isInternallyConsistent => issues.isEmpty;
 }
 
 class DiaryVersion {
