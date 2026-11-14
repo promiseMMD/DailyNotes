@@ -14,12 +14,11 @@ enum ExperimentalSavePhase { untouched, writing, savedLocally, failed }
 
 class ExperimentalDiarySession extends ChangeNotifier {
   ExperimentalDiarySession._({
-    required LocalJournalSpike journal,
+    required this._journal,
     required this.entityId,
     required int revision,
     required String persistedBody,
-  })  : _journal = journal,
-        _revision = revision,
+  })  :         _revision = revision,
         _persistedBody = persistedBody,
         _draft = persistedBody,
         _phase = revision == 0
@@ -49,7 +48,7 @@ class ExperimentalDiarySession extends ChangeNotifier {
     }
     final existing = await journal.readDiary(entityId);
     return ExperimentalDiarySession._(
-      journal: journal,
+      _journal: journal,
       entityId: entityId,
       revision: existing?.revision ?? 0,
       persistedBody: existing?.body ?? '',
