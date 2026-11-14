@@ -71,7 +71,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
-    await tester.pageBack();
+    await tester.tapAt(const Offset(10, 10)); // Dismiss the sort-sheet barrier.
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('打开侧边栏'));
     await tester.pumpAndSettle();
