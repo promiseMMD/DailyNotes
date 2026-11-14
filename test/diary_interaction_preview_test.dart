@@ -135,6 +135,11 @@ void main() {
 
   testWidgets('clear search resets visible text and restores all committed rows',
       (tester) async {
+    // The diary list is lazy: on the default 800x600 test viewport, rows
+    // below the search field are not built and find.text reports a false
+    // negative. Give this interaction test a phone-sized tall viewport.
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final repo = FakePreviewDiaryRepository()
       ..seed('one', 'Stage 故障记录', '2026-11-14T10:00:00.000Z')
       ..seed('two', 'Overlay 调整记录', '2026-11-14T11:00:00.000Z');
