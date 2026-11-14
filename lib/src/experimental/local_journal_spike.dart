@@ -209,6 +209,24 @@ WHERE r.entity_id = ?''', [entityId]);
     return _versionFromRow(rows.single);
   }
 
+  /// Read-only index for the isolated preview diary. Resolves only currently
+  /// committed heads (one per identity), never incomplete revisions/outbox.
+  /// This is not a final production listing/pagination schema.
+  Future<List<DiaryVersion>> listCommittedDiaries({int limit = 200}) async {
+    if (limit < 1 || limit > 1000) {
+      throw RangeError.range(limit, 1, 1000, 'limit');
+    }
+    final rows = await _db.rawQuery('''
+SELECT r.entity_id, r.revision, r.body, r.saved_utc
+FROM entities e
+JOIN diary_revisions r
+  ON r.entity_id = e.id AND r.revision = e.revision
+WHERE e.kind = 'diary'
+ORDER BY r.saved_utc DESC, r.entity_id DESC
+LIMIT ?''', [limit]);
+    return List<DiaryVersion>.unmodifiable(rows.map(_versionFromRow));
+  }
+
   /// Reads an older revision without mutating the current record.
   Future<DiaryVersion?> readRevision(String entityId, int revision) async {
     final rows = await _db.query(
