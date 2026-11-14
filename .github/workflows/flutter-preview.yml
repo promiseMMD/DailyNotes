@@ -45,6 +45,16 @@ jobs:
         run: flutter test --timeout 2m test/diary_autosave_editor_test.dart
       - name: Widget tests
         run: flutter test test/app_navigation_test.dart
+      - name: Moodiary-inspired layout regression tests
+        run: flutter test test/moodiary_inspired_ui_test.dart
+      - name: Render phone screenshots for design review
+        run: flutter test --timeout 2m test/ui_preview_screenshots_test.dart
+      - name: Upload rendered UI screenshots (candidate only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dailynotes-moodiary-inspired-candidate-screenshots
+          path: build/ui-screenshots/*.png
+          if-no-files-found: error
       - name: Debug preview APK (not a data-safe release)
         run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
