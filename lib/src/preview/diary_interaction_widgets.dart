@@ -95,12 +95,24 @@ class PreviewDiaryCalendarPage extends StatefulWidget {
 
 class _PreviewDiaryCalendarPageState extends State<PreviewDiaryCalendarPage> {
   Future<void> _pick() async {
-    final now = DateTime.now();
+    // Only committed local-test dates are selectable. A blank date used to
+    // silently return an empty diary list, which looked like lost records.
+    final available = <DateTime>{};
+    for (final entry in widget.entries) {
+      final date = previewLocalDate(entry);
+      if (date != null) {
+        available.add(DateTime(date.year, date.month, date.day));
+      }
+    }
+    if (available.isEmpty) return;
+    final sorted = available.toList()..sort();
     final selected = await showDatePicker(
       context: context,
-      initialDate: now,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      initialDate: sorted.last,
+      firstDate: sorted.first,
+      lastDate: sorted.last,
+      selectableDayPredicate: available.contains,
+      helpText: '选择有测试日记的日期',
     );
     if (mounted && selected != null) {
       Navigator.of(context).pop(selected);
@@ -125,7 +137,7 @@ class _PreviewDiaryCalendarPageState extends State<PreviewDiaryCalendarPage> {
           IconButton(
             tooltip: '选择日期',
             icon: const Icon(Icons.calendar_month_outlined),
-            onPressed: _pick,
+            onPressed: widget.entries.any((entry) => previewLocalDate(entry) != null) ? _pick : null,
           ),
         ],
       ),
