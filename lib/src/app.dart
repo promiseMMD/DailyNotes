@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Navigation-only proof of concept. This app deliberately performs NO writes.
 class DailyNotesApp extends StatelessWidget {
@@ -46,7 +46,7 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   int _noteSubtab = 0;
 
   void _notImplemented([String? action]) {
-    final label = action == null ? '此功能' : action;
+    final label = action ?? '此功能';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('$label尚未接入。预览版本不会创建、保存或同步任何真实数据。'),
