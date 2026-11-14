@@ -18,7 +18,7 @@ class ExperimentalDiarySession extends ChangeNotifier {
     required this.entityId,
     required int revision,
     required String persistedBody,
-  })  :         _revision = revision,
+  }) : _revision = revision,
         _persistedBody = persistedBody,
         _draft = persistedBody,
         _phase = revision == 0
