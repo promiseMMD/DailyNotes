@@ -39,6 +39,10 @@ jobs:
         run: flutter test test/local_journal_spike_test.dart
       - name: Storage migration and recovery experiments
         run: flutter test test/local_journal_recovery_test.dart
+      - name: Experimental autosave state-machine tests
+        run: flutter test test/diary_autosave_session_test.dart
+      - name: Experimental editor interaction tests
+        run: flutter test --timeout 2m test/diary_autosave_editor_test.dart
       - name: Widget tests
         run: flutter test test/app_navigation_test.dart
       - name: Debug preview APK (not a data-safe release)
