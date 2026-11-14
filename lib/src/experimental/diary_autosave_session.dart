@@ -2,6 +2,15 @@ import 'package:flutter/foundation.dart';
 
 import 'local_journal_spike.dart';
 
+/// Test seam; the production experimental entry must use [open] to supply
+/// real SQLite callbacks. These types do not define a final storage protocol.
+typedef DiaryReadCallback = Future<DiaryVersion?> Function(String entityId);
+typedef DiarySaveCallback = Future<DiaryVersion> Function({
+  required String entityId,
+  required String body,
+  required int expectedRevision,
+});
+
 /// A replaceable editor-state experiment, not production autosave.
 ///
 /// The first non-empty edit initiates a local save; subsequent changes are
@@ -14,7 +23,7 @@ enum ExperimentalSavePhase { untouched, writing, savedLocally, failed }
 
 class ExperimentalDiarySession extends ChangeNotifier {
   ExperimentalDiarySession._({
-    required this._journal,
+    required this._save,
     required this.entityId,
     required int revision,
     required String persistedBody,
@@ -25,7 +34,7 @@ class ExperimentalDiarySession extends ChangeNotifier {
             ? ExperimentalSavePhase.untouched
             : ExperimentalSavePhase.savedLocally;
 
-  final LocalJournalSpike _journal;
+  final DiarySaveCallback _save;
   final String entityId;
 
   int _revision;
@@ -42,13 +51,27 @@ class ExperimentalDiarySession extends ChangeNotifier {
   static Future<ExperimentalDiarySession> open({
     required LocalJournalSpike journal,
     required String entityId,
+  }) =>
+      openWithCallbacksForTest(
+        read: journal.readDiary,
+        save: journal.saveDiary,
+        entityId: entityId,
+      );
+
+  /// Deterministic widget tests inject a fake writer, avoiding FakeAsync +
+  /// external SQLite FFI deadlocks. Real SQLite integration is tested
+  /// separately by diary_autosave_session_test.dart.
+  static Future<ExperimentalDiarySession> openWithCallbacksForTest({
+    required DiaryReadCallback read,
+    required DiarySaveCallback save,
+    required String entityId,
   }) async {
     if (entityId.trim().isEmpty) {
       throw ArgumentError.value(entityId, 'entityId');
     }
-    final existing = await journal.readDiary(entityId);
+    final existing = await read(entityId);
     return ExperimentalDiarySession._(
-      journal: journal,
+      save: save,
       entityId: entityId,
       revision: existing?.revision ?? 0,
       persistedBody: existing?.body ?? '',
@@ -146,7 +169,7 @@ class ExperimentalDiarySession extends ChangeNotifier {
         }
 
         try {
-          final saved = await _journal.saveDiary(
+          final saved = await _save(
             entityId: entityId,
             body: snapshot,
             expectedRevision: _revision,
