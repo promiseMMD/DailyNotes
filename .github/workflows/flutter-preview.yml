@@ -35,8 +35,10 @@ jobs:
         run: flutter pub get
       - name: Static analysis
         run: flutter analyze
+      - name: Transaction and fault-injection tests
+        run: flutter test test/local_journal_spike_test.dart
       - name: Widget tests
-        run: flutter test
+        run: flutter test test/app_navigation_test.dart
       - name: Debug preview APK (not a data-safe release)
         run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
