@@ -24,16 +24,19 @@ void main() {
     await tester.pumpAndSettle();
 
     Future<void> capture(String name) async {
-      final boundary = tester.renderObject<RenderRepaintBoundary>(
-        find.byKey(key),
-      );
-      final image = await boundary.toImage(pixelRatio: 1);
-      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
-      if (bytes == null) throw StateError('Failed to encode UI screenshot');
-      final output = File('build/ui-screenshots/$name.png');
-      await output.parent.create(recursive: true);
-      await output.writeAsBytes(bytes.buffer.asUint8List());
+      // Encoding and file I/O are real async operations, outside fake clock.
+      await tester.runAsync(() async {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(key),
+        );
+        final image = await boundary.toImage(pixelRatio: 1);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        if (bytes == null) throw StateError('Failed to encode UI screenshot');
+        final output = File('build/ui-screenshots/$name.png');
+        await output.parent.create(recursive: true);
+        await output.writeAsBytes(bytes.buffer.asUint8List());
+      });
     }
 
     await capture('01-diary');
