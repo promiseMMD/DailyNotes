@@ -472,7 +472,45 @@ class PlaceholderPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text(title)),
-        body: const Center(child: Text('尚未实现；不会修改真实数据')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: previewSoftSage,
+                    borderRadius: BorderRadius.circular(19),
+                  ),
+                  child: const Icon(Icons.construction_outlined,
+                      color: previewSage, size: 27),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: previewInk,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '该页面正在设计中。尚未实现；不会修改真实数据。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: previewMuted,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
 }
 
@@ -483,21 +521,64 @@ class MyPage extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('我的')),
         body: ListView(
-          padding: const EdgeInsets.all(20),
-          children: const [
-            ListTile(title: Text('记录足迹与热力图'), subtitle: Text('未统计；当前版本没有接入本地记录')),
-            ExpansionTile(
-              title: Text('累计总字数'),
-              subtitle: Text('未统计'),
-              children: [
-                ListTile(title: Text('日记'), trailing: Text('未统计')),
-                ListTile(title: Text('普通笔记'), trailing: Text('未统计')),
-                ListTile(title: Text('长期记录'), trailing: Text('未统计')),
-              ],
+          padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
+          children: [
+            const PreviewPageIntro(
+              kicker: 'PERSONAL SPACE',
+              title: '我的记录生活',
+              subtitle: '足迹、回顾与个人数据管理，留在同一个地方。',
             ),
-            ListTile(title: Text('趋势统计'), subtitle: Text('写作 / 知识 / 待办 / 使用（未统计）')),
-            ListTile(title: Text('年度回顾'), subtitle: Text('尚无可验证统计数据')),
-            ListTile(title: Text('回收站'), subtitle: Text('入口已预留；恢复逻辑尚未实现')),
+            Container(
+              decoration: BoxDecoration(
+                color: previewSoftSage,
+                borderRadius: BorderRadius.circular(17),
+              ),
+              child: const ExpansionTile(
+                leading: Icon(Icons.edit_note_outlined, color: previewSage),
+                title: Text('累计总字数', style: TextStyle(
+                  fontSize: 14,
+                  color: previewInk,
+                  fontWeight: FontWeight.w600,
+                )),
+                subtitle: Text('未统计', style: TextStyle(
+                  color: previewMuted, fontSize: 12,
+                )),
+                children: [
+                  ListTile(title: Text('日记'), trailing: Text('未统计')),
+                  ListTile(title: Text('普通笔记'), trailing: Text('未统计')),
+                  ListTile(title: Text('长期记录'), trailing: Text('未统计')),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const PreviewSectionHeader(title: '记录足迹'),
+            const PreviewEmptyState(
+              icon: Icons.calendar_today_outlined,
+              title: '记录足迹与热力图',
+              description: '未统计；当前版本还没有接入本地记录。',
+              compact: true,
+            ),
+            const PreviewThinDivider(),
+            const SizedBox(height: 20),
+            const PreviewSectionHeader(title: '个人回顾'),
+            const PreviewSoftTile(
+              icon: Icons.show_chart_outlined,
+              title: '趋势统计',
+              subtitle: '写作 / 知识 / 待办 / 使用（未统计）',
+            ),
+            const PreviewSoftTile(
+              icon: Icons.auto_stories_outlined,
+              title: '年度回顾',
+              subtitle: '尚无可验证统计数据',
+            ),
+            const PreviewThinDivider(),
+            const SizedBox(height: 20),
+            const PreviewSectionHeader(title: '个人数据'),
+            const PreviewSoftTile(
+              icon: Icons.restore_from_trash_outlined,
+              title: '回收站',
+              subtitle: '入口已预留；恢复逻辑尚未实现',
+            ),
           ],
         ),
       );
@@ -507,26 +588,86 @@ class DataHealthPage extends StatelessWidget {
   const DataHealthPage({super.key});
 
   static const categories = ['本地数据库', '附件完整性', '备份有效性', '同步一致性'];
+  static const categoryIcons = [
+    Icons.storage_outlined,
+    Icons.attach_file_outlined,
+    Icons.backup_outlined,
+    Icons.sync_outlined,
+  ];
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('数据健康检查')),
         body: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
           children: [
-            const ListTile(
-              title: Text('健康状态：未检查'),
-              subtitle: Text('未执行真实检测，不得视为正常。检查入口只读，不自动修复或删除数据。'),
+            const PreviewPageIntro(
+              kicker: 'DATA SAFETY',
+              title: '了解数据的实际状态',
+              subtitle: '检测仅供查看，绝不自动修复、覆盖或清除内容。',
             ),
-            for (final category in categories)
-              ListTile(
-                title: Text(category),
-                subtitle: const Text('未检查'),
-                trailing: const Icon(Icons.chevron_right),
+            Container(
+              padding: const EdgeInsets.all(17),
+              decoration: BoxDecoration(
+                color: previewSoftSage,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: previewSage),
+                  SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('健康状态：未检查', style: TextStyle(
+                          color: previewInk,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        )),
+                        SizedBox(height: 4),
+                        Text(
+                          '尚未执行真实检测，不得视为正常。',
+                          style: TextStyle(color: previewMuted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+            const PreviewSectionHeader(
+              title: '检查项目',
+              subtitle: '只读诊断 · 检测结果尚未产生',
+            ),
+            const SizedBox(height: 9),
+            for (var i = 0; i < categories.length; i++) ...[
+              PreviewSoftTile(
+                icon: categoryIcons[i],
+                title: categories[i],
+                subtitle: '未检查',
+                trailing: const Icon(
+                  Icons.chevron_right, color: previewMuted,
+                ),
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => HealthDetailPage(category: category)),
+                  MaterialPageRoute<void>(
+                    builder: (_) => HealthDetailPage(category: categories[i]),
+                  ),
                 ),
               ),
+              const PreviewThinDivider(),
+            ],
+            const SizedBox(height: 13),
+            const Text(
+              '检测入口只读，不会自动修复或删除数据。'
+              ' 本机持久化与 WebDAV 同步状态分别判断。',
+              style: TextStyle(
+                color: previewMuted,
+                fontSize: 11,
+                height: 1.5,
+              ),
+            ),
           ],
         ),
       );
@@ -540,9 +681,31 @@ class HealthDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text(category)),
-        body: const Padding(
-          padding: EdgeInsets.all(20),
-          child: Text('未执行真实检测；没有检查时间、范围或结果。当前详情为只读结构预览。'),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(21, 0, 21, 25),
+          children: [
+            PreviewPageIntro(
+              kicker: 'READ-ONLY DETAILS',
+              title: category,
+              subtitle: '目前没有可验证的诊断记录。',
+            ),
+            const PreviewSoftTile(
+              icon: Icons.info_outline,
+              title: '未检查',
+              subtitle: '没有检查时间、范围或结果。',
+            ),
+            const PreviewThinDivider(),
+            const SizedBox(height: 18),
+            const Text(
+              '未执行真实检测；当前详情为只读结构预览。'
+              ' 不会自动修复、删除或同步任何数据。',
+              style: TextStyle(
+                color: previewMuted,
+                height: 1.6,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
       );
 }
