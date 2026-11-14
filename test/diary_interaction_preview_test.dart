@@ -2,6 +2,7 @@ import 'package:dailynotes/src/app.dart';
 import 'package:dailynotes/src/experimental/diary_autosave_session.dart';
 import 'package:dailynotes/src/experimental/local_journal_spike.dart';
 import 'package:dailynotes/src/preview/preview_diary_repository.dart';
+import 'package:dailynotes/src/preview/diary_interaction_widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -140,19 +141,23 @@ void main() {
 
     await tester.pumpWidget(DailyNotesApp(previewRepository: repo));
     await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(find.text('较新的一篇')).dy,
-      lessThan(tester.getTopLeft(find.text('较早的一篇')).dy),
-    );
+    List<String> order() {
+      final list = tester.widget<ListView>(
+        find.byKey(const Key('diary-page')),
+      );
+      final delegate = list.childrenDelegate as SliverChildListDelegate;
+      return delegate.children
+          .whereType<PreviewDiaryEntryRow>()
+          .map((row) => row.entry.entityId)
+          .toList();
+    }
+    expect(order(), orderedEquals(['newer', 'older']));
 
     await tester.tap(find.byTooltip('排序菜单'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('sort-oldest')));
     await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(find.text('较早的一篇')).dy,
-      lessThan(tester.getTopLeft(find.text('较新的一篇')).dy),
-    );
+    expect(order(), orderedEquals(['older', 'newer']));
     expect(repo.writeCount, 0);
   });
 
