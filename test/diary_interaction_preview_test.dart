@@ -196,8 +196,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('日历总览'));
     await tester.pumpAndSettle();
+    // Tooltip wraps the button in Flutter 3.50; inspect the actual
+    // IconButton ancestor rather than casting the tooltip widget.
     final disabled = tester.widget<IconButton>(
-      find.byTooltip('选择日期'),
+      find.ancestor(
+        of: find.byIcon(Icons.calendar_month_outlined),
+        matching: find.byType(IconButton),
+      ).first,
     );
     expect(disabled.onPressed, isNull);
 
