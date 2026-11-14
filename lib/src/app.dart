@@ -1,14 +1,28 @@
+import 'dart:math';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'preview/soft_components.dart';
+import 'preview/diary_interaction_widgets.dart';
+import 'preview/preview_diary_repository.dart';
+import 'experimental/diary_autosave_editor.dart';
+import 'experimental/local_journal_spike.dart';
 
-/// Navigation-only proof of concept. This app deliberately performs NO writes.
+/// Preview UI. Only Android entrypoint injects an isolated test journal.
 class DailyNotesApp extends StatelessWidget {
-  const DailyNotesApp({super.key, this.screenshotFontFamily});
+  const DailyNotesApp({
+    super.key,
+    this.screenshotFontFamily,
+    this.previewRepository,
+  });
 
   /// Non-production override used only by deterministic screenshot tests.
   /// Normal Android rendering continues to use the system text font.
   final String? screenshotFontFamily;
+
+  /// Null in pure widget/layout tests. The Android entrypoint explicitly
+  /// supplies the isolated local test database, never a production schema.
+  final PreviewDiaryRepository? previewRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -29,13 +43,15 @@ class DailyNotesApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
         ),
       ),
-      home: const DailyNotesShell(),
+      home: DailyNotesShell(previewRepository: previewRepository),
     );
   }
 }
 
 class DailyNotesShell extends StatefulWidget {
-  const DailyNotesShell({super.key});
+  const DailyNotesShell({super.key, this.previewRepository});
+
+  final PreviewDiaryRepository? previewRepository;
 
   @override
   State<DailyNotesShell> createState() => _DailyNotesShellState();
@@ -60,6 +76,126 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   int _selectedTab = 0;
   int _todoSubtab = 0;
   int _noteSubtab = 0;
+  List<DiaryVersion> _previewDiaries = const [];
+  String? _previewLoadError;
+  bool _loadingPreview = false;
+  bool _openingDiary = false;
+  bool _searchActive = false;
+  String _searchTerm = '';
+  bool _oldestFirst = false;
+  DateTime? _selectedDiaryDate;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.previewRepository != null) {
+      // The preview-only database never starts in layout test harnesses.
+      Future<void>.microtask(_refreshPreviewDiaries);
+    }
+  }
+
+  @override
+  void dispose() {
+    final repository = widget.previewRepository;
+    if (repository != null) {
+      // There is no active editor after the owning shell is disposed.
+      repository.close();
+    }
+    super.dispose();
+  }
+
+  Future<void> _refreshPreviewDiaries() async {
+    final repository = widget.previewRepository;
+    if (repository == null || !mounted) return;
+    setState(() {
+      _loadingPreview = true;
+      _previewLoadError = null;
+    });
+    try {
+      final entries = await repository.listDiaries();
+      if (!mounted) return;
+      setState(() {
+        _previewDiaries = entries;
+        _loadingPreview = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingPreview = false;
+        _previewLoadError = '读取本机测试记录失败，未修改任何已有内容';
+      });
+    }
+  }
+
+  Future<void> _openDiary([String? existingId]) async {
+    final repository = widget.previewRepository;
+    if (repository == null) {
+      _notImplemented('测试日记编辑');
+      return;
+    }
+    if (_openingDiary) return;
+    setState(() => _openingDiary = true);
+    try {
+      // Preview-only identity scheme; the official V2.51 key format is
+      // undecided. Never reuse this as a future production entity ID.
+      final id = existingId ??
+          'preview-${DateTime.now().toUtc().microsecondsSinceEpoch}-'
+          '${Random.secure().nextInt(1 << 32)}';
+      final session = await repository.openEditor(id);
+      if (!mounted) {
+        session.dispose();
+        return;
+      }
+      try {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => ExperimentalDiaryEditor(session: session),
+          ),
+        );
+      } finally {
+        session.dispose();
+      }
+      if (mounted) await _refreshPreviewDiaries();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('测试日记打开失败，已有记录未被修改')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingDiary = false);
+    }
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searchActive = !_searchActive;
+      if (!_searchActive) _searchTerm = '';
+    });
+  }
+
+  List<DiaryVersion> get _visibleDiaries {
+    final needle = _searchTerm.trim().toLowerCase();
+    final matches = _previewDiaries.where((entry) {
+      if (needle.isNotEmpty && !entry.body.toLowerCase().contains(needle)) {
+        return false;
+      }
+      final selected = _selectedDiaryDate;
+      if (selected != null) {
+        final date = previewLocalDate(entry);
+        if (date == null || !previewSameDate(date, selected)) return false;
+      }
+      return true;
+    }).toList();
+    matches.sort((a, b) {
+      final order = a.savedUtc.compareTo(b.savedUtc);
+      if (order != 0) return _oldestFirst ? order : -order;
+      return _oldestFirst
+          ? a.entityId.compareTo(b.entityId)
+          : b.entityId.compareTo(a.entityId);
+    });
+    return matches;
+  }
 
   void _notImplemented([String? action]) {
     final label = action ?? '此功能';
@@ -72,6 +208,10 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   }
 
   void _createForCurrentContext() {
+    if (_selectedTab == 0) {
+      _openDiary();
+      return;
+    }
     const actions = ['新建日记', '新建待办', '新建笔记', '新建对话'];
     if (_selectedTab == 2 && _noteSubtab == 1) {
       _notImplemented('新建一级知识主题');
@@ -84,16 +224,37 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => const SafeArea(
+      builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 28),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 25),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('日记排序', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              SizedBox(height: 12),
-              Text('排序字段与默认顺序尚未确认。此面板仅核对底部弹出结构，不更改记录。'),
+              const Text('日记排序', style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.w600,
+              )),
+              const SizedBox(height: 8),
+              const Text('排序字段与默认顺序尚未确认。以下仅为本机测试记录的临时排序。',
+                style: TextStyle(fontSize: 12, color: previewMuted)),
+              const SizedBox(height: 9),
+              for (final ascending in [false, true])
+                ListTile(
+                  key: Key(ascending ? 'sort-oldest' : 'sort-newest'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(ascending ? '较早编辑优先（预览）' : '最近编辑优先（预览）'),
+                  trailing: Icon(
+                    _oldestFirst == ascending
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    color: previewSage,
+                  ),
+                  onTap: () {
+                    setState(() => _oldestFirst = ascending);
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
             ],
           ),
         ),
@@ -118,12 +279,29 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
     );
   }
 
-  void _openDrawerDestination(String title) {
-    Navigator.of(context).pop(); // Close the drawer before pushing the page.
-    Navigator.of(context).push(
+  Future<void> _openDrawerDestination(String title) async {
+    Navigator.of(context).pop();
+    if (title == '日历总览') {
+      final date = await Navigator.of(context).push<DateTime>(
+        MaterialPageRoute<DateTime>(
+          builder: (_) => PreviewDiaryCalendarPage(entries: _previewDiaries),
+        ),
+      );
+      if (mounted && date != null) {
+        setState(() {
+          _selectedTab = 0;
+          _selectedDiaryDate = date;
+          _searchActive = false;
+          _searchTerm = '';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) {
-          if (title == '我的') return const MyPage();
+          if (title == '我的') return MyPage(previewDiaryCount: _previewDiaries.length);
           if (title == '数据健康检查') return const DataHealthPage();
           return PlaceholderPage(title: title);
         },
@@ -273,6 +451,8 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   Widget _diaryPage() {
     final now = DateTime.now();
     final month = '${now.year}年${now.month}月';
+    final entries = _visibleDiaries;
+    DateTime? previousDay;
     return ListView(
       key: const Key('diary-page'),
       padding: const EdgeInsets.fromLTRB(21, 0, 21, 28),
@@ -289,24 +469,98 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
         const PreviewEmptyState(
           icon: Icons.auto_stories_outlined,
           title: '暂无可读取的长期记录',
-          description: '未来可持续记录饮食、健康和生活中的变化。',
+          description: '长期记录的数据结构尚未完成，不会将普通日记冒充长期记录。',
           compact: true,
         ),
         const PreviewThinDivider(),
         const SizedBox(height: 24),
-        const PreviewSectionHeader(
+        PreviewSectionHeader(
           title: '最近日记',
-          subtitle: '按时间连续阅读，避免大卡片打断内容',
+          subtitle: '按时间连续阅读 · 本机测试日记，尚未备份同步',
+          trailing: IconButton(
+            tooltip: '刷新测试日记',
+            icon: const Icon(Icons.refresh, size: 19),
+            onPressed: _loadingPreview ? null : _refreshPreviewDiaries,
+          ),
         ),
-        const PreviewEmptyState(
-          icon: Icons.event_note_outlined,
-          title: '暂无可读取的日记',
-          description: '这里将展示真实日记的日期与正文预览。',
-        ),
-        const PreviewThinDivider(),
+        if (_searchActive) ...[
+          const SizedBox(height: 8),
+          TextField(
+            key: const Key('preview-diary-search'),
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: '搜索本机测试日记正文',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: IconButton(
+                tooltip: '清除搜索',
+                onPressed: () => setState(() => _searchTerm = ''),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+            onChanged: (text) => setState(() => _searchTerm = text),
+          ),
+        ],
+        if (_selectedDiaryDate != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InputChip(
+                label: Text('日期：${previewDateLabel(_selectedDiaryDate!)}'),
+                onDeleted: () => setState(() => _selectedDiaryDate = null),
+                deleteIcon: const Icon(Icons.close, size: 17),
+              ),
+            ),
+          ),
+        if (_previewLoadError != null)
+          PreviewEmptyState(
+            icon: Icons.error_outline,
+            title: _previewLoadError!,
+            description: '点击上方刷新重试，切勿卸载含测试数据的 APK。',
+            compact: true,
+          )
+        else if (_loadingPreview && _previewDiaries.isEmpty)
+          const LinearProgressIndicator()
+        else if (entries.isEmpty && _previewDiaries.isEmpty)
+          const PreviewEmptyState(
+            icon: Icons.event_note_outlined,
+            title: '暂无可读取的日记',
+            description: '点击底栏加号写一篇测试日记，保存后会显示在这里。',
+          )
+        else if (entries.isEmpty)
+          const PreviewEmptyState(
+            icon: Icons.search_off_outlined,
+            title: '没有匹配的日记',
+            description: '可修改搜索词、日期，或者清除筛选。',
+          )
+        else
+          for (final entry in entries) ...[
+            if (previewLocalDate(entry) case final DateTime date)
+              if (previousDay == null || !previewSameDate(previousDay, date)) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 21, bottom: 4),
+                  child: Text(
+                    previewDateLabel(date),
+                    style: const TextStyle(
+                      color: previewSage,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                // Note the effective first/last editing date shown is the
+                // committed revision timestamp, not the original create date.
+                ...[Builder(builder: (_) {
+                  previousDay = date;
+                  return const SizedBox.shrink();
+                })],
+              ],
+            PreviewDiaryEntryRow(entry: entry, onOpen: () => _openDiary(entry.entityId)),
+            const PreviewThinDivider(),
+          ],
         const SizedBox(height: 21),
         const Text(
-          '仅界面预览 · 尚未接入正式日记保存',
+          '测试数据区 · 无 WebDAV 同步与可恢复备份 · 请勿记录重要信息',
           textAlign: TextAlign.center,
           style: TextStyle(color: previewMuted, fontSize: 11),
         ),
@@ -437,7 +691,7 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
         actions: _selectedTab == 0
             ? [
                 IconButton(tooltip: '置顶菜单', onPressed: _showPinnedMenu, icon: const Icon(Icons.push_pin_outlined)),
-                IconButton(tooltip: '搜索菜单', onPressed: () => _notImplemented('搜索'), icon: const Icon(Icons.search)),
+                IconButton(tooltip: '搜索菜单', onPressed: _toggleSearch, icon: Icon(_searchActive ? Icons.close : Icons.search)),
                 const IconButton(tooltip: '快捷菜单待确认', onPressed: null, icon: Icon(Icons.more_horiz)),
                 IconButton(tooltip: '排序菜单', onPressed: _showSortSheet, icon: const Icon(Icons.sort)),
               ]
