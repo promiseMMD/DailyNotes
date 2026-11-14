@@ -48,7 +48,7 @@ class ExperimentalDiarySession extends ChangeNotifier {
     }
     final existing = await journal.readDiary(entityId);
     return ExperimentalDiarySession._(
-      _journal: journal,
+      journal: journal,
       entityId: entityId,
       revision: existing?.revision ?? 0,
       persistedBody: existing?.body ?? '',
