@@ -130,7 +130,9 @@ class ExperimentalDiarySession extends ChangeNotifier {
       return;
     }
     _writing = true;
-    _pumpFuture = _pump();
+    // Schedule after assigning the Future: even immediate validation failures
+    // must not leave a completed stale Future behind in _pumpFuture.
+    _pumpFuture = Future<void>.microtask(_pump);
   }
 
   Future<void> _pump() async {
