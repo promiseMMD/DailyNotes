@@ -82,6 +82,7 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   bool _openingDiary = false;
   bool _searchActive = false;
   String _searchTerm = '';
+  final TextEditingController _searchController = TextEditingController();
   bool _oldestFirst = false;
   DateTime? _selectedDiaryDate;
 
@@ -96,6 +97,7 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     final repository = widget.previewRepository;
     if (repository != null) {
       // There is no active editor after the owning shell is disposed.
@@ -170,7 +172,10 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
   void _toggleSearch() {
     setState(() {
       _searchActive = !_searchActive;
-      if (!_searchActive) _searchTerm = '';
+      if (!_searchActive) {
+        _searchTerm = '';
+        _searchController.clear();
+      }
     });
   }
 
@@ -511,13 +516,17 @@ class _DailyNotesShellState extends State<DailyNotesShell> {
           const SizedBox(height: 8),
           TextField(
             key: const Key('preview-diary-search'),
+            controller: _searchController,
             autofocus: true,
             decoration: InputDecoration(
               hintText: '搜索本机测试日记正文',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: IconButton(
                 tooltip: '清除搜索',
-                onPressed: () => setState(() => _searchTerm = ''),
+                onPressed: () => setState(() {
+                  _searchTerm = '';
+                  _searchController.clear();
+                }),
                 icon: const Icon(Icons.close),
               ),
             ),
