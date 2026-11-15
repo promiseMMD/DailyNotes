@@ -14,13 +14,28 @@
 5. **坚果云 WebDAV 只由用户主动手动点击触发。** LAN 自动更新、保存、WebSocket、连接/断开、应用启动和后台任务都不得隐式触发 WebDAV；PC 不作为独立 WebDAV 同步节点。
 6. DN-187 覆盖 DN-185 的「不指定唯一权威」及 DN-186 中「两端各自独立持久化权威」的解释；DN-183 富文本格式、DN-184 PC Web 入口、DN-185 LAN 私有范围、DN-186 自动 LAN 更新目标继续有效。细节见 `docs/research/DailyNotes_Phone_Authoritative_PC_Remote_Editor_Architecture_R009.md`。
 
-**实现状态：以上是已确认的产品架构，不代表已经实现。** 当前仍是 UI 结构预览；手机权威数据库、LAN API/WebSocket、PC 编辑端、断线草稿、冲突保护、手动 WebDAV 和端到端验收均未完成。未通过四阶段验收前，不得将真实重要数据交给当前预览 APK。
+**实现状态：以上是已确认的产品架构，不代表已经实现。**
+## 手机 PC 编辑服务运行方式（2026-11-15，DN-188）
+
+用户明确选择：**A——手机前台手动开启 PC 编辑模式，PC 连接后维持会话；允许息屏后继续服务，必要时配置后台运行权限。**
+
+- 手机直接托管 PC 网页、HTTP API、WebSocket；手机仍是唯一权威数据库，PC 不运行第二套正式数据服务。
+- 技术优先验证 Android connectedDevice 前台服务类型，不把 dataSync 用于长连接；手动由手机前台用户操作启动，显示持续通知和停止入口。
+- 息屏继续服务是目标，不是绝对在线保证。Doze、Low Power Standby、HyperOS 后台网络、电池限制、Wi-Fi/IP 变化、进程被杀和用户停止都可能中断；须自动重连、持久事件补齐，未收到手机落盘确认不得报保存成功。
+- 默认不持有整个会话永久 WakeLock；先实测再决定是否需要受控短时锁。HyperOS「无限制」可按需配置，但不等于绕过 Android 系统省电机制。
+- Android 13+ FGS 通知、Android 17/API 37 target SDK 37+ ACCESS_LOCAL_NETWORK、HTTPS/WSS 与证书信任、Flutter UI/原生服务共享单一事务仓库，均为后续实现前检查项。
+- 完整平台限制和 P0 实机测试见 `docs/research/DailyNotes_Phone_LAN_Foreground_Service_Risk_Research_R010.md`。
+
+**状态：用户已确认运行方式；服务、权限、息屏在线与耗电尚未实现或实测。**
+
+---
+ 当前仍是 UI 结构预览；手机权威数据库、LAN API/WebSocket、PC 编辑端、断线草稿、冲突保护、手动 WebDAV 和端到端验收均未完成。未通过四阶段验收前，不得将真实重要数据交给当前预览 APK。
 
 ---
 
 ## 依据与已确定范围
 
-- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.61.md`（DN-001～DN-187）为准。
+- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.62.md`（DN-001～DN-188）为准。
 - DN-154/155/163：四个底栏主页面及第五个按上下文新建。
 - DN-159/165/173/174：抽屉菜单入口、顺序、底部设置、70%–80% 非全屏。
 - DN-161/162：日记极简文档时间流；不增加旧的顶部输入卡片。
