@@ -27,20 +27,20 @@
 - 完整平台限制和 P0 实机测试见 `docs/research/DailyNotes_Phone_LAN_Foreground_Service_Risk_Research_R010.md`。
 
 **状态：用户已确认运行方式；服务、权限、息屏在线与耗电尚未实现或实测。**
-## PC 连接手机方式与安全协议（2026-11-15，DN-189）
+## 历史连接与安全协议研究（2026-11-15，DN-189，首期授权方案已由 DN-191 覆盖）
 
-用户明确选择：**方案 B——PC 手动输入手机当前 Wi-Fi IP 地址**。首期不使用二维码连接、不使用 mDNS/SSDP 自动发现或局域网扫描。
+用户明确选择：**方案 B——PC 手动输入手机当前 Wi-Fi IP 地址**。首期不使用二维码连接、不使用 mDNS/SSDP 自动发现或局域网扫描。以下原配对设计仅作历史记录，当前必须以 DN-191 为准。
 
 - 手机显示当前 Wi-Fi IPv4、候选固定端口 8443 和完整 HTTPS 地址；PC 手动输入 `https://<phone-ip>:8443`。端口仍待 PoC 验证。
 - 手机同源托管 HTTPS 页面、REST API 和 WSS；只绑定当前 Wi-Fi 接口，不监听蜂窝/所有接口，不开放公网端口、UPnP、隧道或云中继。
-- IP 只负责定位；TLS 证书确认手机服务器身份并加密传输；一次性配对码授权 PC。首次配对由手机确认，之后使用可撤销设备凭证。
-- 证书 SAN 必须包含精确匹配当前 IP 的 iPAddress。R011 初步倾向私有 CA；经 R012 深化后，用户选择暂不决定：比较 CA:FALSE 自签名 trusted leaf 与私有 CA + 动态叶证书。两者均未 PoC；不得让用户忽略证书警告。
-- Windows/Chrome 信任初始化必须验证公开证书 SHA-256 指纹；私钥不离开 Android Keystore。最终信任对象可能是 CA:FALSE 自签名服务器叶证书，也可能是受约束的 CA 根证书，尚未决定。首次信任安装必须用户明确确认。
+- 历史分层设计为 IP 定位、TLS 身份验证、配对码/设备凭证授权；**配对码和长期设备凭证已被 DN-191 取消**，当前改为每次新建/重建会话由手机人工批准。
+- 证书 SAN 必须包含精确匹配当前 IP 的 iPAddress。DN-191 已将首期方向简化为 CA:FALSE 自签名服务器终端证书，不建设私有 CA；Windows/Chrome 仍待 PoC，不得忽略证书警告。
+- Windows/Chrome 信任初始化必须验证公开服务器证书 SHA-256 指纹；私钥不离开 Android Keystore。首次信任安装必须用户明确确认。
 - Chrome 同源 local→local 请求与 Android 17 ACCESS_LOCAL_NETWORK 是不同权限问题；target SDK 37+ 的 Android 入站 TCP 权限仍须处理，手动输入 IP 不豁免。
 - PC 正式写入携带 operationId/baseRevision；手机事务落盘后 ACK；WSS 只作通知，断线按 eventSequence 补齐。所有异常下保留 PC 未提交草稿，手机本地记录继续可用。
 - 完整配对、证书、通信和恢复矩阵见 `docs/research/DailyNotes_Manual_IP_Connection_Pairing_TLS_Recovery_Research_R011.md`。
 
-**状态：手动 IP 方式已确认；TLS 路线、证书 PoC、配对协议和异常恢复尚未实现/实测。**
+**历史状态：手动 IP 方式已确认；本节原配对/证书方案已由 DN-191 简化并覆盖。**
 ## 家庭局域网简化安全架构与每次连接手机审批（2026-11-15，DN-191）
 
 用户明确选择：**B——PC 每次新建连接或断线后重新连接，都必须由手机再次人工确认。**
@@ -59,9 +59,9 @@
 
 ---
 
-## Windows TLS 证书策略比较（2026-11-15，DN-190）
+## 历史 Windows TLS 证书路线比较（2026-11-15，DN-190，首期方向已由 DN-191 覆盖）
 
-用户明确选择 C：**暂不决定 A/B，继续比较，不授权安装证书或实施。**
+历史决策：当时用户选择 C 暂不决定 A/B；随后 DN-191 已将首期方案收敛为单张 CA:FALSE 自签名服务器证书目标路线，不建设私有 CA。该路线仍须 PoC。
 
 - **路线 A（进一步细化）：** 自签名终端服务器证书，`CA:FALSE`、`EKU=serverAuth`、`SAN=iPAddress(当前手机 IP)`。Chromium Windows 当前实现允许 Windows Root store 中的自签名证书作为 trusted leaf；研究导入 Windows 当前用户 `Trusted Root Certification Authorities`。它不是可签发其他证书的 CA，但仍需要一次本地信任安装；IP 改变时需重新导入新证书并移除旧证书。
 - **路线 B：** Android Keystore 私有 CA + 动态 IP 叶证书。Windows 信任 CA；手机在 NameConstraints 允许范围内自动签发新叶证书。应先研究将 CA 的 critical IP NameConstraints 限定到当前家庭 LAN CIDR，不默认允许所有 RFC1918；同一子网内 IP 改变无需重新安装根证书，跨子网则需重新签发根证书并重新导入。
@@ -70,7 +70,7 @@
 - **研究倾向而非决策：** 单手机/单 PC/稳定家庭 LAN 可优先 PoC A；频繁 IP 变化且接受 CA 权限与维护复杂度时再评估 B。
 - 详细比较、风险、证书生命周期和 PoC 验收见 `docs/research/DailyNotes_Certificate_Architecture_Comparison_R012.md`。
 
-**状态：用户尚未选择证书路线；A/B 均未 PoC、未安装、未实机验证。**
+**历史状态：R012 的 A/B 比较已归档；当前以 DN-191 单张自签名服务器证书为首期 PoC 目标，尚未安装、未实测。**
 
 ---
 
