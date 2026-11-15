@@ -4,7 +4,7 @@
 
 ## 当前权威架构决策（2026-11-15，接手必须优先阅读）
 
-**当前唯一规范基线：** `docs/requirements/DailyNotes开发规范_V2.64.md`（DN-001～DN-190）。历史 V2.51 UI 记录仅供追溯，不是当前完整规范。
+**当前唯一规范基线：** `docs/requirements/DailyNotes开发规范_V2.65.md`（DN-001～DN-191）。历史 V2.51 UI 记录仅供追溯，不是当前完整规范。
 
 **不可偏离的核心边界（DN-187）：**
 1. **Android 手机是唯一正式、权威的数据存储中心（Single Source of Truth）。** 日记、笔记、长期记录、追加项、富文本 JSON、revision、删除状态、附件和业务历史均由手机权威数据库管理；手机脱离 PC、LAN、WebDAV 仍可可靠记录。
@@ -41,6 +41,24 @@
 - 完整配对、证书、通信和恢复矩阵见 `docs/research/DailyNotes_Manual_IP_Connection_Pairing_TLS_Recovery_Research_R011.md`。
 
 **状态：手动 IP 方式已确认；TLS 路线、证书 PoC、配对协议和异常恢复尚未实现/实测。**
+## 家庭局域网简化安全架构与每次连接手机审批（2026-11-15，DN-191）
+
+用户明确选择：**B——PC 每次新建连接或断线后重新连接，都必须由手机再次人工确认。**
+
+- 首期家庭 LAN 安全边界：手机服务只监听当前 Wi-Fi 局域网接口；不监听蜂窝/所有接口，不开放公网、UPnP、端口转发或云中继。
+- TLS 继续使用 HTTPS/WSS；首期目标简化为一张 `CA:FALSE`、`EKU=serverAuth`、`SAN=iPAddress(当前手机 Wi-Fi IPv4)` 的自签名服务器终端证书，私钥留在 Android Keystore；Windows 优先 Current User → Trusted Root Certification Authorities，导入前核对手机显示的 SHA-256 指纹。首期不建设私有 CA、不做动态 CA/叶证书签发。Chrome 157 / Windows 10 兼容性尚待 PoC，不得忽略证书警告。
+- 家庭路由器 DHCP reservation 作为减少 IP 变化的可选建议，不强制；IP 变化后若 SAN 不匹配，需要重新生成服务器证书并在 PC 重新信任。
+- 取消首期一次性配对码、长期 PC 凭证、可信 PC 列表、「记住 PC」和自动授权。
+- 每次新的逻辑编辑/WSS 会话由手机显示客户端 IP、请求时间，用户明确点击「允许本次连接」或「拒绝」。未经批准只能看到无个人数据等待页，不能读取文档/日记/索引/附件或调用业务 API。
+- 手机批准后只发放当前会话临时 token；WSS 断开/心跳超时、页面刷新、新标签、新浏览器会话、PC 休眠导致会话失效、网络/IP 变化、手机服务重启等导致重建会话时，旧 token 撤销，重新请求手机批准。
+- 同一有效 WSS 会话中的普通 REST 请求及底层 HTTP keep-alive/TCP 连接池变化不重复弹窗。手机息屏/后台时通过通知引导用户手动确认，禁止自动批准。
+- PC 断线保留未提交草稿；重新获批后按 baseRevision 提交，operationId 幂等，手机事务落盘后 ACK；WebDAV 仍只由用户手动触发。
+- 详细状态机和验收见 `docs/research/DailyNotes_Simplified_PerConnection_Approval_Security_Research_R013.md`。DN-191 取代 DN-189 的配对码/长期 PC 凭证方案和 DN-190 的首期 A/B 证书长期比较方向；R010 的 Android 服务权限、R011/R012 的网络与 Chromium TLS 证据仍供 PoC 使用。
+
+**状态：用户已确认逐次手机审批及首期简化方向；应用实现、证书安装、Windows/Chrome 兼容性、息屏通知和真机测试均未完成。**
+
+---
+
 ## Windows TLS 证书策略比较（2026-11-15，DN-190）
 
 用户明确选择 C：**暂不决定 A/B，继续比较，不授权安装证书或实施。**
@@ -67,7 +85,7 @@
 
 ## 依据与已确定范围
 
-- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.64.md`（DN-001～DN-190）为准。
+- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.65.md`（DN-001～DN-191）为准。
 - DN-154/155/163：四个底栏主页面及第五个按上下文新建。
 - DN-159/165/173/174：抽屉菜单入口、顺序、底部设置、70%–80% 非全屏。
 - DN-161/162：日记极简文档时间流；不增加旧的顶部输入卡片。
@@ -98,4 +116,4 @@
 3. `flutter build apk --debug` 能生成仅用于结构预览的 APK。
 4. Android 真机检查尚未执行，状态必须如实标为未验收。
 
-**本文后续 UI/测试条目是历史阶段记录；与最新 V2.64 规范不一致时，以 V2.64 为准。核心架构决策见本文顶部 DN-187～DN-190。**
+**本文后续 UI/测试条目是历史阶段记录；与最新 V2.65 规范不一致时，以 V2.65 为准。核心架构决策见本文顶部 DN-187～DN-191。**
