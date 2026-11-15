@@ -4,7 +4,7 @@
 
 ## 当前权威架构决策（2026-11-15，接手必须优先阅读）
 
-**当前唯一规范基线：** `docs/requirements/DailyNotes开发规范_V2.61.md`（DN-001～DN-187）。历史 V2.51 UI 记录仅供追溯，不是当前完整规范。
+**当前唯一规范基线：** `docs/requirements/DailyNotes开发规范_V2.63.md`（DN-001～DN-189）。历史 V2.51 UI 记录仅供追溯，不是当前完整规范。
 
 **不可偏离的核心边界（DN-187）：**
 1. **Android 手机是唯一正式、权威的数据存储中心（Single Source of Truth）。** 日记、笔记、长期记录、追加项、富文本 JSON、revision、删除状态、附件和业务历史均由手机权威数据库管理；手机脱离 PC、LAN、WebDAV 仍可可靠记录。
@@ -27,6 +27,23 @@
 - 完整平台限制和 P0 实机测试见 `docs/research/DailyNotes_Phone_LAN_Foreground_Service_Risk_Research_R010.md`。
 
 **状态：用户已确认运行方式；服务、权限、息屏在线与耗电尚未实现或实测。**
+## PC 连接手机方式与安全协议（2026-11-15，DN-189）
+
+用户明确选择：**方案 B——PC 手动输入手机当前 Wi-Fi IP 地址**。首期不使用二维码连接、不使用 mDNS/SSDP 自动发现或局域网扫描。
+
+- 手机显示当前 Wi-Fi IPv4、候选固定端口 8443 和完整 HTTPS 地址；PC 手动输入 `https://<phone-ip>:8443`。端口仍待 PoC 验证。
+- 手机同源托管 HTTPS 页面、REST API 和 WSS；只绑定当前 Wi-Fi 接口，不监听蜂窝/所有接口，不开放公网端口、UPnP、隧道或云中继。
+- IP 只负责定位；TLS 证书确认手机服务器身份并加密传输；一次性配对码授权 PC。首次配对由手机确认，之后使用可撤销设备凭证。
+- 证书 SAN 必须包含精确匹配当前 IP 的 iPAddress。长期倾向 Android Keystore 私有 CA + 动态 IP 叶证书；简化 PoC 备选为 DHCP 地址保留 + 固定 IP 自签名证书。两者均未 PoC；不得让用户忽略证书警告。
+- Windows/Chrome 信任初始化必须验证根证书 SHA-256 指纹；仅导入公开根证书，私钥不离开 Android Keystore；首次安装根 CA 必须用户明确确认。
+- Chrome 同源 local→local 请求与 Android 17 ACCESS_LOCAL_NETWORK 是不同权限问题；target SDK 37+ 的 Android 入站 TCP 权限仍须处理，手动输入 IP 不豁免。
+- PC 正式写入携带 operationId/baseRevision；手机事务落盘后 ACK；WSS 只作通知，断线按 eventSequence 补齐。所有异常下保留 PC 未提交草稿，手机本地记录继续可用。
+- 完整配对、证书、通信和恢复矩阵见 `docs/research/DailyNotes_Manual_IP_Connection_Pairing_TLS_Recovery_Research_R011.md`。
+
+**状态：手动 IP 方式已确认；TLS 路线、证书 PoC、配对协议和异常恢复尚未实现/实测。**
+
+---
+
 
 ---
  当前仍是 UI 结构预览；手机权威数据库、LAN API/WebSocket、PC 编辑端、断线草稿、冲突保护、手动 WebDAV 和端到端验收均未完成。未通过四阶段验收前，不得将真实重要数据交给当前预览 APK。
@@ -35,7 +52,7 @@
 
 ## 依据与已确定范围
 
-- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.62.md`（DN-001～DN-188）为准。
+- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.63.md`（DN-001～DN-189）为准。
 - DN-154/155/163：四个底栏主页面及第五个按上下文新建。
 - DN-159/165/173/174：抽屉菜单入口、顺序、底部设置、70%–80% 非全屏。
 - DN-161/162：日记极简文档时间流；不增加旧的顶部输入卡片。
@@ -66,4 +83,4 @@
 3. `flutter build apk --debug` 能生成仅用于结构预览的 APK。
 4. Android 真机检查尚未执行，状态必须如实标为未验收。
 
-**本文后续 UI/测试条目是历史阶段记录；与最新 V2.61 规范不一致时，以 V2.61 为准。核心架构决策见本文顶部 DN-187。**
+**本文后续 UI/测试条目是历史阶段记录；与最新 V2.63 规范不一致时，以 V2.63 为准。核心架构决策见本文顶部 DN-187～DN-189。**
