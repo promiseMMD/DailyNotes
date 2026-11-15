@@ -1826,6 +1826,12 @@ class Translations$dailynotes$zh {
 
 	/// zh: '默认清单'
 	String get defaultTaskList => '默认清单';
+
+	/// zh: '富文本编辑器体验'
+	String get editorPreview => '富文本编辑器体验';
+
+	/// zh: '此体验页面不保存内容，返回后内容会清除。'
+	String get editorPreviewNotice => '此体验页面不保存内容，返回后内容会清除。';
 }
 
 // Path: dailynotesNavigation

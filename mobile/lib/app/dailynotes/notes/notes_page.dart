@@ -3,6 +3,7 @@ import 'package:mui/mui.dart';
 
 import '../data/daily_notes_store.dart';
 import 'note_editor_page.dart';
+import 'appflowy_preview_page.dart';
 
 class DailyNotesNotesPage extends StatefulWidget {
   const DailyNotesNotesPage({super.key, required this.store});
@@ -162,6 +163,16 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
                   : l10n.dailynotes.notesTitle,
             ),
             actions: [
+              if (!isKnowledgeContext)
+                IconButton(
+                  tooltip: context.l10n.dailynotes.editorPreview,
+                  icon: const Icon(LucideIcons.filePen),
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => const AppFlowyPreviewPage(),
+                    ),
+                  ),
+                ),
               if (!isKnowledgeContext)
                 IconButton(
                   onPressed: _browseFolders,

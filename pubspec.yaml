@@ -53,5 +53,9 @@ dev_dependencies:
   moodiary_assistant: 0.0.1
 
 dependency_overrides:
+  appflowy_editor:
+    path: vendor/appflowy_editor
+  file_picker: 12.2.0
+  device_info_plus: 13.2.0
   cli_util: 0.5.2
 

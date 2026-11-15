@@ -1,4 +1,8 @@
 import 'dart:async';
+
+import 'package:appflowy_editor/appflowy_editor.dart'
+    show AppFlowyEditorLocalizations;
+
 import 'dart:io';
 import 'dart:ui';
 
@@ -210,6 +214,7 @@ class Moodiary extends ConsumerWidget {
       locale: TranslationProvider.of(context).flutterLocale,
       themeMode: settings.themeMode,
       localizationsDelegates: const [
+        AppFlowyEditorLocalizations.delegate,
         ...GlobalMaterialLocalizations.delegates,
         GlobalMuiLocalizations.delegate,
       ],

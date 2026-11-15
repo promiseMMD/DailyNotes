@@ -666,6 +666,8 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get discardChanges => 'Discard changes';
 	@override String get unsavedChangesHint => 'Going back will discard unsaved changes to this to-do.';
 	@override String get defaultTaskList => 'Default list';
+	@override String get editorPreview => 'Rich text editor preview';
+	@override String get editorPreviewNotice => 'This preview does not save content; it will be cleared when you leave.';
 }
 
 // Path: dailynotesNavigation

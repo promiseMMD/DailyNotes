@@ -9,6 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  appflowy_editor: 6.2.0
   code_assets: 1.2.1
   hooks: 2.2.0
   flutter:

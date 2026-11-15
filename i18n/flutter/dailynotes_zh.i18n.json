@@ -99,5 +99,7 @@
   "unsavedChanges": "未保存的更改",
   "discardChanges": "放弃更改",
   "unsavedChangesHint": "返回会丢弃尚未保存的待办内容。",
-  "defaultTaskList": "默认清单"
+  "defaultTaskList": "默认清单",
+  "editorPreview": "富文本编辑器体验",
+  "editorPreviewNotice": "此体验页面不保存内容，返回后内容会清除。"
 }

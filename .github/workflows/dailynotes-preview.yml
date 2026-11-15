@@ -2,7 +2,7 @@ name: DailyNotes preview APK
 on:
   workflow_dispatch:
   push:
-    branches: [bootstrap/moodiary-baseline]
+    branches: [bootstrap/moodiary-baseline, feat/appflowy-editor-preview]
 permissions:
   contents: read
 concurrency:
@@ -33,10 +33,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: android-actions/setup-android@v3
       - name: Install pinned native tools
         run: |
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
           rustup toolchain install 1.99.1 --profile minimal
           rustup target add aarch64-linux-android --toolchain 1.99.1
           cargo install cargo-about --version 0.9.2 --locked

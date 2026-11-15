@@ -99,5 +99,7 @@
   "unsavedChanges": "Unsaved changes",
   "discardChanges": "Discard changes",
   "unsavedChangesHint": "Going back will discard unsaved changes to this to-do.",
-  "defaultTaskList": "Default list"
+  "defaultTaskList": "Default list",
+  "editorPreview": "Rich text editor preview",
+  "editorPreviewNotice": "This preview does not save content; it will be cleared when you leave."
 }
