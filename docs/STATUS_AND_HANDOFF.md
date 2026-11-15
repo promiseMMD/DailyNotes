@@ -4,7 +4,7 @@
 
 ## 当前权威架构决策（2026-11-15，接手必须优先阅读）
 
-**当前唯一规范基线：** `docs/requirements/DailyNotes开发规范_V2.63.md`（DN-001～DN-189）。历史 V2.51 UI 记录仅供追溯，不是当前完整规范。
+**当前唯一规范基线：** `docs/requirements/DailyNotes开发规范_V2.64.md`（DN-001～DN-190）。历史 V2.51 UI 记录仅供追溯，不是当前完整规范。
 
 **不可偏离的核心边界（DN-187）：**
 1. **Android 手机是唯一正式、权威的数据存储中心（Single Source of Truth）。** 日记、笔记、长期记录、追加项、富文本 JSON、revision、删除状态、附件和业务历史均由手机权威数据库管理；手机脱离 PC、LAN、WebDAV 仍可可靠记录。
@@ -34,13 +34,28 @@
 - 手机显示当前 Wi-Fi IPv4、候选固定端口 8443 和完整 HTTPS 地址；PC 手动输入 `https://<phone-ip>:8443`。端口仍待 PoC 验证。
 - 手机同源托管 HTTPS 页面、REST API 和 WSS；只绑定当前 Wi-Fi 接口，不监听蜂窝/所有接口，不开放公网端口、UPnP、隧道或云中继。
 - IP 只负责定位；TLS 证书确认手机服务器身份并加密传输；一次性配对码授权 PC。首次配对由手机确认，之后使用可撤销设备凭证。
-- 证书 SAN 必须包含精确匹配当前 IP 的 iPAddress。长期倾向 Android Keystore 私有 CA + 动态 IP 叶证书；简化 PoC 备选为 DHCP 地址保留 + 固定 IP 自签名证书。两者均未 PoC；不得让用户忽略证书警告。
-- Windows/Chrome 信任初始化必须验证根证书 SHA-256 指纹；仅导入公开根证书，私钥不离开 Android Keystore；首次安装根 CA 必须用户明确确认。
+- 证书 SAN 必须包含精确匹配当前 IP 的 iPAddress。R011 初步倾向私有 CA；经 R012 深化后，用户选择暂不决定：比较 CA:FALSE 自签名 trusted leaf 与私有 CA + 动态叶证书。两者均未 PoC；不得让用户忽略证书警告。
+- Windows/Chrome 信任初始化必须验证公开证书 SHA-256 指纹；私钥不离开 Android Keystore。最终信任对象可能是 CA:FALSE 自签名服务器叶证书，也可能是受约束的 CA 根证书，尚未决定。首次信任安装必须用户明确确认。
 - Chrome 同源 local→local 请求与 Android 17 ACCESS_LOCAL_NETWORK 是不同权限问题；target SDK 37+ 的 Android 入站 TCP 权限仍须处理，手动输入 IP 不豁免。
 - PC 正式写入携带 operationId/baseRevision；手机事务落盘后 ACK；WSS 只作通知，断线按 eventSequence 补齐。所有异常下保留 PC 未提交草稿，手机本地记录继续可用。
 - 完整配对、证书、通信和恢复矩阵见 `docs/research/DailyNotes_Manual_IP_Connection_Pairing_TLS_Recovery_Research_R011.md`。
 
 **状态：手动 IP 方式已确认；TLS 路线、证书 PoC、配对协议和异常恢复尚未实现/实测。**
+## Windows TLS 证书策略比较（2026-11-15，DN-190）
+
+用户明确选择 C：**暂不决定 A/B，继续比较，不授权安装证书或实施。**
+
+- **路线 A（进一步细化）：** 自签名终端服务器证书，`CA:FALSE`、`EKU=serverAuth`、`SAN=iPAddress(当前手机 IP)`。Chromium Windows 当前实现允许 Windows Root store 中的自签名证书作为 trusted leaf；研究导入 Windows 当前用户 `Trusted Root Certification Authorities`。它不是可签发其他证书的 CA，但仍需要一次本地信任安装；IP 改变时需重新导入新证书并移除旧证书。
+- **路线 B：** Android Keystore 私有 CA + 动态 IP 叶证书。Windows 信任 CA；手机在 NameConstraints 允许范围内自动签发新叶证书。应先研究将 CA 的 critical IP NameConstraints 限定到当前家庭 LAN CIDR，不默认允许所有 RFC1918；同一子网内 IP 改变无需重新安装根证书，跨子网则需重新签发根证书并重新导入。
+- 两条路线都优先验证 Windows Current User Root store，不修改 Local Machine 全机信任；Chromium Windows 对当前用户 Root、自签名 trusted leaf、anchor constraints 的实现细节见 R012。
+- Android Keystore 非导出不等于必然硬件保护；需在目标小米设备检查 KeyInfo securityLevel。App 卸载/换机后需考虑密钥身份重建。
+- **研究倾向而非决策：** 单手机/单 PC/稳定家庭 LAN 可优先 PoC A；频繁 IP 变化且接受 CA 权限与维护复杂度时再评估 B。
+- 详细比较、风险、证书生命周期和 PoC 验收见 `docs/research/DailyNotes_Certificate_Architecture_Comparison_R012.md`。
+
+**状态：用户尚未选择证书路线；A/B 均未 PoC、未安装、未实机验证。**
+
+---
+
 
 ---
 
@@ -52,7 +67,7 @@
 
 ## 依据与已确定范围
 
-- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.63.md`（DN-001～DN-189）为准。
+- 历史 UI 基线摘录：`docs/requirements/DailyNotes开发规范_V2.51.md`；当前完整规范以 `docs/requirements/DailyNotes开发规范_V2.64.md`（DN-001～DN-190）为准。
 - DN-154/155/163：四个底栏主页面及第五个按上下文新建。
 - DN-159/165/173/174：抽屉菜单入口、顺序、底部设置、70%–80% 非全屏。
 - DN-161/162：日记极简文档时间流；不增加旧的顶部输入卡片。
@@ -83,4 +98,4 @@
 3. `flutter build apk --debug` 能生成仅用于结构预览的 APK。
 4. Android 真机检查尚未执行，状态必须如实标为未验收。
 
-**本文后续 UI/测试条目是历史阶段记录；与最新 V2.63 规范不一致时，以 V2.63 为准。核心架构决策见本文顶部 DN-187～DN-189。**
+**本文后续 UI/测试条目是历史阶段记录；与最新 V2.64 规范不一致时，以 V2.64 为准。核心架构决策见本文顶部 DN-187～DN-190。**
