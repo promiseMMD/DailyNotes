@@ -38,7 +38,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
           rustup toolchain install 1.99.1 --profile minimal
           rustup target add aarch64-linux-android --toolchain 1.99.1
-          cargo install cargo-about --version 0.9.2 --locked
+          cargo install cargo-about --version 0.9.2 --locked --features cli
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           corepack enable
       - name: Prepare preview identity and build settings
