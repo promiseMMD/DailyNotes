@@ -37,3 +37,15 @@
 - https://github.com/AppFlowy-IO/AppFlowy/blob/main/frontend/appflowy_flutter/lib/plugins/document/presentation/editor_plugins/mobile_toolbar_v3/aa_toolbar_item.dart
 - https://github.com/AppFlowy-IO/AppFlowy/blob/main/frontend/appflowy_flutter/lib/plugins/document/presentation/editor_plugins/mobile_toolbar_v3/add_attachment_item.dart
 - https://github.com/AppFlowy-IO/AppFlowy/blob/main/frontend/appflowy_flutter/lib/plugins/document/presentation/editor_plugins/mobile_floating_toolbar/custom_mobile_floating_toolbar.dart
+
+## 后续确认：Aa 四组与 + 原版纵向区块菜单（DN-200）
+
+- 2026-11-15，用户明确同意：**DailyNotes 手机端 Aa 排版菜单尽可能 1:1 沿用 AppFlowy 完整应用的四组控件布局和交互；编辑器内部 + 采用 AppFlowy 原版纵向区块插入菜单，按原版条目层次、顺序、滚动方式、底部面板与上下文状态复刻，而不是另设计简化六宫格、五类卡片或自定义二级菜单。**
+- 本条对旧的「继续研究和待选择菜单结构」提出明确批准：菜单结构、排版顺序、高一致性复刻方向已确认。**不代表所有高级区块已实现、已通过许可审查或真机验证**；复杂表格、媒体、公式等仍按既定五阶段实现，未实现项列入差异清单，不能出现假按钮。
+- 已核对的完整 AppFlowy 固定源码：`AppFlowy-IO/AppFlowy@8fcee27d9bd93aad4ee0191d5d8d915d6a9a4e93`。
+  - `mobile_toolbar_v3/aa_toolbar_item.dart` 控件顺序：HeadingsAndTextItems；BIUSItems + ColorItem；BlockItems + AlignItems；FontFamilyItem + IndentAndOutdentItems。后续视觉应按原版具体布局核验，不可用研究概括的“四组”擅自另排版。
+  - `mobile_toolbar_v3/add_block_toolbar_item.dart`：点击编辑器 + 关闭键盘、保留选区，`showMobileBottomSheet` 展示 `AddBlockMenu`；顶部标题、拖动柄、关闭按钮等需核对。
+  - `mobile_toolbar_v3/add_block_menu_item_builder.dart`：默认序列依次聚合标题、段落、清单、表格、引用、列表、折叠标题、图片、相册、文件、提及、分隔线、提示块、代码、数学公式；表格单元格等上下文使用不同允许项，不能不加判定地罗列一模一样的所有项。
+- 用户另已批准 DN-197/198 的既有记录默认阅读锁定、须解锁并点正文才出现键盘，DN-193 的统一编辑器，DN-194 的功能不静默删减。工具栏 Aa 和编辑器 + 只允许在可编辑上下文操作，不能绕过阅读锁改写文档；编辑器 + 不等同于底部全局新建 +（DN-155）。
+- **仍待讨论**：颜色子面板的文字色/高亮色与选区保留、字体选择页面返回焦点、键盘与 Aa/+ 菜单交替、具体图标/边距/字体、每种区块的交付阶段与能力状态；不能将本次“可以”视为对上述实施细节的全部批准。
+- 仅作规范和研究确认；未修改 DailyNotes 源码，未执行 flutter test、构建或真机对比。研究历史段落原样保留，以本后续确认为最新决策。
