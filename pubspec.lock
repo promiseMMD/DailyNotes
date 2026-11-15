@@ -1334,12 +1334,11 @@ packages:
     source: hosted
     version: "6.14.1"
   keyboard_height_plugin:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: keyboard_height_plugin
-      sha256: "3a51c8ebb43465ebe0b3bad17f3b6d945421e58011f3f5a08134afe69a3d775f"
-      url: "https://pub.dev"
-    source: hosted
+      path: "vendor/keyboard_height_plugin"
+      relative: true
+    source: path
     version: "0.1.5"
   latlong2:
     dependency: transitive

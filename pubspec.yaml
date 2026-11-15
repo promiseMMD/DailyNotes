@@ -53,6 +53,8 @@ dev_dependencies:
   moodiary_assistant: 0.0.1
 
 dependency_overrides:
+  keyboard_height_plugin:
+    path: vendor/keyboard_height_plugin
   appflowy_editor:
     path: vendor/appflowy_editor
   file_picker: 12.2.0
