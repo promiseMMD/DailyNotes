@@ -120,5 +120,7 @@
   "copyRichJson": "Copy document JSON",
   "richEmergencyExportWarning": "Includes current rich document and text only, not attachments or other records. A lost password cannot be recovered; ZIP filenames may remain visible.",
   "richEmergencyExportPartial": "Partial export saved: current document and text, no attachments",
-  "copyOriginalJson": "Copy original document JSON"
+  "copyOriginalJson": "Copy original document JSON",
+  "saveQueued": "Waiting to save…",
+  "noteSyncUnavailable": "WebDAV sync is not yet available for this note"
 }

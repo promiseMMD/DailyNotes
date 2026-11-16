@@ -99,12 +99,16 @@ void main() {
     await tester.enterText(find.byType(TextField).at(1), 'Keep this thought');
     await tester.pump(const Duration(milliseconds: 500));
     expect(store.attempts, hasLength(1));
-    expect(find.textContaining('本机已保存'), findsNothing);
+    expect(find.byTooltip('本机已保存'), findsNothing);
     store.attempts.single.complete();
     await tester.pumpAndSettle();
-    expect(find.textContaining('本机已保存'), findsOneWidget);
+    expect(find.byTooltip('本机已保存'), findsOneWidget);
     expect(find.text('Keep this thought'), findsOneWidget);
-    expect(find.text('本机保存，尚未同步'), findsOneWidget);
+    await tester.tap(find.byTooltip('本机已保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('当前笔记尚未接入 WebDAV 同步'), findsOneWidget);
+    await tester.tap(find.text('确认').last);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
@@ -122,10 +126,10 @@ void main() {
       await tester.pump();
       expect(store.attempts, hasLength(2));
       expect(store.attempts.last.body, 'Second revision');
-      expect(find.textContaining('本机已保存'), findsNothing);
+      expect(find.byTooltip('本机已保存'), findsNothing);
       store.attempts.last.complete();
       await tester.pumpAndSettle();
-      expect(find.textContaining('本机已保存'), findsOneWidget);
+      expect(find.byTooltip('本机已保存'), findsOneWidget);
       expect(find.text('Second revision'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
@@ -140,7 +144,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     expect(find.textContaining('保存失败'), findsOneWidget);
-    expect(find.textContaining('本机已保存'), findsNothing);
+    expect(find.byTooltip('本机已保存'), findsNothing);
     await tester.tap(find.byIcon(LucideIcons.arrowLeft));
     await tester.pumpAndSettle();
     expect(find.text('内容尚未保存'), findsOneWidget);
@@ -268,7 +272,7 @@ void main() {
       await tester.enterText(find.byType(TextField).at(1), 'latest');
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.textContaining('保存失败'), findsOneWidget);
-      expect(find.textContaining('本机已保存'), findsNothing);
+      expect(find.byTooltip('本机已保存'), findsNothing);
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
       expect(find.textContaining('保存失败'), findsOneWidget);
@@ -281,7 +285,7 @@ void main() {
       store.attempts.single.complete();
       await tester.pumpAndSettle();
       expect(find.textContaining('保存失败'), findsNothing);
-      expect(find.textContaining('本机已保存'), findsOneWidget);
+      expect(find.byTooltip('本机已保存'), findsOneWidget);
     },
   );
   testWidgets(
@@ -348,7 +352,7 @@ void main() {
       expect(store.attempts.single.body, 'Latest unsaved');
       store.attempts.single.complete();
       await tester.pumpAndSettle();
-      expect(find.textContaining('本机已保存'), findsOneWidget);
+      expect(find.byTooltip('本机已保存'), findsOneWidget);
     },
   );
   testWidgets('unsupported rich document is preserved and never saved', (
@@ -412,11 +416,11 @@ void main() {
       await tester.pump();
       expect(store.attempts, hasLength(2));
       expect(find.textContaining('保存失败'), findsOneWidget);
-      expect(find.textContaining('本机已保存'), findsNothing);
+      expect(find.byTooltip('本机已保存'), findsNothing);
       expect(store.attempts.last.body, 'new');
       store.attempts.last.complete();
       await tester.pumpAndSettle();
-      expect(find.textContaining('本机已保存'), findsOneWidget);
+      expect(find.byTooltip('本机已保存'), findsOneWidget);
     },
   );
 }

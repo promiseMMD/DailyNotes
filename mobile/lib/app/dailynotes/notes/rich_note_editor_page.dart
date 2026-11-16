@@ -478,6 +478,15 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   Widget build(BuildContext context) {
     final t = context.l10n.dailynotes;
     final editor = _editor;
+    final status = _failed
+        ? t.saveFailed
+        : _pending != null
+        ? t.saving
+        : _revision != _savedRevision
+        ? t.saveQueued
+        : _id == null
+        ? t.unsaved
+        : t.savedLocally;
     final folder = widget.store.folders
         .where((f) => f.id == _folderId)
         .firstOrNull;
@@ -494,6 +503,32 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
             onPressed: _leave,
           ),
           actions: [
+            if (editor != null)
+              IconButton(
+                tooltip: status,
+                icon: Icon(
+                  _failed
+                      ? LucideIcons.circleAlert
+                      : _revision != _savedRevision || _pending != null
+                      ? LucideIcons.clock
+                      : _id == null
+                      ? LucideIcons.circle
+                      : LucideIcons.circleCheck,
+                ),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (dialog) => AlertDialog(
+                    title: Text(status),
+                    content: Text(t.noteSyncUnavailable),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialog),
+                        child: Text(t.confirm),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (editor != null) ...[
               IconButton(
                 onPressed: _editing ? _chooseFolder : null,
@@ -559,27 +594,17 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
             : SafeArea(
                 child: Column(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _failed
-                                  ? t.saveFailed
-                                  : _revision != _savedRevision
-                                  ? t.saving
-                                  : _id == null
-                                  ? t.unsaved
-                                  : t.savedLocally,
-                            ),
-                          ),
-                          if (_failed)
+                    if (_failed)
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(t.saveFailed)),
                             TextButton(onPressed: _save, child: Text(t.retry)),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Text('${t.localOnly} · ${folder?.name ?? t.uncategorized}'),
+                    Text(folder?.name ?? t.uncategorized),
                     if (_tags.isNotEmpty)
                       Text(_tags.map((tag) => '#$tag').join('  ')),
                     Expanded(

@@ -687,6 +687,8 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get richEmergencyExportWarning => 'Includes current rich document and text only, not attachments or other records. A lost password cannot be recovered; ZIP filenames may remain visible.';
 	@override String get richEmergencyExportPartial => 'Partial export saved: current document and text, no attachments';
 	@override String get copyOriginalJson => 'Copy original document JSON';
+	@override String get saveQueued => 'Waiting to save…';
+	@override String get noteSyncUnavailable => 'WebDAV sync is not yet available for this note';
 }
 
 // Path: dailynotesNavigation
@@ -1306,6 +1308,8 @@ class _Translations$month$en extends Translations$month$zh {
 	@override String get retainUncertain => 'The save result is unconfirmed. The draft keeps the exact request. Reopen it to retry that request without creating a duplicate.';
 	@override String get retainAndLeave => 'Keep draft and leave';
 	@override String get draftSaveFailed => 'Could not keep the draft or read the editor. Your content remains here. Retry or copy the draft before leaving.';
+	@override String get locatedOutsideFilter => 'The new entry is temporarily shown for navigation despite the current search filter.';
+	@override String get locateFailed => 'The entry was saved, but could not be located. Refresh or search to find it.';
 }
 
 // Path: picker

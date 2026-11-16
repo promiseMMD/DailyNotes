@@ -1889,6 +1889,12 @@ class Translations$dailynotes$zh {
 
 	/// zh: '复制原始文档 JSON'
 	String get copyOriginalJson => '复制原始文档 JSON';
+
+	/// zh: '等待保存…'
+	String get saveQueued => '等待保存…';
+
+	/// zh: '当前笔记尚未接入 WebDAV 同步'
+	String get noteSyncUnavailable => '当前笔记尚未接入 WebDAV 同步';
 }
 
 // Path: dailynotesNavigation
@@ -3559,6 +3565,12 @@ class Translations$month$zh {
 
 	/// zh: '未能保留草稿或取得编辑器确认，当前内容仍在此页。请重试或复制草稿后再离开。'
 	String get draftSaveFailed => '未能保留草稿或取得编辑器确认，当前内容仍在此页。请重试或复制草稿后再离开。';
+
+	/// zh: '刚追加的记录不符合当前搜索条件，暂时显示以便定位。'
+	String get locatedOutsideFilter => '刚追加的记录不符合当前搜索条件，暂时显示以便定位。';
+
+	/// zh: '记录已保存，但暂时无法定位，请刷新或搜索查看。'
+	String get locateFailed => '记录已保存，但暂时无法定位，请刷新或搜索查看。';
 }
 
 // Path: picker

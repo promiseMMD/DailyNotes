@@ -445,8 +445,10 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
         .firstOrNull;
     final status = _failed
         ? l10n.dailynotes.saveFailed
-        : _pendingSave != null || _dirty
+        : _pendingSave != null
         ? l10n.dailynotes.saving
+        : _dirty
+        ? l10n.dailynotes.saveQueued
         : _id == null
         ? l10n.dailynotes.unsaved
         : l10n.dailynotes.savedLocally;
@@ -463,6 +465,31 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
           ),
           title: Text(l10n.dailynotes.notesTitle),
           actions: [
+            IconButton(
+              tooltip: status,
+              icon: Icon(
+                _failed
+                    ? LucideIcons.circleAlert
+                    : _dirty || _pendingSave != null
+                    ? LucideIcons.clock
+                    : _id == null
+                    ? LucideIcons.circle
+                    : LucideIcons.circleCheck,
+              ),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (dialog) => AlertDialog(
+                  title: Text(status),
+                  content: Text(l10n.dailynotes.noteSyncUnavailable),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialog),
+                      child: Text(l10n.dailynotes.confirm),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             IconButton(
               onPressed: _toggleEditing,
               tooltip: _editing
@@ -497,15 +524,11 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$status · ${folder?.name ?? l10n.dailynotes.uncategorized}',
+                      folder?.name ?? l10n.dailynotes.uncategorized,
                       style:
                           context.theme.typography.bodySmall.onSurfaceVariant,
                     ),
-                    Text(
-                      l10n.dailynotes.localOnly,
-                      style:
-                          context.theme.typography.labelSmall.onSurfaceVariant,
-                    ),
+                    if (_failed) Text(l10n.dailynotes.saveFailed),
                     if (_failed)
                       Wrap(
                         spacing: 8,

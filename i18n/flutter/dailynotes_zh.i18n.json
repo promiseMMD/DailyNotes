@@ -120,5 +120,7 @@
   "copyRichJson": "复制文档 JSON",
   "richEmergencyExportWarning": "仅包含当前富文本文档和文字，不含附件或其他记录。密码遗失后无法恢复；ZIP 文件名可能可见。",
   "richEmergencyExportPartial": "已导出部分内容：当前文档和文字，不含附件",
-  "copyOriginalJson": "复制原始文档 JSON"
+  "copyOriginalJson": "复制原始文档 JSON",
+  "saveQueued": "等待保存…",
+  "noteSyncUnavailable": "当前笔记尚未接入 WebDAV 同步"
 }

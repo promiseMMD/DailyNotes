@@ -38,5 +38,7 @@
   "retainDraftMessage": "You have unsubmitted content. Keep a local draft and leave, or continue editing.",
   "retainUncertain": "The save result is unconfirmed. The draft keeps the exact request. Reopen it to retry that request without creating a duplicate.",
   "retainAndLeave": "Keep draft and leave",
-  "draftSaveFailed": "Could not keep the draft or read the editor. Your content remains here. Retry or copy the draft before leaving."
+  "draftSaveFailed": "Could not keep the draft or read the editor. Your content remains here. Retry or copy the draft before leaving.",
+  "locatedOutsideFilter": "The new entry is temporarily shown for navigation despite the current search filter.",
+  "locateFailed": "The entry was saved, but could not be located. Refresh or search to find it."
 }

@@ -54,6 +54,14 @@ void main() {
     expect(store.notes.single.documentJson, contains('富文本测试'));
     expect(store.notes.single.documentVersion, 1);
     expect(store.pendingOperationCount, greaterThan(0));
+    expect(find.byTooltip('本机已保存'), findsOneWidget);
+    expect(find.text('本机已保存'), findsNothing);
+    await tester.tap(find.byTooltip('本机已保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('本机已保存'), findsOneWidget);
+    expect(find.text('当前笔记尚未接入 WebDAV 同步'), findsOneWidget);
+    await tester.tap(find.text('确认').last);
+    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     store.dispose();
     await db.close();
@@ -413,7 +421,7 @@ void main() {
       await tester.tap(find.text('重试'));
       await tester.pumpAndSettle();
       expect(store.notes.single.body, contains('latest'));
-      expect(find.textContaining('本机已保存'), findsOneWidget);
+      expect(find.byTooltip('本机已保存'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       store.dispose();
       await db.close();
