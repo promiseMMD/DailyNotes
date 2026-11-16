@@ -147,4 +147,41 @@ void main() {
     await db.close();
     await tester.binding.setSurfaceSize(null);
   });
+  testWidgets('unknown node fields remain protected and cannot be edited', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    final store = DailyNotesStore(db);
+    await store.open();
+    const raw =
+        '{"document":{"type":"page","children":[{"type":"paragraph","future_field":"must keep"}]}}';
+    final note = DailyNote(
+      id: 'future',
+      title: 'Title',
+      body: 'preview',
+      documentJson: raw,
+      documentVersion: 1,
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          home: RichNoteEditorPage(store: store, note: note),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('文档格式暂不支持或内容损坏，已保留原文，请勿覆盖。'), findsOneWidget);
+    expect(find.text('复制原始文档 JSON'), findsOneWidget);
+    expect(store.pendingOperationCount, 0);
+    await tester.pumpWidget(const SizedBox());
+    store.dispose();
+    await db.close();
+  });
 }

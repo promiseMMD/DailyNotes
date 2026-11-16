@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moodiary_data/moodiary_data.dart';
@@ -306,4 +309,75 @@ void main() {
     expect(store.notes, isEmpty);
     expect(store.pendingOperationCount, 0);
   });
+  test('unsupported rich update cannot overwrite a saved revision or create an event', () async {
+    const valid =
+        '{"document":{"type":"page","children":[{"type":"paragraph","data":{"delta":[{"insert":"safe"}]}}]}}';
+    const unsupported =
+        '{"document":{"type":"page","children":[{"type":"future-block","data":{"secret":"preserve"}}]}}';
+    final note = await store.saveRichNote(
+      title: 'Safe',
+      plainText: 'safe',
+      documentJson: valid,
+      documentVersion: 1,
+    );
+    await expectLater(
+      store.saveRichNote(
+        id: note.id,
+        title: 'Safe',
+        plainText: 'changed',
+        documentJson: unsupported,
+        documentVersion: 1,
+      ),
+      throwsFormatException,
+    );
+    expect(store.notes.single.documentJson, valid);
+    expect(store.notes.single.body, 'safe');
+    expect(store.pendingOperationCount, 1);
+    final events = await db
+        .customSelect('SELECT COUNT(*) AS n FROM dn_outbox')
+        .getSingle();
+    expect(events.read<int>('n'), 1);
+  });
+  test(
+    'unknown existing document cannot be replaced via the data API',
+    () async {
+      const valid =
+          '{"document":{"type":"page","children":[{"type":"paragraph"}]}}';
+      const unknown = '{"document":{"type":"page","future_data":"retain"}}';
+      final note = await store.saveRichNote(
+        title: 'Safe',
+        plainText: 'safe',
+        documentJson: valid,
+        documentVersion: 1,
+      );
+      final rows = await db
+          .customSelect(
+            'SELECT payload FROM dn_records WHERE id = ?',
+            variables: [Variable.withString(note.id)],
+          )
+          .getSingle();
+      final payload =
+          jsonDecode(rows.read<String>('payload')) as Map<String, dynamic>;
+      payload['documentJson'] = unknown;
+      await db.customStatement(
+        'UPDATE dn_records SET payload = ? WHERE id = ?',
+        [jsonEncode(payload), note.id],
+      );
+      final reopened = DailyNotesStore(db);
+      await reopened.open();
+      await expectLater(
+        reopened.saveRichNote(
+          id: note.id,
+          title: 'Replacement',
+          plainText: 'new',
+          documentJson: valid,
+          documentVersion: 1,
+        ),
+        throwsFormatException,
+      );
+      expect(reopened.notes.single.documentJson, unknown);
+      expect(reopened.pendingOperationCount, 1);
+      reopened.dispose();
+    },
+  );
 }

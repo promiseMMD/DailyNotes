@@ -12,6 +12,7 @@ import 'package:mui/mui.dart';
 
 import '../data/daily_notes_store.dart';
 import '../recovery/emergency_note_export.dart';
+import '../data/rich_document_guard.dart';
 
 /// AppFlowy document is the source of truth; text is only a list preview.
 class RichNoteEditorPage extends StatefulWidget {
@@ -60,9 +61,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
       _editor = json == null
           ? widget.testEditor ?? EditorState.blank(withInitialText: true)
           : EditorState(
-              document: Document.fromJson(
-                jsonDecode(json) as Map<String, dynamic>,
-              ),
+              document: Document.fromJson(validateRichDocument(json)),
             );
       _editor!.editable = _editing;
       _changes = _editor!.transactionStream.listen((event) {
@@ -101,18 +100,18 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     if (_revision == _savedRevision) return;
     final revision = _revision;
     final title = _title.text;
-    final body = _text();
-    if (_id == null && title.trim().isEmpty && body.trim().isEmpty) {
-      _savedRevision = revision;
-      if (mounted) setState(() {});
-      return;
-    }
-    final doc = jsonEncode(_editor!.document.toJson());
     final done = Completer<void>();
     _pending = done.future;
     if (mounted) setState(() {});
     var succeeded = false;
     try {
+      final doc = jsonEncode(_editor!.document.toJson());
+      validateRichDocument(doc);
+      final body = _text();
+      if (_id == null && title.trim().isEmpty && body.trim().isEmpty) {
+        _savedRevision = revision;
+        return;
+      }
       final note = await widget.store.saveRichNote(
         id: _id,
         title: title,

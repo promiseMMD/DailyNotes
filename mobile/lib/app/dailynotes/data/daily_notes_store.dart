@@ -5,6 +5,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 
+import 'rich_document_guard.dart';
+
 DateTime _date(Map<String, dynamic> value, String key) =>
     DateTime.parse(value[key] as String);
 DateTime? _optionalDate(Map<String, dynamic> value, String key) =>
@@ -548,19 +550,17 @@ class DailyNotesStore extends ChangeNotifier {
     List<String> tags = const [],
   }) => _commit((state, now) {
     if (documentVersion != 1) throw StateError('unsupported_document_version');
-    final decoded = jsonDecode(documentJson);
-    if (decoded is! Map || decoded['document'] is! Map) {
-      throw const FormatException('invalid_appflowy_document');
-    }
+    validateRichDocument(documentJson);
     if (title.trim().isEmpty && plainText.trim().isEmpty) {
       throw StateError('empty_note');
     }
     if (folderId != null) state.require(folderId, 'folder');
     final old = id == null ? null : state.require(id, 'note');
-    if (old != null &&
-        old['documentJson'] != null &&
-        old['documentVersion'] != 1) {
-      throw StateError('unsupported_document_version');
+    if (old != null && old['documentJson'] != null) {
+      if (old['documentVersion'] != 1) {
+        throw StateError('unsupported_document_version');
+      }
+      validateRichDocument(old['documentJson'] as String);
     }
     final note = DailyNote(
       id: id ?? _id(),
