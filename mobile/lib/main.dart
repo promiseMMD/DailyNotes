@@ -98,7 +98,9 @@ Future<void> _initSystem() async {
   if (getIt<MoodiaryDatabase>().upgradedFrom != null) {
     MoodiaryKVs.syncPendingLocal.set(true);
   }
-  getIt<AutoSyncWatcher>().start();
+  // DN-187: WebDAV is started only by an explicit user action.
+  // Reset stale preferences so settings and status cannot imply auto sync is active.
+  MoodiaryKVs.autoSync.set(false);
   DiaryShare.register(showDiaryShareSheet);
   runStartupMaintenance();
   await Future.wait([themeFuture, localeFuture, migrationGateFuture]);

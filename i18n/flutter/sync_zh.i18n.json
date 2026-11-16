@@ -339,5 +339,6 @@
   "nextPollInSeconds": "{seconds} 秒后",
   "remoteCount": "远端 {count}",
   "logHealth": "连接",
-  "lastSuccess": "上次成功 {time}"
+  "lastSuccess": "上次成功 {time}",
+  "manualOnlyNotice": "WebDAV 仅在手动操作时同步。"
 }

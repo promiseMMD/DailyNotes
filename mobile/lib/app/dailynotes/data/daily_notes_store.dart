@@ -14,6 +14,8 @@ DateTime? _optionalDate(Map<String, dynamic> value, String key) =>
 class DailyNote {
   final String id, title, body;
   final String? folderId;
+  final String? documentJson;
+  final int? documentVersion;
   final List<String> tags;
   final DateTime createdAt, updatedAt;
   final DateTime? deletedAt;
@@ -23,6 +25,8 @@ class DailyNote {
     required this.title,
     required this.body,
     this.folderId,
+    this.documentJson,
+    this.documentVersion,
     List<String> tags = const [],
     required this.createdAt,
     required this.updatedAt,
@@ -34,6 +38,8 @@ class DailyNote {
     title: value['title'] as String,
     body: value['body'] as String,
     folderId: value['folderId'] as String?,
+    documentJson: value['documentJson'] as String?,
+    documentVersion: value['documentVersion'] as int?,
     tags: (value['tags'] as List<dynamic>).cast<String>(),
     createdAt: _date(value, 'createdAt'),
     updatedAt: _date(value, 'updatedAt'),
@@ -45,6 +51,8 @@ class DailyNote {
     'title': title,
     'body': body,
     'folderId': folderId,
+    if (documentJson != null) 'documentJson': documentJson,
+    if (documentVersion != null) 'documentVersion': documentVersion,
     'tags': tags,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
@@ -508,10 +516,58 @@ class DailyNotesStore extends ChangeNotifier {
       throw StateError('empty_note');
     if (folderId != null) state.require(folderId, 'folder');
     final old = id == null ? null : state.require(id, 'note');
+    if (old != null && old['documentJson'] != null) {
+      throw StateError('rich_document_requires_compatible_editor');
+    }
     final note = DailyNote(
       id: id ?? _id(),
       title: title,
       body: body,
+      folderId: folderId,
+      tags: tags
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .toList(),
+      createdAt: old == null ? now : _date(old, 'createdAt'),
+      updatedAt: now,
+    );
+    state.put('note', note.toJson());
+    return note;
+  });
+
+  /// Stores the versioned AppFlowy document and its derived text together
+  /// with the local revision and outbox event. Unknown versions fail closed.
+  Future<DailyNote> saveRichNote({
+    String? id,
+    required String title,
+    required String plainText,
+    required String documentJson,
+    required int documentVersion,
+    String? folderId,
+    List<String> tags = const [],
+  }) => _commit((state, now) {
+    if (documentVersion != 1) throw StateError('unsupported_document_version');
+    final decoded = jsonDecode(documentJson);
+    if (decoded is! Map || decoded['document'] is! Map) {
+      throw const FormatException('invalid_appflowy_document');
+    }
+    if (title.trim().isEmpty && plainText.trim().isEmpty) {
+      throw StateError('empty_note');
+    }
+    if (folderId != null) state.require(folderId, 'folder');
+    final old = id == null ? null : state.require(id, 'note');
+    if (old != null &&
+        old['documentJson'] != null &&
+        old['documentVersion'] != 1) {
+      throw StateError('unsupported_document_version');
+    }
+    final note = DailyNote(
+      id: id ?? _id(),
+      title: title,
+      body: plainText,
+      documentJson: documentJson,
+      documentVersion: documentVersion,
       folderId: folderId,
       tags: tags
           .map((t) => t.trim())

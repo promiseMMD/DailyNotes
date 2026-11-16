@@ -339,5 +339,6 @@
   "nextPollInSeconds": "in {seconds} s",
   "remoteCount": "remote {count}",
   "logHealth": "Connection",
-  "lastSuccess": "last success {time}"
+  "lastSuccess": "last success {time}",
+  "manualOnlyNotice": "WebDAV sync runs only when started manually."
 }

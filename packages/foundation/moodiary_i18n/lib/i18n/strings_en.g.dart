@@ -668,6 +668,25 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get defaultTaskList => 'Default list';
 	@override String get editorPreview => 'Rich text editor preview';
 	@override String get editorPreviewNotice => 'This preview does not save content; it will be cleared when you leave.';
+	@override String get discardUnsavedAction => 'Discard unsaved changes';
+	@override String get discardUnsavedTitle => 'Discard unsaved changes?';
+	@override String get discardUnsavedWarning => 'Your latest changes have not been saved and cannot be recovered after leaving.';
+	@override String get discardUnsavedConfirm => 'Discard and leave';
+	@override String get emergencyExport => 'Export emergency ZIP';
+	@override String get emergencyExportWarning => 'Includes current note text only, not attachments or other records. A lost password cannot be recovered; ZIP filenames may remain visible.';
+	@override String get emergencyPassword => 'Password';
+	@override String get emergencyPasswordConfirm => 'Confirm password';
+	@override String get emergencyPasswordMismatch => 'Enter matching non-empty passwords';
+	@override String get emergencyExportPartial => 'Partial export saved: current note text only, no attachments';
+	@override String get emergencyExportFailed => 'Emergency export failed; retry or copy the content';
+	@override String get emergencyExportCancelled => 'Export cancelled; your edits are still available';
+	@override String get lockEditing => 'Lock editing';
+	@override String get unlockEditing => 'Unlock editing';
+	@override String get richDocumentUnsupported => 'This document is unsupported or damaged. Its original content has been preserved.';
+	@override String get copyRichJson => 'Copy document JSON';
+	@override String get richEmergencyExportWarning => 'Includes current rich document and text only, not attachments or other records. A lost password cannot be recovered; ZIP filenames may remain visible.';
+	@override String get richEmergencyExportPartial => 'Partial export saved: current document and text, no attachments';
+	@override String get copyOriginalJson => 'Copy original document JSON';
 }
 
 // Path: dailynotesNavigation
@@ -1735,6 +1754,7 @@ class _Translations$sync$en extends Translations$sync$zh {
 	@override String remoteCount({required Object count}) => 'remote ${count}';
 	@override String get logHealth => 'Connection';
 	@override String lastSuccess({required Object time}) => 'last success ${time}';
+	@override String get manualOnlyNotice => 'WebDAV sync runs only when started manually.';
 }
 
 // Path: ui

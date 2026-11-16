@@ -261,4 +261,49 @@ void main() {
       expect(store.topics, isEmpty);
     },
   );
+  test('rich documents persist with their outbox and plain editors cannot overwrite them', () async {
+    const doc =
+        '{"document":{"type":"page","children":[{"type":"paragraph","data":{"delta":[{"insert":"hello"}]}}]}}';
+    final note = await store.saveRichNote(
+      title: 'Rich',
+      plainText: 'hello',
+      documentJson: doc,
+      documentVersion: 1,
+    );
+    final reopened = DailyNotesStore(db);
+    await reopened.open();
+    expect(reopened.notes.single.documentJson, doc);
+    expect(reopened.notes.single.documentVersion, 1);
+    expect(reopened.pendingOperationCount, 1);
+    await expectLater(
+      reopened.saveNote(id: note.id, title: 'Rich', body: 'flattened'),
+      throwsStateError,
+    );
+    expect(reopened.notes.single.documentJson, doc);
+    expect(reopened.pendingOperationCount, 1);
+    reopened.dispose();
+  });
+
+  test('invalid rich data or unknown version never commits', () async {
+    await expectLater(
+      store.saveRichNote(
+        title: 'x',
+        plainText: 'x',
+        documentJson: '{}',
+        documentVersion: 1,
+      ),
+      throwsFormatException,
+    );
+    await expectLater(
+      store.saveRichNote(
+        title: 'x',
+        plainText: 'x',
+        documentJson: '{"document":{}}',
+        documentVersion: 2,
+      ),
+      throwsStateError,
+    );
+    expect(store.notes, isEmpty);
+    expect(store.pendingOperationCount, 0);
+  });
 }

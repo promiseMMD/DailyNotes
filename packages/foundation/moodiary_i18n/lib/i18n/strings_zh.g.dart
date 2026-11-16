@@ -1832,6 +1832,63 @@ class Translations$dailynotes$zh {
 
 	/// zh: '此体验页面不保存内容，返回后内容会清除。'
 	String get editorPreviewNotice => '此体验页面不保存内容，返回后内容会清除。';
+
+	/// zh: '放弃未保存内容'
+	String get discardUnsavedAction => '放弃未保存内容';
+
+	/// zh: '确认丢失未保存内容？'
+	String get discardUnsavedTitle => '确认丢失未保存内容？';
+
+	/// zh: '最新修改尚未保存。离开后这些修改将丢失，无法恢复。'
+	String get discardUnsavedWarning => '最新修改尚未保存。离开后这些修改将丢失，无法恢复。';
+
+	/// zh: '确认放弃并离开'
+	String get discardUnsavedConfirm => '确认放弃并离开';
+
+	/// zh: '应急导出 ZIP'
+	String get emergencyExport => '应急导出 ZIP';
+
+	/// zh: '仅包含当前笔记文字，不含附件或其他记录。密码遗失后无法恢复；ZIP 文件名可能可见。'
+	String get emergencyExportWarning => '仅包含当前笔记文字，不含附件或其他记录。密码遗失后无法恢复；ZIP 文件名可能可见。';
+
+	/// zh: '设置密码'
+	String get emergencyPassword => '设置密码';
+
+	/// zh: '再次输入密码'
+	String get emergencyPasswordConfirm => '再次输入密码';
+
+	/// zh: '密码不能为空且两次必须一致'
+	String get emergencyPasswordMismatch => '密码不能为空且两次必须一致';
+
+	/// zh: '已导出部分内容：仅当前笔记文字，不含附件'
+	String get emergencyExportPartial => '已导出部分内容：仅当前笔记文字，不含附件';
+
+	/// zh: '应急导出失败，请重试或复制内容'
+	String get emergencyExportFailed => '应急导出失败，请重试或复制内容';
+
+	/// zh: '已取消导出，编辑内容仍保留'
+	String get emergencyExportCancelled => '已取消导出，编辑内容仍保留';
+
+	/// zh: '锁定编辑'
+	String get lockEditing => '锁定编辑';
+
+	/// zh: '解锁编辑'
+	String get unlockEditing => '解锁编辑';
+
+	/// zh: '文档格式暂不支持或内容损坏，已保留原文，请勿覆盖。'
+	String get richDocumentUnsupported => '文档格式暂不支持或内容损坏，已保留原文，请勿覆盖。';
+
+	/// zh: '复制文档 JSON'
+	String get copyRichJson => '复制文档 JSON';
+
+	/// zh: '仅包含当前富文本文档和文字，不含附件或其他记录。密码遗失后无法恢复；ZIP 文件名可能可见。'
+	String get richEmergencyExportWarning => '仅包含当前富文本文档和文字，不含附件或其他记录。密码遗失后无法恢复；ZIP 文件名可能可见。';
+
+	/// zh: '已导出部分内容：当前文档和文字，不含附件'
+	String get richEmergencyExportPartial => '已导出部分内容：当前文档和文字，不含附件';
+
+	/// zh: '复制原始文档 JSON'
+	String get copyOriginalJson => '复制原始文档 JSON';
 }
 
 // Path: dailynotesNavigation
@@ -4774,6 +4831,9 @@ class Translations$sync$zh {
 
 	/// zh: '上次成功 {time}'
 	String lastSuccess({required Object time}) => '上次成功 ${time}';
+
+	/// zh: 'WebDAV 仅在手动操作时同步。'
+	String get manualOnlyNotice => 'WebDAV 仅在手动操作时同步。';
 }
 
 // Path: ui

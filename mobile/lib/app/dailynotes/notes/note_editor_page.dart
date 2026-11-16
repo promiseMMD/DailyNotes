@@ -1,10 +1,15 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 
 import 'package:flutter/services.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
 
 import '../data/daily_notes_store.dart';
+import '../recovery/emergency_note_export.dart';
 
 /// The original note is edited in every entry point; a topic never owns a copy.
 class DailyNoteEditorPage extends StatefulWidget {
@@ -13,11 +18,18 @@ class DailyNoteEditorPage extends StatefulWidget {
     required this.store,
     this.note,
     this.initialFolderId,
+    this.createEmergencyArchive,
+    this.saveEmergencyArchive,
   });
 
   final DailyNotesStore store;
   final DailyNote? note;
   final String? initialFolderId;
+  @visibleForTesting
+  final Future<Uint8List> Function(EmergencyNoteSnapshot, String)?
+  createEmergencyArchive;
+  @visibleForTesting
+  final Future<Uri?> Function(Uint8List)? saveEmergencyArchive;
 
   @override
   State<DailyNoteEditorPage> createState() => _DailyNoteEditorPageState();
@@ -37,6 +49,8 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
   bool _failed = false;
   bool _allowPop = false;
   bool _leaving = false;
+  bool _exporting = false;
+  late bool _editing = widget.note == null;
 
   bool get _hasContent =>
       _title.text.trim().isNotEmpty || _body.text.trim().isNotEmpty;
@@ -64,7 +78,8 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
     _generation++;
     _timer?.cancel();
     _timer = Timer(const Duration(milliseconds: 450), _save);
-    if (mounted) setState(() => _failed = false);
+    // Keep the failure warning visible until a later save succeeds.
+    if (mounted) setState(() {});
   }
 
   /// Serialize saves so slower writes cannot overwrite newer editor input.
@@ -82,7 +97,8 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
     final tags = List<String>.of(_tags);
     final done = Completer<void>();
     _pendingSave = done.future;
-    if (mounted) setState(() => _failed = false);
+    if (mounted) setState(() {});
+    var succeeded = false;
     try {
       final note = await widget.store.saveNote(
         id: _id,
@@ -93,6 +109,8 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
       );
       _id = note.id;
       _savedGeneration = generation;
+      succeeded = true;
+      if (_generation == generation) _failed = false;
     } catch (_) {
       _failed = true;
     } finally {
@@ -100,7 +118,7 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
       done.complete();
       if (mounted) setState(() {});
     }
-    if (_dirty && !_failed) await _save();
+    if ((_dirty) && succeeded) await _save();
   }
 
   Future<void> _copy() async {
@@ -119,6 +137,104 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
     }
   }
 
+  Future<void> _emergencyExport() async {
+    if (_exporting) return;
+    _exporting = true;
+    try {
+      final snapshot = EmergencyNoteSnapshot(
+        title: _title.text,
+        body: _body.text,
+      );
+      final password = TextEditingController();
+      final confirmation = TextEditingController();
+      var mismatch = false;
+      final selected = await showDialog<String>(
+        context: context,
+        builder: (dialog) => StatefulBuilder(
+          builder: (dialog, setDialogState) => AlertDialog(
+            title: Text(context.l10n.dailynotes.emergencyExport),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(context.l10n.dailynotes.emergencyExportWarning),
+                TextField(
+                  controller: password,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.dailynotes.emergencyPassword,
+                  ),
+                ),
+                TextField(
+                  controller: confirmation,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.dailynotes.emergencyPasswordConfirm,
+                    errorText: mismatch
+                        ? context.l10n.dailynotes.emergencyPasswordMismatch
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: Text(context.l10n.dailynotes.cancel),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (password.text.isEmpty ||
+                      password.text != confirmation.text) {
+                    setDialogState(() => mismatch = true);
+                  } else {
+                    Navigator.pop(dialog, password.text);
+                  }
+                },
+                child: Text(context.l10n.dailynotes.confirm),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (selected == null || !mounted) return;
+      try {
+        final bytes =
+            await (widget.createEmergencyArchive?.call(snapshot, selected) ??
+                createEmergencyNoteZip(
+                  snapshot: snapshot,
+                  password: selected,
+                  temporaryDirectory: Directory.systemTemp,
+                ));
+        final destination =
+            await (widget.saveEmergencyArchive?.call(bytes) ??
+                FilePicker.saveFile(
+                  fileName: 'DailyNotes-emergency.zip',
+                  bytes: bytes,
+                  mimeType: 'application/zip',
+                ));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              destination == null
+                  ? context.l10n.dailynotes.emergencyExportCancelled
+                  : context.l10n.dailynotes.emergencyExportPartial,
+            ),
+          ),
+        );
+      } catch (_) {
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.dailynotes.emergencyExportFailed),
+            ),
+          );
+      }
+    } finally {
+      _exporting = false;
+    }
+  }
+
   Future<void> _leave() async {
     if (_leaving) return;
     _leaving = true;
@@ -126,7 +242,7 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
     await _save();
     if (!mounted) return;
     if (_dirty) {
-      await showDialog<void>(
+      final discard = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
           title: Text(context.l10n.dailynotes.unsavedExitTitle),
@@ -137,17 +253,66 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
               child: Text(context.l10n.dailynotes.copyContent),
             ),
             TextButton(
+              onPressed: _emergencyExport,
+              child: Text(context.l10n.dailynotes.emergencyExport),
+            ),
+            TextButton(
+              onPressed: () async {
+                await _save();
+                if (c.mounted && !_dirty) Navigator.pop(c, false);
+              },
+              child: Text(context.l10n.dailynotes.retry),
+            ),
+            TextButton(
               onPressed: () => Navigator.pop(c),
               child: Text(context.l10n.dailynotes.keepEditing),
+            ),
+            TextButton(
+              onPressed: () async {
+                final discard = await showDialog<bool>(
+                  context: c,
+                  builder: (dialog) => AlertDialog(
+                    title: Text(context.l10n.dailynotes.discardUnsavedTitle),
+                    content: Text(
+                      context.l10n.dailynotes.discardUnsavedWarning,
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialog, false),
+                        child: Text(context.l10n.dailynotes.cancel),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialog, true),
+                        child: Text(
+                          context.l10n.dailynotes.discardUnsavedConfirm,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if (discard == true && c.mounted) Navigator.pop(c, true);
+              },
+              child: Text(context.l10n.dailynotes.discardUnsavedAction),
             ),
           ],
         ),
       );
-      _leaving = false;
-      return;
+      if (discard != true || !mounted) {
+        _leaving = false;
+        return;
+      }
     }
     setState(() => _allowPop = true);
     Navigator.of(context).pop();
+  }
+
+  void _toggleEditing() {
+    if (_editing) {
+      FocusScope.of(context).unfocus();
+      _timer?.cancel();
+      unawaited(_save());
+    }
+    setState(() => _editing = !_editing);
   }
 
   Future<void> _chooseFolder() async {
@@ -186,7 +351,7 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
         ],
       ),
     );
-    if (confirmed == true && mounted) {
+    if (confirmed == true && mounted && _editing) {
       _folderId = result.isEmpty ? null : result;
       _changed();
     }
@@ -219,7 +384,7 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
       ),
     );
     // A dialog route may still be animating after its result completes.
-    if (result == null || !mounted) return;
+    if (result == null || !mounted || !_editing) return;
     _tags = result
         .split(RegExp('[,，]'))
         .map((t) => t.trim())
@@ -299,12 +464,19 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
           title: Text(l10n.dailynotes.notesTitle),
           actions: [
             IconButton(
-              onPressed: _chooseFolder,
+              onPressed: _toggleEditing,
+              tooltip: _editing
+                  ? l10n.dailynotes.lockEditing
+                  : l10n.dailynotes.unlockEditing,
+              icon: Icon(_editing ? LucideIcons.lock : LucideIcons.lockOpen),
+            ),
+            IconButton(
+              onPressed: _editing ? _chooseFolder : null,
               tooltip: l10n.dailynotes.chooseFolder,
               icon: const Icon(LucideIcons.folder),
             ),
             IconButton(
-              onPressed: _editTags,
+              onPressed: _editing ? _editTags : null,
               tooltip: l10n.dailynotes.noteTags,
               icon: const Icon(LucideIcons.tags),
             ),
@@ -363,6 +535,7 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: TextField(
                   controller: _title,
+                  readOnly: !_editing,
                   textCapitalization: TextCapitalization.sentences,
                   style: context.theme.typography.titleLarge.onSurface,
                   decoration: InputDecoration(
@@ -376,6 +549,7 @@ class _DailyNoteEditorPageState extends State<DailyNoteEditorPage>
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                   child: TextField(
                     controller: _body,
+                    readOnly: !_editing,
                     autofocus: widget.note == null,
                     expands: true,
                     minLines: null,

@@ -387,12 +387,10 @@ class _AutoSyncSection extends StatelessWidget {
               valueListenable: MoodiaryKVs.syncPollInterval.getNotifier(),
               builder: (context, seconds, _) => SettingSwitchListTile(
                 title: context.l10n.sync.autoSync,
-                subtitle: context.l10n.sync.autoSyncSubtitleDetail(
-                  interval: _fmtInterval(seconds),
-                ),
+                subtitle: context.l10n.sync.manualOnlyNotice,
                 secondary: const Icon(LucideIcons.refreshCw),
-                value: enabled,
-                onChanged: (v) => MoodiaryKVs.autoSync.set(v),
+                value: false,
+                onChanged: null,
               ),
             ),
             ValueListenableBuilder(
