@@ -391,6 +391,16 @@ class DailyNotesStore extends ChangeNotifier {
     return value == null ? null : Map.unmodifiable(value);
   }
 
+  /// A snapshot of draft keys and payloads for the caller's scoped prefix.
+  Map<String, Map<String, Object?>> draftsWithPrefix(String prefix) {
+    if (!_opened) throw StateError('dailynotes_not_open');
+    return Map.unmodifiable({
+      for (final entry in _drafts.entries)
+        if (entry.key.startsWith(prefix))
+          entry.key: Map<String, Object?>.unmodifiable(entry.value),
+    });
+  }
+
   Future<void> saveDraft(String key, Map<String, Object?> payload) =>
       _serialize(() async {
         if (!_opened) throw StateError('dailynotes_not_open');

@@ -23,7 +23,74 @@ String _composerDraftKey({
   String? blockId,
   String? dayKey,
 }) =>
-    'long-record:$topicId:$monthKey:${blockId ?? (summary ? "summary" : dayKey ?? modDayKey(DateTime.now()))}:$action';
+    'long-record:$topicId:$monthKey:${blockId ?? (summary ? "summary" : "append-${uuidV7()}")}:$action';
+
+class ModAppendDraft {
+  final String key;
+  final String monthKey;
+  final String dayKey;
+  final String preview;
+  final bool pendingRequest;
+
+  const ModAppendDraft({
+    required this.key,
+    required this.monthKey,
+    required this.dayKey,
+    required this.preview,
+    required this.pendingRequest,
+  });
+}
+
+String? _appendDraftMonth(String key, String topicId) {
+  final parts = key.split(':');
+  if (parts.length != 5 ||
+      parts[0] != 'long-record' ||
+      parts[1] != topicId ||
+      parts[4] != 'edit' ||
+      !RegExp(r'^[0-9]{4}-(0[1-9]|1[0-2])$').hasMatch(parts[2]) ||
+      !(parts[3].startsWith('append-') || modValidArchiveDay(parts[3]))) {
+    return null;
+  }
+  return parts[2];
+}
+
+Future<List<ModAppendDraft>> loadModAppendDrafts(
+  ModNativeMonthRepository repository,
+  String topicId,
+) async {
+  final store = DailyNotesStore(repository.store.db);
+  try {
+    await store.open();
+    final result = <ModAppendDraft>[];
+    for (final entry
+        in store.draftsWithPrefix('long-record:$topicId:').entries) {
+      final month = _appendDraftMonth(entry.key, topicId);
+      if (month == null) continue;
+      final payload = entry.value;
+      _validateComposerDraft(payload, topicId);
+      final day = payload['dayKey'];
+      if (day is! String || !modValidArchiveDay(day)) {
+        throw const FormatException('invalid_long_record_draft_day');
+      }
+      result.add(
+        ModAppendDraft(
+          key: entry.key,
+          monthKey: month,
+          dayKey: day,
+          preview: modBlockText(payload['body'] as String),
+          pendingRequest: payload['attempt'] != null,
+        ),
+      );
+    }
+    result.sort((a, b) {
+      final byDay = b.dayKey.compareTo(a.dayKey);
+      return byDay != 0 ? byDay : a.key.compareTo(b.key);
+    });
+    return List.unmodifiable(result);
+  } finally {
+    store.dispose();
+  }
+}
 
 void _validateComposerDraft(Map<String, Object?> draft, String topicId) {
   if (draft['schemaVersion'] != 1 ||
@@ -85,20 +152,33 @@ Future<ModStoredBlock?> showModMonthComposer({
   String action = 'edit',
   String? initialDayKey,
   MoodiaryEditorController? editorController,
+  String? resumeDraftKey,
 }) async {
   final drafts = DailyNotesStore(repository.store.db);
   try {
     await drafts.open();
     if (!context.mounted) return null;
-    final key = _composerDraftKey(
-      topicId: topicId,
-      monthKey: monthKey,
-      summary: block?.kind == 'summary' || summary,
-      action: action,
-      blockId: block?.blockId,
-      dayKey: initialDayKey,
-    );
+    if (resumeDraftKey != null &&
+        (block != null ||
+            summary ||
+            action != 'edit' ||
+            _appendDraftMonth(resumeDraftKey, topicId) != monthKey)) {
+      throw const FormatException('invalid_long_record_draft_identity');
+    }
+    final key =
+        resumeDraftKey ??
+        _composerDraftKey(
+          topicId: topicId,
+          monthKey: monthKey,
+          summary: block?.kind == 'summary' || summary,
+          action: action,
+          blockId: block?.blockId,
+          dayKey: initialDayKey,
+        );
     final initialDraft = drafts.draft(key);
+    if (resumeDraftKey != null && initialDraft == null) {
+      throw const FormatException('long_record_draft_missing');
+    }
     if (initialDraft != null) _validateComposerDraft(initialDraft, topicId);
     return await Navigator.of(context).push<ModStoredBlock>(
       MaterialPageRoute(

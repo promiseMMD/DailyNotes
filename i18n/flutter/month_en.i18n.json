@@ -40,5 +40,10 @@
   "retainAndLeave": "Keep draft and leave",
   "draftSaveFailed": "Could not keep the draft or read the editor. Your content remains here. Retry or copy the draft before leaving.",
   "locatedOutsideFilter": "The new entry is temporarily shown for navigation despite the current search filter.",
-  "locateFailed": "The entry was saved, but could not be located. Refresh or search to find it."
+  "locateFailed": "The entry was saved, but could not be located. Refresh or search to find it.",
+  "pendingDrafts": "Pending drafts",
+  "draftListFailed": "Could not load pending drafts. Retry; existing drafts have not been deleted.",
+  "emptyDraft": "Draft without text",
+  "pendingDraftLocal": "{day} · Saved locally, not yet submitted",
+  "pendingDraftUncertain": "{day} · Submission unconfirmed; reopen to retry the same request"
 }

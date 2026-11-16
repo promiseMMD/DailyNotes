@@ -1310,6 +1310,11 @@ class _Translations$month$en extends Translations$month$zh {
 	@override String get draftSaveFailed => 'Could not keep the draft or read the editor. Your content remains here. Retry or copy the draft before leaving.';
 	@override String get locatedOutsideFilter => 'The new entry is temporarily shown for navigation despite the current search filter.';
 	@override String get locateFailed => 'The entry was saved, but could not be located. Refresh or search to find it.';
+	@override String get pendingDrafts => 'Pending drafts';
+	@override String get draftListFailed => 'Could not load pending drafts. Retry; existing drafts have not been deleted.';
+	@override String get emptyDraft => 'Draft without text';
+	@override String pendingDraftLocal({required Object day}) => '${day} · Saved locally, not yet submitted';
+	@override String pendingDraftUncertain({required Object day}) => '${day} · Submission unconfirmed; reopen to retry the same request';
 }
 
 // Path: picker

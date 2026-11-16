@@ -49,6 +49,8 @@ class _ModMonthPageState extends State<ModMonthPage>
   bool _recycle = false;
   bool _opened = false;
   bool _composing = false;
+  List<ModAppendDraft> _drafts = const [];
+  bool _draftLoadFailed = false;
   int _generation = 0;
   int _limit = 50;
   String? _locatedBlockId;
@@ -98,9 +100,17 @@ class _ModMonthPageState extends State<ModMonthPage>
         throw StateError('invalid_daily_route');
       }
       final data = await widget.repository.load(widget.topicId, month);
+      List<ModAppendDraft>? drafts;
+      try {
+        drafts = await loadModAppendDrafts(widget.repository, widget.topicId);
+      } catch (_) {
+        // A damaged or unreadable draft must never disappear silently.
+      }
       if (!mounted || ticket != _generation) return;
       setState(() {
         _snapshot = data;
+        if (drafts != null) _drafts = drafts;
+        _draftLoadFailed = drafts == null;
         _verified = true;
         _loading = false;
       });
@@ -123,6 +133,7 @@ class _ModMonthPageState extends State<ModMonthPage>
 
   Future<void> _compose({
     ModStoredBlock? block,
+    ModAppendDraft? draft,
     bool summary = false,
     String action = 'edit',
   }) async {
@@ -131,6 +142,7 @@ class _ModMonthPageState extends State<ModMonthPage>
     try {
       final saved =
           widget.testAppend != null &&
+              draft == null &&
               block == null &&
               !summary &&
               action == 'edit'
@@ -139,12 +151,13 @@ class _ModMonthPageState extends State<ModMonthPage>
               context: context,
               repository: widget.repository,
               topicId: widget.topicId,
-              monthKey: _month,
+              monthKey: draft?.monthKey ?? _month,
               block: block,
               summary: summary,
               action: action,
               initialDayKey: _day,
               editorController: widget.composerController,
+              resumeDraftKey: draft?.key,
             );
       if (!mounted) return;
       if (saved != null) {
@@ -434,6 +447,49 @@ class _ModMonthPageState extends State<ModMonthPage>
               controller: _listController,
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 100),
               children: [
+                if (!_recycle &&
+                    _day == null &&
+                    (_drafts.isNotEmpty || _draftLoadFailed)) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+                    child: Text(
+                      l10n.month.pendingDrafts,
+                      style: context.theme.typography.titleSmall.primary,
+                    ),
+                  ),
+                  if (_draftLoadFailed)
+                    ListTile(
+                      title: Text(l10n.month.draftListFailed),
+                      trailing: TextButton(
+                        onPressed: _loading ? null : _reload,
+                        child: Text(l10n.common.retry),
+                      ),
+                    ),
+                  for (final draft in _drafts)
+                    Card(
+                      child: ListTile(
+                        key: ValueKey(draft.key),
+                        title: Text(
+                          draft.preview.isEmpty
+                              ? l10n.month.emptyDraft
+                              : draft.preview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          draft.pendingRequest
+                              ? l10n.month.pendingDraftUncertain(
+                                  day: draft.dayKey,
+                                )
+                              : l10n.month.pendingDraftLocal(day: draft.dayKey),
+                        ),
+                        trailing: const Icon(LucideIcons.chevronRight),
+                        onTap: writable && !_draftLoadFailed
+                            ? () => _compose(draft: draft)
+                            : null,
+                      ),
+                    ),
+                ],
                 if (_recycle)
                   Padding(
                     padding: const EdgeInsets.all(12),

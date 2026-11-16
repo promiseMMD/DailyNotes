@@ -3571,6 +3571,21 @@ class Translations$month$zh {
 
 	/// zh: '记录已保存，但暂时无法定位，请刷新或搜索查看。'
 	String get locateFailed => '记录已保存，但暂时无法定位，请刷新或搜索查看。';
+
+	/// zh: '待提交草稿'
+	String get pendingDrafts => '待提交草稿';
+
+	/// zh: '无法读取待提交草稿，请重试。已有草稿不会被删除。'
+	String get draftListFailed => '无法读取待提交草稿，请重试。已有草稿不会被删除。';
+
+	/// zh: '无文字的草稿'
+	String get emptyDraft => '无文字的草稿';
+
+	/// zh: '{day} · 已保存在本机，尚未正式追加'
+	String pendingDraftLocal({required Object day}) => '${day} · 已保存在本机，尚未正式追加';
+
+	/// zh: '{day} · 提交结果待确认，打开后可重试原请求'
+	String pendingDraftUncertain({required Object day}) => '${day} · 提交结果待确认，打开后可重试原请求';
 }
 
 // Path: picker

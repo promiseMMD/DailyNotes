@@ -40,5 +40,10 @@
   "retainAndLeave": "保留草稿并返回",
   "draftSaveFailed": "未能保留草稿或取得编辑器确认，当前内容仍在此页。请重试或复制草稿后再离开。",
   "locatedOutsideFilter": "刚追加的记录不符合当前搜索条件，暂时显示以便定位。",
-  "locateFailed": "记录已保存，但暂时无法定位，请刷新或搜索查看。"
+  "locateFailed": "记录已保存，但暂时无法定位，请刷新或搜索查看。",
+  "pendingDrafts": "待提交草稿",
+  "draftListFailed": "无法读取待提交草稿，请重试。已有草稿不会被删除。",
+  "emptyDraft": "无文字的草稿",
+  "pendingDraftLocal": "{day} · 已保存在本机，尚未正式追加",
+  "pendingDraftUncertain": "{day} · 提交结果待确认，打开后可重试原请求"
 }

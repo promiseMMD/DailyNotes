@@ -2,8 +2,11 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
+import 'package:moodiary_editor/moodiary_editor.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
+import 'package:moodiary_mobile/app/dailynotes/data/daily_notes_store.dart';
 import 'package:moodiary_mobile/app/home/mod_continuous.dart';
+import 'package:moodiary_mobile/app/home/mod_month_composer.dart';
 import 'package:moodiary_mobile/app/home/mod_month_native.dart';
 import 'package:moodiary_mobile/app/home/mod_month_page.dart';
 import 'package:moodiary_mobile/app/home/mod_month_store.dart';
@@ -62,6 +65,13 @@ class _ControlledRepository extends ModNativeMonthRepository {
   }
 }
 
+class _DraftEditor extends MoodiaryEditorController {
+  @override
+  Future<void> blur() async {}
+  @override
+  Future<String> snapshot() async => body;
+}
+
 void main() {
   late MoodiaryDatabase db;
   late _ControlledRepository repository;
@@ -78,6 +88,7 @@ void main() {
   Future<void> mount(
     WidgetTester tester, {
     Future<ModStoredBlock?> Function(String, String?)? testAppend,
+    MoodiaryEditorController? composerController,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -98,6 +109,7 @@ void main() {
             repository: repository,
             openLegacy: () async {},
             testAppend: testAppend,
+            composerController: composerController,
           ),
         ),
       ),
@@ -209,6 +221,93 @@ void main() {
     expect(find.text('cached native record'), findsOneWidget);
     expect(find.text(l10n.month.savedLocal), findsNothing);
     expect(find.text(l10n.month.locateFailed), findsNothing);
+  });
+
+  testWidgets(
+    'shows only this record’s append drafts and resumes the exact legacy draft',
+    (tester) async {
+      final store = DailyNotesStore(db);
+      await store.open();
+      final payload = <String, Object?>{
+        'schemaVersion': 1,
+        'blockId': 'draft-block-123',
+        'body': body,
+        'dayKey': '2026-11-05',
+        'occurredAtMs': 1793865600000,
+        'baselineBody':
+            '{"type":"doc","attrs":{"v":2},"content":[{"type":"paragraph"}]}',
+        'baselineDay': '2026-11-05',
+        'baselineEventMs': 1793865600000,
+      };
+      const key = 'long-record:$topicId:2026-11:2026-11-05:edit';
+      await store.saveDraft(key, payload);
+      await store.saveDraft(
+        'long-record:another-topic:2026-11:2026-11-05:edit',
+        payload,
+      );
+      await store.saveDraft(
+        'long-record:$topicId:2026-11:existing-block-123:edit',
+        payload,
+      );
+      store.dispose();
+      await mount(tester, composerController: _DraftEditor());
+      expect(find.text(l10n.month.pendingDrafts), findsOneWidget);
+      expect(find.byKey(const ValueKey(key)), findsOneWidget);
+      expect(
+        find.text(l10n.month.pendingDraftLocal(day: '2026-11-05')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey(key)));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<MoodiaryEditor>(find.byType(MoodiaryEditor))
+            .initialContent,
+        body,
+      );
+      final composer = tester.widget<ModMonthComposer>(
+        find.byType(ModMonthComposer),
+      );
+      expect(composer.draftKey, key);
+      expect(composer.initialDraft!['blockId'], 'draft-block-123');
+    },
+  );
+
+  testWidgets('two new drafts created on the same day remain separate', (
+    tester,
+  ) async {
+    await mount(tester, composerController: _DraftEditor());
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(l10n.common.close));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.month.retainAndLeave));
+      await tester.pumpAndSettle();
+    }
+    final store = DailyNotesStore(db);
+    await store.open();
+    final saved = store.draftsWithPrefix('long-record:$topicId:');
+    expect(saved.length, 2);
+    expect(saved.values.map((item) => item['blockId']).toSet().length, 2);
+    expect(find.text(l10n.month.pendingDrafts), findsOneWidget);
+    store.dispose();
+  });
+
+  testWidgets('an unreadable draft is reported and left in storage', (
+    tester,
+  ) async {
+    const key = 'long-record:$topicId:2026-11:append-corrupt:edit';
+    final store = DailyNotesStore(db);
+    await store.open();
+    await store.saveDraft(key, {'schemaVersion': 99, 'body': 'unreadable'});
+    store.dispose();
+    await mount(tester);
+    expect(find.text(l10n.month.draftListFailed), findsOneWidget);
+    final check = DailyNotesStore(db);
+    await check.open();
+    expect(check.draft(key)!['body'], 'unreadable');
+    check.dispose();
   });
 
   testWidgets(
