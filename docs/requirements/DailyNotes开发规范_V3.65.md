@@ -867,6 +867,6 @@
 
 ## 24. 本次变更范围及下一讨论阶段
 
-- 本轮仅**新建完整累计规范 \`docs/requirements/DailyNotes开发规范_V3.65.md\` 并更新 \`docs/requirements/README.md\`**。保留 V3.49 及以前的所有历史文件；不修改 Flutter 源码、数据库、CI、APK。
+- 本轮仅**新建完整累计规范 `docs/requirements/DailyNotes开发规范_V3.65.md` 并更新 `docs/requirements/README.md`**。保留 V3.49 及以前的所有历史文件；不修改 Flutter 源码、数据库、CI、APK。
 - DN-241～DN-250 为十项明确确认的方案及不可违背边界；第 21～23 节为候选工程细节、风险和验收设计。原型、模拟数据库、通知发送均非真实实现。
 - 下一阶段 **V3.66**：通知进入其他页面后，存活的原编辑会话如何恢复焦点、IME composing、Aa 选区、PDF 位置、播放器以及在途写入回执；先完成可交互原型及失败路径审查。
