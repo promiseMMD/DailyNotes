@@ -2,7 +2,7 @@
 
 > **当前设计规范**：[DailyNotes开发规范_V3.65.md](./DailyNotes开发规范_V3.65.md)（2026-11-17，V3.50～V3.65 集中同步，DN-001～DN-250）  
 > **上一版本**：[DailyNotes开发规范_V3.49.md](./DailyNotes开发规范_V3.49.md)（DN-001～DN-240，保留不删除）  
- > **较早完整版本**：[DailyNotes开发规范_V3.27.md](./DailyNotes开发规范_V3.27.md)（DN-001～DN-228，保留不删除）  
+> **较早完整版本**：[DailyNotes开发规范_V3.27.md](./DailyNotes开发规范_V3.27.md)（DN-001～DN-228，保留不删除）  
 > **上一份完整规范**：[DailyNotes开发规范_V3.12.md](./DailyNotes开发规范_V3.12.md)（DN-001～DN-216）  
 > **最近的完整历史基线**：[DailyNotes开发规范_V2.77.md](./DailyNotes开发规范_V2.77.md)（DN-001～DN-203）  
 > **更早的归档**：[DailyNotes开发规范_V2.51.md](./DailyNotes开发规范_V2.51.md) 等版本仍保留。
