@@ -3586,6 +3586,18 @@ class Translations$month$zh {
 
 	/// zh: '{day} · 提交结果待确认，打开后可重试原请求'
 	String pendingDraftUncertain({required Object day}) => '${day} · 提交结果待确认，打开后可重试原请求';
+
+	/// zh: '草稿未能确认保存，请重试；当前内容仍在编辑器中。'
+	String get draftAutosaveFailed => '草稿未能确认保存，请重试；当前内容仍在编辑器中。';
+
+	/// zh: '正在保存本机草稿…'
+	String get draftAutosaving => '正在保存本机草稿…';
+
+	/// zh: '草稿有修改，等待保存到本机。'
+	String get draftAutosavePending => '草稿有修改，等待保存到本机。';
+
+	/// zh: '最近一次草稿内容已保存到本机，尚未正式追加。'
+	String get draftAutosaved => '最近一次草稿内容已保存到本机，尚未正式追加。';
 }
 
 // Path: picker

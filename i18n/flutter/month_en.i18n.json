@@ -45,5 +45,9 @@
   "draftListFailed": "Could not load pending drafts. Retry; existing drafts have not been deleted.",
   "emptyDraft": "Draft without text",
   "pendingDraftLocal": "{day} · Saved locally, not yet submitted",
-  "pendingDraftUncertain": "{day} · Submission unconfirmed; reopen to retry the same request"
+  "pendingDraftUncertain": "{day} · Submission unconfirmed; reopen to retry the same request",
+  "draftAutosaveFailed": "Draft saving could not be confirmed. Retry; the current content remains in the editor.",
+  "draftAutosaving": "Saving draft locally…",
+  "draftAutosavePending": "Draft changes are waiting to be saved locally.",
+  "draftAutosaved": "The last captured draft was saved locally; it has not been submitted."
 }

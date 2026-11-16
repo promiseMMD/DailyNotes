@@ -22,12 +22,31 @@ const topicId = 'aac26e25-4a1d-4b4c-b256-9b0c347d36e2';
 class _Editor extends MoodiaryEditorController {
   String document = validBody;
   bool fail = false;
+  Completer<String>? delayedSnapshot;
   @override
   Future<void> blur() async {}
   @override
   Future<String> snapshot() async {
     if (fail) throw TimeoutException('no editor acknowledgement');
+    final delayed = delayedSnapshot;
+    delayedSnapshot = null;
+    if (delayed != null) return delayed.future;
     return document;
+  }
+}
+
+class _DraftStore extends DailyNotesStore {
+  bool failWrites = false;
+  Completer<void>? blockNext;
+  _DraftStore(super.database);
+
+  @override
+  Future<void> saveDraft(String key, Map<String, Object?> payload) async {
+    final block = blockNext;
+    blockNext = null;
+    if (block != null) await block.future;
+    if (failWrites) throw StateError('draft_write_failed');
+    await super.saveDraft(key, payload);
   }
 }
 
@@ -225,6 +244,175 @@ void main() {
     expect(drafts.draft('composer-test')!['body'], validBody);
     expect(repository.attempts, isEmpty);
     expect(find.byKey(const ValueKey('launch-composer')), findsOneWidget);
+  });
+
+  testWidgets('typing saves the newest draft locally without submitting', (
+    tester,
+  ) async {
+    final drafts = _DraftStore(db);
+    addTearDown(drafts.dispose);
+    await drafts.open();
+    await mount(tester, drafts: drafts);
+    final changed = validBody.replaceAll('native draft', 'newest draft');
+    editor.document = changed;
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      changed,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(drafts.draft('composer-test'), isNull);
+    expect(find.byTooltip(l10n.month.draftAutosavePending), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(drafts.draft('composer-test')!['body'], changed);
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsOneWidget);
+    expect(repository.attempts, isEmpty);
+  });
+
+  testWidgets('a delayed old save cannot report newer changes as saved', (
+    tester,
+  ) async {
+    final drafts = _DraftStore(db);
+    addTearDown(drafts.dispose);
+    await drafts.open();
+    final gate = Completer<void>();
+    drafts.blockNext = gate;
+    await mount(tester, drafts: drafts);
+    final first = validBody.replaceAll('native draft', 'first edit');
+    final second = validBody.replaceAll('native draft', 'second edit');
+    editor.document = first;
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      first,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    editor.document = second;
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      second,
+    );
+    await tester.pump();
+    gate.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsNothing);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(drafts.draft('composer-test')!['body'], second);
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsOneWidget);
+  });
+
+  testWidgets('a late editor snapshot cannot overwrite a newer change', (
+    tester,
+  ) async {
+    final drafts = _DraftStore(db);
+    addTearDown(drafts.dispose);
+    await drafts.open();
+    await mount(tester, drafts: drafts);
+    final first = validBody.replaceAll('native draft', 'old snapshot');
+    final second = validBody.replaceAll('native draft', 'current edit');
+    final snapshot = Completer<String>();
+    editor.delayedSnapshot = snapshot;
+    editor.document = first;
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      first,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    editor.document = second;
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      second,
+    );
+    snapshot.complete(first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(drafts.draft('composer-test')!['body'], second);
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsOneWidget);
+  });
+
+  testWidgets('failed autosave retains content and can be retried', (
+    tester,
+  ) async {
+    final drafts = _DraftStore(db)..failWrites = true;
+    addTearDown(drafts.dispose);
+    await drafts.open();
+    await mount(tester, drafts: drafts);
+    final changed = validBody.replaceAll('native draft', 'unsaved content');
+    editor.document = changed;
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      changed,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.month.draftAutosaveFailed), findsOneWidget);
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsNothing);
+    drafts.failWrites = false;
+    await tester.tap(find.text(l10n.common.retry));
+    await tester.pumpAndSettle();
+    expect(drafts.draft('composer-test')!['body'], changed);
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsOneWidget);
+    expect(repository.attempts, isEmpty);
+  });
+
+  testWidgets('failed editor snapshot does not claim the draft was saved', (
+    tester,
+  ) async {
+    final drafts = _DraftStore(db);
+    addTearDown(drafts.dispose);
+    await drafts.open();
+    await mount(tester, drafts: drafts);
+    editor.fail = true;
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      validBody,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.month.draftAutosaveFailed), findsOneWidget);
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsNothing);
+    expect(drafts.draft('composer-test'), isNull);
+    editor.fail = false;
+    await tester.tap(find.text(l10n.common.retry));
+    await tester.pumpAndSettle();
+    expect(drafts.draft('composer-test')!['body'], validBody);
+    expect(find.byTooltip(l10n.month.draftAutosaved), findsOneWidget);
+  });
+
+  testWidgets(
+    'background snapshots editor changes before their callback arrives',
+    (tester) async {
+      final drafts = _DraftStore(db);
+      addTearDown(drafts.dispose);
+      await drafts.open();
+      await mount(tester, drafts: drafts);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(drafts.draft('composer-test')!['body'], validBody);
+      expect(repository.attempts, isEmpty);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    },
+  );
+
+  testWidgets('formal submit waits for an older draft write before cleanup', (
+    tester,
+  ) async {
+    final drafts = _DraftStore(db);
+    addTearDown(drafts.dispose);
+    await drafts.open();
+    final gate = Completer<void>();
+    drafts.blockNext = gate;
+    await mount(tester, drafts: drafts);
+    tester.widget<MoodiaryEditor>(find.byType(MoodiaryEditor)).onChanged!(
+      validBody,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, l10n.common.save));
+    await tester.pump();
+    expect(repository.attempts, isEmpty);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(repository.attempts, hasLength(1));
+    expect(drafts.draft('composer-test'), isNull);
   });
 
   testWidgets(

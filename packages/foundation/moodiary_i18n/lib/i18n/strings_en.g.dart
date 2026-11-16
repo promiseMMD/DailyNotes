@@ -1315,6 +1315,10 @@ class _Translations$month$en extends Translations$month$zh {
 	@override String get emptyDraft => 'Draft without text';
 	@override String pendingDraftLocal({required Object day}) => '${day} · Saved locally, not yet submitted';
 	@override String pendingDraftUncertain({required Object day}) => '${day} · Submission unconfirmed; reopen to retry the same request';
+	@override String get draftAutosaveFailed => 'Draft saving could not be confirmed. Retry; the current content remains in the editor.';
+	@override String get draftAutosaving => 'Saving draft locally…';
+	@override String get draftAutosavePending => 'Draft changes are waiting to be saved locally.';
+	@override String get draftAutosaved => 'The last captured draft was saved locally; it has not been submitted.';
 }
 
 // Path: picker

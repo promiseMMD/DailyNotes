@@ -45,5 +45,9 @@
   "draftListFailed": "无法读取待提交草稿，请重试。已有草稿不会被删除。",
   "emptyDraft": "无文字的草稿",
   "pendingDraftLocal": "{day} · 已保存在本机，尚未正式追加",
-  "pendingDraftUncertain": "{day} · 提交结果待确认，打开后可重试原请求"
+  "pendingDraftUncertain": "{day} · 提交结果待确认，打开后可重试原请求",
+  "draftAutosaveFailed": "草稿未能确认保存，请重试；当前内容仍在编辑器中。",
+  "draftAutosaving": "正在保存本机草稿…",
+  "draftAutosavePending": "草稿有修改，等待保存到本机。",
+  "draftAutosaved": "最近一次草稿内容已保存到本机，尚未正式追加。"
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
@@ -239,7 +240,8 @@ class ModMonthComposer extends StatefulWidget {
   State<ModMonthComposer> createState() => _ModMonthComposerState();
 }
 
-class _ModMonthComposerState extends State<ModMonthComposer> {
+class _ModMonthComposerState extends State<ModMonthComposer>
+    with WidgetsBindingObserver {
   late final _editor = widget.editorController ?? MoodiaryEditorController();
   late final String _blockId;
   late final String? _parentRevisionId;
@@ -256,6 +258,19 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
   bool _conflict = false;
   bool _allowExit = false;
   bool _leaving = false;
+  Timer? _draftTimer;
+  Future<void> _draftWrites = Future.value();
+  int _draftRevision = 0;
+  int _persistedDraftRevision = 0;
+  int _draftWritesInFlight = 0;
+  bool _draftWriteFailed = false;
+  bool _snapshotUncertain = false;
+  bool get _autoDraft =>
+      widget.block == null &&
+      !_summary &&
+      _editing &&
+      widget.draftStore != null &&
+      widget.draftKey != null;
   bool get _summary => widget.block?.kind == 'summary' || widget.summary;
   bool get _editing => widget.action == 'edit';
   bool get _locked => _busy || _leaving || _attempt != null;
@@ -263,6 +278,7 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final block = widget.block;
     final draft = widget.initialDraft;
     _blockId = draft?['blockId'] as String? ?? block?.blockId ?? uuidV7();
@@ -300,6 +316,88 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
       }
     }
     _initialBody = _body;
+  }
+
+  @override
+  void dispose() {
+    _draftTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      unawaited(_flushDraftOnBackground());
+    }
+  }
+
+  void _draftChanged() {
+    if (!_autoDraft || _attempt != null) return;
+    _draftRevision++;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(
+      const Duration(milliseconds: 500),
+      () => unawaited(_flushDraftOnBackground()),
+    );
+    if (mounted) setState(() {});
+  }
+
+  void _queueDraftSave() {
+    if (!_autoDraft || _locked) return;
+    _draftTimer?.cancel();
+    final revision = _draftRevision;
+    final payload = _draftPayload();
+    _draftWritesInFlight++;
+    if (mounted) setState(() {});
+    _draftWrites = _draftWrites.then((_) async {
+      var success = false;
+      try {
+        await widget.draftStore!.saveDraft(widget.draftKey!, payload);
+        success = true;
+      } catch (_) {
+        // Keep the editor and its newest in-memory contents available.
+      }
+      _draftWritesInFlight--;
+      if (success) {
+        if (revision > _persistedDraftRevision) {
+          _persistedDraftRevision = revision;
+        }
+        if (revision == _draftRevision && !_snapshotUncertain) {
+          _draftWriteFailed = false;
+        }
+      } else {
+        _draftWriteFailed = true;
+      }
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _flushDraftOnBackground() async {
+    if (!_autoDraft || _locked) return;
+    final before = _draftRevision;
+    try {
+      final snapshot = await _editor.snapshot();
+      jsonDecode(snapshot);
+      if (!mounted || _locked) return;
+      // A newer editor callback supersedes an older asynchronous snapshot.
+      if (before == _draftRevision && snapshot != _body) {
+        _body = snapshot;
+        _draftRevision++;
+      }
+      jsonDecode(_body);
+      _snapshotUncertain = false;
+      if (_draftRevision == 0) return;
+      _queueDraftSave();
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _snapshotUncertain = true;
+          _draftWriteFailed = true;
+        });
+    }
   }
 
   void _message(String message) {
@@ -345,6 +443,7 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
         _event.microsecond,
       );
     });
+    _draftChanged();
   }
 
   Future<void> _time() async {
@@ -364,6 +463,7 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
         time.minute,
       ),
     );
+    _draftChanged();
   }
 
   Future<void> _copyDraft() async {
@@ -432,6 +532,7 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
     final key = widget.draftKey;
     if (drafts == null || key == null)
       throw StateError('draft_storage_unavailable');
+    await _draftWrites;
     await drafts.saveDraft(key, _draftPayload());
   }
 
@@ -444,7 +545,9 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
   Future<void> _leave() async {
     if (_busy || _allowExit || _leaving) return;
     setState(() => _leaving = true);
+    _draftTimer?.cancel();
     try {
+      await _draftWrites;
       if (_editing && _attempt == null) {
         // An acknowledged snapshot includes the final keystroke, even when the
         // WebView's debounced onChanged callback has not reached Flutter yet.
@@ -503,7 +606,9 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
       _busy = true;
       _error = null;
     });
+    _draftTimer?.cancel();
     try {
+      await _draftWrites;
       if (_attempt == null) {
         if (_editing) {
           await _editor.blur();
@@ -584,6 +689,18 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
               ? l10n.month.deleteTitle
               : l10n.diary.recycleRestore)
         : (_summary ? l10n.month.summary : l10n.month.record);
+    final showDraftStatus =
+        _autoDraft &&
+        (_draftRevision > 0 ||
+            widget.initialDraft != null ||
+            _draftWriteFailed);
+    final draftStatus = _draftWriteFailed
+        ? l10n.month.draftAutosaveFailed
+        : _draftWritesInFlight > 0
+        ? l10n.month.draftAutosaving
+        : _persistedDraftRevision < _draftRevision
+        ? l10n.month.draftAutosavePending
+        : l10n.month.draftAutosaved;
     return PopScope(
       canPop: _allowExit,
       onPopInvokedWithResult: (didPop, _) {
@@ -598,6 +715,19 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
             icon: const Icon(LucideIcons.x),
           ),
           actions: [
+            if (showDraftStatus)
+              IconButton(
+                tooltip: draftStatus,
+                onPressed: () => _details(draftStatus),
+                icon: Icon(
+                  _draftWriteFailed
+                      ? LucideIcons.circleAlert
+                      : _draftWritesInFlight > 0 ||
+                            _persistedDraftRevision < _draftRevision
+                      ? LucideIcons.clock
+                      : LucideIcons.circleCheck,
+                ),
+              ),
             IconButton(
               onPressed: _busy ? null : _copyDraft,
               tooltip: l10n.month.copyDraft,
@@ -661,6 +791,21 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
                     ],
                   ),
                 ),
+              if (_autoDraft && _draftWriteFailed)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(l10n.month.draftAutosaveFailed)),
+                      TextButton(
+                        onPressed: _locked
+                            ? null
+                            : () => unawaited(_flushDraftOnBackground()),
+                        child: Text(l10n.common.retry),
+                      ),
+                    ],
+                  ),
+                ),
               Expanded(
                 child: _editing
                     ? AbsorbPointer(
@@ -670,7 +815,10 @@ class _ModMonthComposerState extends State<ModMonthComposer> {
                           bodyOnly: true,
                           initialContent: _initialBody,
                           onChanged: (value) {
-                            if (!_locked) _body = value;
+                            if (!_locked && value != _body) {
+                              _body = value;
+                              _draftChanged();
+                            }
                           },
                         ),
                       )
