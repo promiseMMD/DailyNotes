@@ -41,16 +41,21 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   Timer? _timer;
   Future<void>? _pending;
   String? _id;
+  late String? _folderId;
+  late List<String> _tags;
   int _revision = 0, _savedRevision = 0;
   bool _failed = false, _allowPop = false, _leaving = false;
   late bool _editing;
   bool _exporting = false;
+  bool _deleting = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _id = widget.note?.id;
+    _folderId = widget.note?.folderId ?? widget.folderId;
+    _tags = List.of(widget.note?.tags ?? const []);
     _editing = widget.note == null;
     _title = TextEditingController(text: widget.note?.title ?? '')
       ..addListener(_changed);
@@ -100,6 +105,8 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     if (_revision == _savedRevision) return;
     final revision = _revision;
     final title = _title.text;
+    final folderId = _folderId;
+    final tags = List<String>.of(_tags);
     final done = Completer<void>();
     _pending = done.future;
     if (mounted) setState(() {});
@@ -118,8 +125,8 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         plainText: body,
         documentJson: doc,
         documentVersion: 1,
-        folderId: widget.note?.folderId ?? widget.folderId,
-        tags: widget.note?.tags ?? const [],
+        folderId: folderId,
+        tags: tags,
       );
       _id = note.id;
       _savedRevision = revision;
@@ -320,6 +327,134 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     Navigator.pop(context);
   }
 
+  Future<void> _chooseFolder() async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: Text(context.l10n.dailynotes.chooseFolder),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(c, ''),
+            child: Text(context.l10n.dailynotes.uncategorized),
+          ),
+          for (final folder in widget.store.folders)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(c, folder.id),
+              child: Text(folder.name),
+            ),
+        ],
+      ),
+    );
+    if (result == null || !mounted || result == (_folderId ?? '')) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(context.l10n.dailynotes.moveNote),
+        content: Text(context.l10n.dailynotes.moveConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: Text(context.l10n.dailynotes.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: Text(context.l10n.dailynotes.confirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted && _editing) {
+      _folderId = result.isEmpty ? null : result;
+      _changed();
+    }
+  }
+
+  Future<void> _editTags() async {
+    final text = TextEditingController(text: _tags.join(', '));
+    final result = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(context.l10n.dailynotes.noteTags),
+        content: TextField(
+          controller: text,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: context.l10n.dailynotes.tagsHint,
+          ),
+          onSubmitted: (value) => Navigator.pop(c, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: Text(context.l10n.dailynotes.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, text.text),
+            child: Text(context.l10n.dailynotes.confirm),
+          ),
+        ],
+      ),
+    );
+    // A dialog route may still be animating after its result completes.
+    if (result == null || !mounted || !_editing) return;
+    _tags = result
+        .split(RegExp('[,，]'))
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList();
+    _changed();
+  }
+
+  Future<void> _delete() async {
+    if (_deleting || _id == null) return;
+    _deleting = true;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(context.l10n.dailynotes.deleteNote),
+          content: Text(context.l10n.dailynotes.deleteNoteHint),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: Text(context.l10n.dailynotes.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text(context.l10n.dailynotes.delete),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      _timer?.cancel();
+      await _save();
+      if (!mounted) return;
+      if (_revision != _savedRevision) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.dailynotes.saveFailed)),
+        );
+        return;
+      }
+      try {
+        await widget.store.deleteNote(_id!);
+        if (!mounted) return;
+        setState(() => _allowPop = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
+      } catch (_) {
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.dailynotes.saveFailed)),
+          );
+      }
+    } finally {
+      _deleting = false;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive ||
@@ -343,6 +478,9 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   Widget build(BuildContext context) {
     final t = context.l10n.dailynotes;
     final editor = _editor;
+    final folder = widget.store.folders
+        .where((f) => f.id == _folderId)
+        .firstOrNull;
     return PopScope(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, _) {
@@ -356,6 +494,24 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
             onPressed: _leave,
           ),
           actions: [
+            if (editor != null) ...[
+              IconButton(
+                onPressed: _editing ? _chooseFolder : null,
+                tooltip: t.chooseFolder,
+                icon: const Icon(LucideIcons.folder),
+              ),
+              IconButton(
+                onPressed: _editing ? _editTags : null,
+                tooltip: t.noteTags,
+                icon: const Icon(LucideIcons.tags),
+              ),
+            ],
+            if (editor != null && _id != null)
+              IconButton(
+                onPressed: _delete,
+                tooltip: t.delete,
+                icon: const Icon(LucideIcons.trash2),
+              ),
             if (editor != null)
               IconButton(
                 tooltip: _editing ? t.lockEditing : t.unlockEditing,
@@ -423,7 +579,9 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                         ],
                       ),
                     ),
-                    Text(t.localOnly),
+                    Text('${t.localOnly} · ${folder?.name ?? t.uncategorized}'),
+                    if (_tags.isNotEmpty)
+                      Text(_tags.map((tag) => '#$tag').join('  ')),
                     Expanded(
                       child: MobileToolbarV2(
                         editorState: editor,

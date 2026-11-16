@@ -184,4 +184,240 @@ void main() {
     store.dispose();
     await db.close();
   });
+  testWidgets(
+    'delete moves a rich note to trash and restoration preserves the document',
+    (tester) async {
+      final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+      final store = DailyNotesStore(db);
+      await store.open();
+      final source = EditorState.blank(withInitialText: true);
+      await source.insertText(0, '保留格式', path: [0]);
+      final original = jsonEncode(source.document.toJson());
+      final note = await store.saveRichNote(
+        title: 'Title',
+        plainText: '保留格式',
+        documentJson: original,
+        documentVersion: 1,
+      );
+      source.dispose();
+      await tester.binding.setSurfaceSize(const Size(430, 900));
+      await tester.pumpWidget(
+        TranslationProvider(
+          child: MaterialApp(
+            theme: buildMuiTheme(brightness: Brightness.light),
+            localizationsDelegates: const [
+              AppFlowyEditorLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          RichNoteEditorPage(store: store, note: note),
+                    ),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('删除'));
+      await tester.pumpAndSettle();
+      expect(find.text('删除这篇笔记？'), findsOneWidget);
+      await tester.tap(find.text('删除').last);
+      await tester.pumpAndSettle();
+      expect(store.notes, isEmpty);
+      expect(store.deletedNotes.single.documentJson, original);
+      await store.restoreNote(note.id);
+      expect(store.notes.single.documentJson, original);
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+  testWidgets('delete is blocked if the latest rich edit cannot be saved', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    var fail = false;
+    final store = DailyNotesStore(
+      db,
+      beforeOutboxWrite: () async {
+        if (fail) throw StateError('disk');
+      },
+    );
+    await store.open();
+    final source = EditorState.blank(withInitialText: true);
+    await source.insertText(0, 'original', path: [0]);
+    final note = await store.saveRichNote(
+      title: 'Title',
+      plainText: 'original',
+      documentJson: jsonEncode(source.document.toJson()),
+      documentVersion: 1,
+    );
+    source.dispose();
+    await tester.binding.setSurfaceSize(const Size(430, 900));
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          home: RichNoteEditorPage(store: store, note: note),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('解锁编辑'));
+    await tester.pumpAndSettle();
+    final editor = tester
+        .widget<AppFlowyEditor>(find.byType(AppFlowyEditor))
+        .editorState;
+    fail = true;
+    await editor.insertText(8, ' latest', path: [0]);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('删除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    expect(store.notes.single.id, note.id);
+    expect(store.deletedNotes, isEmpty);
+    expect(editor.document.toJson().toString(), contains('latest'));
+    expect(find.textContaining('保存失败'), findsWidgets);
+    await tester.pumpWidget(const SizedBox());
+    store.dispose();
+    await db.close();
+    await tester.binding.setSurfaceSize(null);
+  });
+  testWidgets(
+    'moving a rich note and editing tags preserve its original document',
+    (tester) async {
+      final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+      final store = DailyNotesStore(db);
+      await store.open();
+      final folder = await store.createFolder('设备');
+      final source = EditorState.blank(withInitialText: true);
+      await source.insertText(0, '带格式的正文', path: [0]);
+      final document = jsonEncode(source.document.toJson());
+      final note = await store.saveRichNote(
+        title: 'Title',
+        plainText: '带格式的正文',
+        documentJson: document,
+        documentVersion: 1,
+      );
+      source.dispose();
+      await tester.binding.setSurfaceSize(const Size(430, 900));
+      await tester.pumpWidget(
+        TranslationProvider(
+          child: MaterialApp(
+            theme: buildMuiTheme(brightness: Brightness.light),
+            localizationsDelegates: const [
+              AppFlowyEditorLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            home: RichNoteEditorPage(store: store, note: note),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('解锁编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('选择文件夹'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设备').last);
+      await tester.pumpAndSettle();
+      expect(find.text('移动笔记'), findsOneWidget);
+      await tester.tap(find.text('确认').last);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(store.notes.single.folderId, folder.id);
+      expect(store.notes.single.documentJson, document);
+      await tester.tap(find.byTooltip('标签'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '维护, 观察');
+      await tester.tap(find.text('确认').last);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(store.notes.single.tags, ['维护', '观察']);
+      expect(store.notes.single.documentJson, document);
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+  testWidgets(
+    'locking after a rich save failure preserves edits through unlock and retry',
+    (tester) async {
+      final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+      var fail = false;
+      final store = DailyNotesStore(
+        db,
+        beforeOutboxWrite: () async {
+          if (fail) throw StateError('disk');
+        },
+      );
+      await store.open();
+      final source = EditorState.blank(withInitialText: true);
+      await source.insertText(0, 'original', path: [0]);
+      final note = await store.saveRichNote(
+        title: 'Title',
+        plainText: 'original',
+        documentJson: jsonEncode(source.document.toJson()),
+        documentVersion: 1,
+      );
+      source.dispose();
+      await tester.binding.setSurfaceSize(const Size(430, 900));
+      await tester.pumpWidget(
+        TranslationProvider(
+          child: MaterialApp(
+            theme: buildMuiTheme(brightness: Brightness.light),
+            localizationsDelegates: const [
+              AppFlowyEditorLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            home: RichNoteEditorPage(store: store, note: note),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('解锁编辑'));
+      await tester.pumpAndSettle();
+      final editor = tester
+          .widget<AppFlowyEditor>(find.byType(AppFlowyEditor))
+          .editorState;
+      fail = true;
+      await editor.insertText(8, ' latest', path: [0]);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('锁定编辑'));
+      await tester.pumpAndSettle();
+      expect(editor.editable, isFalse);
+      expect(find.textContaining('保存失败'), findsOneWidget);
+      expect(editor.document.toJson().toString(), contains('latest'));
+      await tester.tap(find.byTooltip('解锁编辑'));
+      await tester.pumpAndSettle();
+      expect(editor.editable, isTrue);
+      fail = false;
+      await tester.tap(find.text('重试'));
+      await tester.pumpAndSettle();
+      expect(store.notes.single.body, contains('latest'));
+      expect(find.textContaining('本机已保存'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
 }
