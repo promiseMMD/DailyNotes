@@ -91,6 +91,25 @@ class DailyFolder {
   };
 }
 
+/// A read-only preview of exactly which direct children a removal will affect.
+/// The private fingerprint prevents confirming one impact and applying another.
+class DailyFolderRemovalPlan {
+  final String folderId, folderName;
+  final String? parentId;
+  final int noteCount, trashedNoteCount, childFolderCount;
+  final String _fingerprint;
+
+  const DailyFolderRemovalPlan._({
+    required this.folderId,
+    required this.folderName,
+    required this.parentId,
+    required this.noteCount,
+    required this.trashedNoteCount,
+    required this.childFolderCount,
+    required this._fingerprint,
+  });
+}
+
 @immutable
 class KnowledgeTopic {
   final String id, title;
@@ -604,6 +623,115 @@ class DailyNotesStore extends ChangeNotifier {
         );
         state.put('folder', folder.toJson());
         return folder;
+      });
+
+  Future<DailyFolder> renameFolder(String id, String name) =>
+      _commit((state, now) {
+        final old = state.require(id, 'folder');
+        final trimmed = name.trim();
+        if (trimmed.isEmpty) throw StateError('empty_folder_name');
+        final updated = {
+          ...old,
+          'name': _uniqueFolderName(
+            state,
+            trimmed,
+            old['parentId'] as String?,
+            except: id,
+          ),
+          'updatedAt': now.toIso8601String(),
+        };
+        state.put('folder', updated);
+        return DailyFolder.fromJson(updated);
+      });
+
+  DailyFolderRemovalPlan _folderRemovalPlan(_State state, String id) {
+    final folder = state.require(id, 'folder');
+    final parentId = folder['parentId'] as String?;
+    if (parentId == id) throw StateError('invalid_folder_parent');
+    if (parentId != null) state.require(parentId, 'folder');
+    var noteCount = 0;
+    var trashedNoteCount = 0;
+    var childFolderCount = 0;
+    final fingerprint = <String>[];
+    for (final entry in state.records.entries) {
+      final row = entry.value;
+      final value = row.value;
+      var relevant = entry.key == id || entry.key == parentId;
+      if (row.kind == 'folder' && value['deletedAt'] == null) {
+        if (value['parentId'] == id) childFolderCount++;
+        relevant =
+            relevant ||
+            value['parentId'] == id ||
+            value['parentId'] == parentId;
+      }
+      if (row.kind == 'note' && value['folderId'] == id) {
+        if (value['deletedAt'] == null) {
+          noteCount++;
+        } else {
+          trashedNoteCount++;
+        }
+        relevant = true;
+      }
+      if (relevant) fingerprint.add('${entry.key}:${row.kind}:${row.revision}');
+    }
+    fingerprint.sort();
+    return DailyFolderRemovalPlan._(
+      folderId: id,
+      folderName: folder['name'] as String,
+      parentId: parentId,
+      noteCount: noteCount,
+      trashedNoteCount: trashedNoteCount,
+      childFolderCount: childFolderCount,
+      fingerprint: jsonEncode(fingerprint),
+    );
+  }
+
+  Future<DailyFolderRemovalPlan> planFolderRemoval(String id) =>
+      _serialize(() async {
+        if (!_opened) throw StateError('dailynotes_not_open');
+        return _folderRemovalPlan(await _readState(), id);
+      });
+
+  /// Soft-delete the folder and transfer its direct contents atomically.
+  /// A stale impact preview is rejected rather than silently moving new data.
+  Future<void> removeFolder(DailyFolderRemovalPlan plan) =>
+      _commit((state, now) {
+        final current = _folderRemovalPlan(state, plan.folderId);
+        if (current._fingerprint != plan._fingerprint) {
+          throw StateError('folder_removal_plan_changed');
+        }
+        final folder = state.require(plan.folderId, 'folder');
+        final direct = state.records.entries.toList();
+        state.put('folder', {
+          ...folder,
+          'deletedAt': now.toIso8601String(),
+          'updatedAt': now.toIso8601String(),
+        });
+        for (final entry in direct) {
+          final row = entry.value;
+          final value = row.value;
+          if (row.kind == 'folder' &&
+              value['deletedAt'] == null &&
+              value['parentId'] == plan.folderId) {
+            state.put('folder', {
+              ...value,
+              'name': _uniqueFolderName(
+                state,
+                value['name'] as String,
+                plan.parentId,
+                except: entry.key,
+              ),
+              'parentId': plan.parentId,
+              'updatedAt': now.toIso8601String(),
+            });
+          } else if (row.kind == 'note' && value['folderId'] == plan.folderId) {
+            state.put('note', {
+              ...value,
+              'folderId': plan.parentId,
+              'updatedAt': now.toIso8601String(),
+            });
+          }
+        }
       });
 
   String _uniqueFolderName(

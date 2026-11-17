@@ -13,6 +13,7 @@ import 'package:mui/mui.dart';
 import '../data/daily_notes_store.dart';
 import '../recovery/emergency_note_export.dart';
 import '../data/rich_document_guard.dart';
+import 'rich_note_outline.dart';
 
 /// AppFlowy document is the source of truth; text is only a list preview.
 class RichNoteEditorPage extends StatefulWidget {
@@ -37,6 +38,8 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     with WidgetsBindingObserver {
   late final TextEditingController _title;
   EditorState? _editor;
+  EditorScrollController? _scrollController;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription<dynamic>? _changes;
   Timer? _timer;
   Future<void>? _pending;
@@ -69,6 +72,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
               document: Document.fromJson(validateRichDocument(json)),
             );
       _editor!.editable = _editing;
+      _scrollController = EditorScrollController(editorState: _editor!);
       _changes = _editor!.transactionStream.listen((event) {
         if (event.$1 == TransactionTime.after) _changed();
       });
@@ -470,8 +474,45 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     _timer?.cancel();
     _changes?.cancel();
     _title.dispose();
+    _scrollController?.dispose();
     _editor?.dispose();
     super.dispose();
+  }
+
+  Future<void> _jumpToOutline(Node target) async {
+    _scaffoldKey.currentState?.closeEndDrawer();
+    await WidgetsBinding.instance.endOfFrame;
+    final editor = _editor;
+    final scroll = _scrollController;
+    if (!mounted || editor == null || scroll == null) return;
+    final path = target.path;
+    if (path.isEmpty ||
+        editor.document.nodeAtPath(path) != target ||
+        !scroll.itemScrollController.isAttached) {
+      _outlineUnavailable();
+      return;
+    }
+    // The document header is item zero; root document blocks start at one.
+    scroll.itemScrollController.jumpTo(index: path.first + 1);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || editor.document.nodeAtPath(target.path) != target) return;
+    final targetContext = target.key.currentContext;
+    if (targetContext == null || !targetContext.mounted) {
+      _outlineUnavailable();
+      return;
+    }
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.08,
+      duration: const Duration(milliseconds: 180),
+    );
+  }
+
+  void _outlineUnavailable() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.l10n.dailynotes.outlineUnavailable)),
+    );
   }
 
   @override
@@ -496,6 +537,14 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         if (!didPop) unawaited(_leave());
       },
       child: Scaffold(
+        key: _scaffoldKey,
+        endDrawerEnableOpenDragGesture: false,
+        endDrawer: editor == null
+            ? null
+            : RichNoteOutline(
+                editor: editor,
+                onSelect: (node) => unawaited(_jumpToOutline(node)),
+              ),
         appBar: AppBar(
           title: Text(t.notesTitle),
           leading: IconButton(
@@ -503,6 +552,12 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
             onPressed: _leave,
           ),
           actions: [
+            if (editor != null)
+              IconButton(
+                tooltip: t.documentOutline,
+                icon: const Icon(LucideIcons.listTree),
+                onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+              ),
             if (editor != null)
               IconButton(
                 tooltip: status,
@@ -616,6 +671,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                             : [],
                         child: AppFlowyEditor(
                           editorState: editor,
+                          editorScrollController: _scrollController,
                           editable: _editing,
                           autoFocus: widget.note == null,
                           header: TextField(

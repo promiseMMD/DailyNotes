@@ -1895,6 +1895,60 @@ class Translations$dailynotes$zh {
 
 	/// zh: '当前笔记尚未接入 WebDAV 同步'
 	String get noteSyncUnavailable => '当前笔记尚未接入 WebDAV 同步';
+
+	/// zh: '搜索文件夹路径'
+	String get searchFolders => '搜索文件夹路径';
+
+	/// zh: '清除搜索'
+	String get clearFolderSearch => '清除搜索';
+
+	/// zh: '没有匹配的文件夹'
+	String get noFolderMatches => '没有匹配的文件夹';
+
+	/// zh: '文件夹更多操作'
+	String get folderMore => '文件夹更多操作';
+
+	/// zh: '重命名文件夹'
+	String get renameFolder => '重命名文件夹';
+
+	/// zh: '名称已调整为“{name}”，以避免同级重名。'
+	String folderRenamedTo({required Object name}) => '名称已调整为“${name}”，以避免同级重名。';
+
+	/// zh: '删除文件夹“{name}”？'
+	String removeFolderTitle({required Object name}) => '删除文件夹“${name}”？';
+
+	/// zh: '将 {notes} 篇笔记及 {trashed} 篇回收站笔记转移到“{destination}”，并将 {folders} 个直属子文件夹提升到上一级。笔记正文和子文件夹内容会保留；同名文件夹会自动更名。'
+	String removeFolderImpact({required Object notes, required Object trashed, required Object destination, required Object folders}) => '将 ${notes} 篇笔记及 ${trashed} 篇回收站笔记转移到“${destination}”，并将 ${folders} 个直属子文件夹提升到上一级。笔记正文和子文件夹内容会保留；同名文件夹会自动更名。';
+
+	/// zh: '文件夹内容已变化，请重新查看影响范围后确认。'
+	String get folderChangedRetry => '文件夹内容已变化，请重新查看影响范围后确认。';
+
+	/// zh: '文档目录'
+	String get documentOutline => '文档目录';
+
+	/// zh: '搜索标题'
+	String get searchOutline => '搜索标题';
+
+	/// zh: '文档中还没有标题'
+	String get outlineEmpty => '文档中还没有标题';
+
+	/// zh: '没有匹配的标题'
+	String get outlineNoMatch => '没有匹配的标题';
+
+	/// zh: '无文字标题'
+	String get untitledHeading => '无文字标题';
+
+	/// zh: '当前标题已变化或暂时无法定位，请重新打开目录。'
+	String get outlineUnavailable => '当前标题已变化或暂时无法定位，请重新打开目录。';
+
+	/// zh: '进入下一级目录'
+	String get enterFolderBranch => '进入下一级目录';
+
+	/// zh: '搜索全部文件夹的笔记和标签'
+	String get searchNotesEverywhere => '搜索全部文件夹的笔记和标签';
+
+	/// zh: '搜索结果'
+	String get noteSearchResults => '搜索结果';
 }
 
 // Path: dailynotesNavigation

@@ -689,6 +689,24 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get copyOriginalJson => 'Copy original document JSON';
 	@override String get saveQueued => 'Waiting to save…';
 	@override String get noteSyncUnavailable => 'WebDAV sync is not yet available for this note';
+	@override String get searchFolders => 'Search folder paths';
+	@override String get clearFolderSearch => 'Clear search';
+	@override String get noFolderMatches => 'No matching folders';
+	@override String get folderMore => 'More folder actions';
+	@override String get renameFolder => 'Rename folder';
+	@override String folderRenamedTo({required Object name}) => 'Renamed to “${name}” to avoid a duplicate name.';
+	@override String removeFolderTitle({required Object name}) => 'Delete folder “${name}”?';
+	@override String removeFolderImpact({required Object notes, required Object trashed, required Object destination, required Object folders}) => 'Move ${notes} notes and ${trashed} trashed notes to “${destination}”, and promote ${folders} direct subfolders to the parent. Note contents and folder contents remain; duplicate folder names are adjusted.';
+	@override String get folderChangedRetry => 'The folder contents changed. Review the impact and confirm again.';
+	@override String get documentOutline => 'Document outline';
+	@override String get searchOutline => 'Search headings';
+	@override String get outlineEmpty => 'No headings in this document';
+	@override String get outlineNoMatch => 'No matching headings';
+	@override String get untitledHeading => 'Untitled heading';
+	@override String get outlineUnavailable => 'The heading changed or cannot be located. Reopen the outline.';
+	@override String get enterFolderBranch => 'Browse next folder level';
+	@override String get searchNotesEverywhere => 'Search notes and tags in all folders';
+	@override String get noteSearchResults => 'Search results';
 }
 
 // Path: dailynotesNavigation

@@ -21,6 +21,8 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
   late final TabController _tabs;
   String? _folderId;
   bool _allNotes = true;
+  bool _noteSearchOpen = false;
+  final _noteSearch = TextEditingController();
   final List<String> _topicPath = [];
 
   bool get isKnowledgeContext => _tabs.index == 1;
@@ -41,6 +43,7 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
   void dispose() {
     _tabs.removeListener(_contextChanged);
     _tabs.dispose();
+    _noteSearch.dispose();
     super.dispose();
   }
 
@@ -153,6 +156,11 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
         // A removed topic must never leave an editable orphan context.
         if (_topicPath.any((id) => !widget.store.topics.any((t) => t.id == id)))
           _topicPath.clear();
+        if (_folderId != null &&
+            !widget.store.folders.any((f) => f.id == _folderId)) {
+          _folderId = null;
+          _allNotes = true;
+        }
         final topic = widget.store.topics
             .where((t) => t.id == currentTopicId)
             .firstOrNull;
@@ -170,6 +178,17 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
                   : l10n.dailynotes.notesTitle,
             ),
             actions: [
+              if (!isKnowledgeContext)
+                IconButton(
+                  tooltip: l10n.dailynotes.searchNotes,
+                  icon: Icon(
+                    _noteSearchOpen ? LucideIcons.x : LucideIcons.search,
+                  ),
+                  onPressed: () => setState(() {
+                    _noteSearchOpen = !_noteSearchOpen;
+                    if (!_noteSearchOpen) _noteSearch.clear();
+                  }),
+                ),
               if (!isKnowledgeContext)
                 IconButton(
                   tooltip: context.l10n.dailynotes.editorPreview,
@@ -213,11 +232,15 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
   Widget _notes(BuildContext context) {
     final l10n = context.l10n;
     final folders = widget.store.folders;
-    final notes =
-        widget.store.notes
-            .where((n) => _allNotes || n.folderId == _folderId)
-            .toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final query = _noteSearchOpen ? _noteSearch.text.trim().toLowerCase() : '';
+    final tagQuery = query.startsWith('#') ? query.substring(1).trim() : query;
+    final notes = widget.store.notes.where((n) {
+      if (query.isEmpty) return _allNotes || n.folderId == _folderId;
+      return n.title.toLowerCase().contains(query) ||
+          n.body.toLowerCase().contains(query) ||
+          (tagQuery.isNotEmpty &&
+              n.tags.any((tag) => tag.toLowerCase().contains(tagQuery)));
+    }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     final folder = folders.where((f) => f.id == _folderId).firstOrNull;
     return ListView(
       padding: EdgeInsets.fromLTRB(
@@ -227,55 +250,77 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
         120 + MediaQuery.paddingOf(context).bottom,
       ),
       children: [
-        Row(
-          children: [
-            Expanded(child: _SectionTitle(l10n.dailynotes.frequentFolders)),
-            TextButton(
-              onPressed: _browseFolders,
-              child: Text(l10n.dailynotes.allFolders),
+        if (_noteSearchOpen)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: _noteSearch,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: l10n.dailynotes.searchNotesEverywhere,
+                suffixIcon: _noteSearch.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: l10n.dailynotes.clearFolderSearch,
+                        icon: const Icon(LucideIcons.x),
+                        onPressed: () => setState(_noteSearch.clear),
+                      ),
+              ),
             ),
-          ],
-        ),
-        if (folders.isEmpty)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(LucideIcons.folderPlus),
-            title: Text(l10n.dailynotes.newFolder),
-            subtitle: Text(l10n.dailynotes.noFoldersHint),
-            onTap: () => _createFolder(),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          ),
+        if (query.isEmpty) ...[
+          Row(
             children: [
-              // Until ranking is confirmed, stable creation order is a preview choice.
-              for (final f in folders.take(4))
-                ActionChip(
-                  avatar: const Icon(LucideIcons.folder, size: 16),
-                  label: Text(
-                    f.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onPressed: () => setState(() {
-                    _folderId = f.id;
-                    _allNotes = false;
-                  }),
-                ),
+              Expanded(child: _SectionTitle(l10n.dailynotes.frequentFolders)),
+              TextButton(
+                onPressed: _browseFolders,
+                child: Text(l10n.dailynotes.allFolders),
+              ),
             ],
           ),
-        const SizedBox(height: 12),
+          if (folders.isEmpty)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(LucideIcons.folderPlus),
+              title: Text(l10n.dailynotes.newFolder),
+              subtitle: Text(l10n.dailynotes.noFoldersHint),
+              onTap: () => _createFolder(),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                // Until ranking is confirmed, stable creation order is a preview choice.
+                for (final f in folders.take(4))
+                  ActionChip(
+                    avatar: const Icon(LucideIcons.folder, size: 16),
+                    label: Text(
+                      f.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: () => setState(() {
+                      _folderId = f.id;
+                      _allNotes = false;
+                    }),
+                  ),
+              ],
+            ),
+          const SizedBox(height: 12),
+        ],
         Row(
           children: [
             Expanded(
               child: _SectionTitle(
-                _allNotes
+                query.isNotEmpty
+                    ? l10n.dailynotes.noteSearchResults
+                    : _allNotes
                     ? l10n.dailynotes.recentNotes
                     : folder?.name ?? l10n.dailynotes.uncategorized,
               ),
             ),
-            if (!_allNotes)
+            if (!_allNotes && query.isEmpty)
               TextButton(
                 onPressed: () => setState(() {
                   _allNotes = true;
@@ -285,7 +330,9 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
               ),
           ],
         ),
-        if (notes.isEmpty)
+        if (notes.isEmpty && query.isNotEmpty)
+          ListTile(title: Text(l10n.dailynotes.noMatches))
+        else if (notes.isEmpty)
           DailyNotesEmptyState(
             icon: LucideIcons.notebookPen,
             title: l10n.dailynotes.noNotes,
@@ -658,35 +705,360 @@ class DailyNotesEmptyState extends StatelessWidget {
   );
 }
 
-class _FolderBrowser extends StatelessWidget {
+class _FolderBrowser extends StatefulWidget {
   const _FolderBrowser({required this.store, required this.onCreate});
   final DailyNotesStore store;
   final Future<void> Function({String? parentId}) onCreate;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(context.l10n.dailynotes.folderTree),
-      actions: [
-        IconButton(
-          onPressed: () => onCreate(),
-          tooltip: context.l10n.dailynotes.newFolder,
-          icon: const Icon(LucideIcons.folderPlus),
-        ),
-      ],
-    ),
-    body: ListenableBuilder(
-      listenable: store,
-      builder: (context, _) => ListView(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+  State<_FolderBrowser> createState() => _FolderBrowserState();
+}
+
+enum _FolderAction { add, rename, remove }
+
+class _FolderPath {
+  const _FolderPath(this.folder, this.path);
+  final DailyFolder folder;
+  final String path;
+}
+
+class _FolderBrowserState extends State<_FolderBrowser> {
+  final _search = TextEditingController();
+  bool _searchOpen = false;
+  String? _branchId;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<_FolderPath> _folderPaths() {
+    final folders = widget.store.folders;
+    final children = <String?, List<DailyFolder>>{};
+    for (final folder in folders) {
+      children.putIfAbsent(folder.parentId, () => []).add(folder);
+    }
+    final result = <_FolderPath>[];
+    final pending = <(DailyFolder, String)>[];
+    for (final root in (children[null] ?? const <DailyFolder>[]).reversed) {
+      pending.add((root, ''));
+    }
+    final seen = <String>{};
+    while (pending.isNotEmpty) {
+      final (folder, prefix) = pending.removeLast();
+      if (!seen.add(folder.id)) continue;
+      final path = prefix.isEmpty ? folder.name : '$prefix / ${folder.name}';
+      result.add(_FolderPath(folder, path));
+      for (final child
+          in (children[folder.id] ?? const <DailyFolder>[]).reversed) {
+        pending.add((child, path));
+      }
+    }
+    return result;
+  }
+
+  List<DailyFolder> _branchPath() {
+    final folders = {
+      for (final folder in widget.store.folders) folder.id: folder,
+    };
+    final path = <DailyFolder>[];
+    final seen = <String>{};
+    var id = _branchId;
+    while (id != null && seen.add(id)) {
+      final folder = folders[id];
+      if (folder == null) return [];
+      path.add(folder);
+      id = folder.parentId;
+    }
+    if (id != null) return [];
+    return path.reversed.toList();
+  }
+
+  void _goUp() {
+    final path = _branchPath();
+    setState(
+      () => _branchId = path.length > 1 ? path[path.length - 2].id : null,
+    );
+  }
+
+  void _selectFolder(String id) {
+    if (_branchId == null) {
+      Navigator.pop(context, id);
+      return;
+    }
+    setState(() => _branchId = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.pop(context, id);
+    });
+  }
+
+  Widget _breadcrumbs(List<DailyFolder> path) {
+    final shown = path.length > 3
+        ? [path.first, ...path.skip(path.length - 2)]
+        : path;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
-          ListTile(
-            title: Text(context.l10n.dailynotes.uncategorized),
-            leading: const Icon(LucideIcons.folder),
-            onTap: () => Navigator.pop(context, ''),
+          TextButton(
+            onPressed: () => setState(() => _branchId = null),
+            child: Text(context.l10n.dailynotes.folderTree),
           ),
-          ..._children(context, null, <String>{}),
+          for (var i = 0; i < shown.length; i++) ...[
+            if (path.length > 3 && i == 1)
+              TextButton(
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  builder: (sheet) => SafeArea(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final folder in path)
+                          ListTile(
+                            title: Text(folder.name),
+                            onTap: () {
+                              Navigator.pop(sheet);
+                              setState(() => _branchId = folder.id);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                child: const Text('…'),
+              ),
+            const Icon(LucideIcons.chevronRight, size: 14),
+            TextButton(
+              onPressed: () => setState(() => _branchId = shown[i].id),
+              child: Text(shown[i].name),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _act(DailyFolder folder, _FolderAction action) async {
+    if (action == _FolderAction.add) {
+      await widget.onCreate(parentId: folder.id);
+      return;
+    }
+    if (action == _FolderAction.rename) {
+      var name = folder.name;
+      final result = await showDialog<String>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(context.l10n.dailynotes.renameFolder),
+          content: TextFormField(
+            initialValue: folder.name,
+            maxLength: 120,
+            onChanged: (value) => name = value,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: Text(context.l10n.dailynotes.cancel),
+            ),
+            TextButton(
+              onPressed: () {
+                if (name.trim().isNotEmpty) Navigator.pop(dialog, name.trim());
+              },
+              child: Text(context.l10n.dailynotes.confirm),
+            ),
+          ],
+        ),
+      );
+      if (result == null || !mounted) return;
+      try {
+        final renamed = await widget.store.renameFolder(folder.id, result);
+        if (mounted && renamed.name != result) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                context.l10n.dailynotes.folderRenamedTo(name: renamed.name),
+              ),
+            ),
+          );
+        }
+      } catch (_) {
+        _showError();
+      }
+      return;
+    }
+    try {
+      final plan = await widget.store.planFolderRemoval(folder.id);
+      if (!mounted) return;
+      final parent = widget.store.folders
+          .where((f) => f.id == plan.parentId)
+          .firstOrNull;
+      final destination = parent?.name ?? context.l10n.dailynotes.uncategorized;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(
+            context.l10n.dailynotes.removeFolderTitle(name: plan.folderName),
+          ),
+          content: Text(
+            context.l10n.dailynotes.removeFolderImpact(
+              notes: plan.noteCount,
+              trashed: plan.trashedNoteCount,
+              folders: plan.childFolderCount,
+              destination: destination,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: Text(context.l10n.dailynotes.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text(context.l10n.dailynotes.delete),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await widget.store.removeFolder(plan);
+    } catch (error) {
+      if (!mounted) return;
+      final changed =
+          error is StateError && error.message == 'folder_removal_plan_changed';
+      _showError(changed: changed);
+    }
+  }
+
+  void _showError({bool changed = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          changed
+              ? context.l10n.dailynotes.folderChangedRetry
+              : context.l10n.dailynotes.saveFailed,
+        ),
+      ),
+    );
+  }
+
+  Widget _menu(DailyFolder folder) => PopupMenuButton<_FolderAction>(
+    tooltip: context.l10n.dailynotes.folderMore,
+    onSelected: (action) => _act(folder, action),
+    itemBuilder: (context) => [
+      PopupMenuItem(
+        value: _FolderAction.add,
+        child: Text(context.l10n.dailynotes.newFolder),
+      ),
+      PopupMenuItem(
+        value: _FolderAction.rename,
+        child: Text(context.l10n.dailynotes.rename),
+      ),
+      PopupMenuItem(
+        value: _FolderAction.remove,
+        child: Text(context.l10n.dailynotes.delete),
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: _branchId == null,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && _branchId != null) _goUp();
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        leading: _branchId == null ? null : BackButton(onPressed: _goUp),
+        title: Text(context.l10n.dailynotes.folderTree),
+        actions: [
+          IconButton(
+            onPressed: () => setState(() {
+              _searchOpen = !_searchOpen;
+              if (!_searchOpen) _search.clear();
+            }),
+            tooltip: context.l10n.dailynotes.searchFolders,
+            icon: Icon(_searchOpen ? LucideIcons.x : LucideIcons.search),
+          ),
+          IconButton(
+            onPressed: () => widget.onCreate(parentId: _branchId),
+            tooltip: context.l10n.dailynotes.newFolder,
+            icon: const Icon(LucideIcons.folderPlus),
+          ),
+        ],
+      ),
+      body: ListenableBuilder(
+        listenable: widget.store,
+        builder: (context, _) {
+          final branchPath = _branchPath();
+          if (_branchId != null && branchPath.isEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _branchId != null && _branchPath().isEmpty) {
+                setState(() => _branchId = null);
+              }
+            });
+          }
+          final branchId = branchPath.isEmpty ? null : _branchId;
+          final query = _search.text.trim().toLowerCase();
+          final indexed = _folderPaths();
+          final matches = indexed
+              .where((entry) => entry.path.toLowerCase().contains(query))
+              .toList();
+          // Dart's sort is not stable; retain the tree order within each group.
+          bool exact(_FolderPath entry) =>
+              entry.folder.name.toLowerCase() == query ||
+              entry.path.toLowerCase() == query;
+          final ordered = [
+            ...matches.where(exact),
+            ...matches.where((entry) => !exact(entry)),
+          ];
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+            children: [
+              if (branchId != null && query.isEmpty) _breadcrumbs(branchPath),
+              if (_searchOpen)
+                TextField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.dailynotes.searchFolders,
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: context.l10n.dailynotes.clearFolderSearch,
+                            icon: const Icon(LucideIcons.x),
+                            onPressed: () => setState(_search.clear),
+                          ),
+                  ),
+                ),
+              if (query.isNotEmpty) ...[
+                if (ordered.isEmpty)
+                  ListTile(
+                    title: Text(context.l10n.dailynotes.noFolderMatches),
+                  ),
+                for (final entry in ordered)
+                  ListTile(
+                    key: ValueKey('folder-search-${entry.folder.id}'),
+                    leading: const Icon(LucideIcons.folder),
+                    title: Text(entry.folder.name),
+                    subtitle: Text(
+                      '${context.l10n.dailynotes.folderTree} / ${entry.path}',
+                    ),
+                    trailing: _menu(entry.folder),
+                    onTap: () => _selectFolder(entry.folder.id),
+                  ),
+              ] else ...[
+                if (branchId == null)
+                  ListTile(
+                    title: Text(context.l10n.dailynotes.uncategorized),
+                    leading: const Icon(LucideIcons.folder),
+                    onTap: () => _selectFolder(''),
+                  ),
+                ..._children(context, branchId, <String>{}, 0),
+              ],
+            ],
+          );
+        },
       ),
     ),
   );
@@ -695,48 +1067,88 @@ class _FolderBrowser extends StatelessWidget {
     BuildContext context,
     String? parentId,
     Set<String> ancestors,
+    int depth,
   ) => [
-    for (final folder in store.folders.where((f) => f.parentId == parentId))
+    for (final folder in widget.store.folders.where(
+      (f) => f.parentId == parentId,
+    ))
       if (!ancestors.contains(folder.id))
         _FolderTreeRow(
+          key: ValueKey(folder.id),
           folder: folder,
-          childRows: _children(context, folder.id, {...ancestors, folder.id}),
-          onOpen: () => Navigator.pop(context, folder.id),
-          onAdd: () => onCreate(parentId: folder.id),
+          childRows:
+              depth >= 2 &&
+                  widget.store.folders.any(
+                    (child) =>
+                        child.parentId == folder.id &&
+                        !ancestors.contains(child.id),
+                  )
+              ? [
+                  ListTile(
+                    title: Text(context.l10n.dailynotes.enterFolderBranch),
+                    trailing: const Icon(LucideIcons.chevronRight),
+                    onTap: () => setState(() => _branchId = folder.id),
+                  ),
+                ]
+              : _children(context, folder.id, {
+                  ...ancestors,
+                  folder.id,
+                }, depth + 1),
+          onOpen: () => _selectFolder(folder.id),
+          menu: _menu(folder),
         ),
   ];
 }
 
-class _FolderTreeRow extends StatelessWidget {
+class _FolderTreeRow extends StatefulWidget {
   const _FolderTreeRow({
+    super.key,
     required this.folder,
     required this.childRows,
     required this.onOpen,
-    required this.onAdd,
+    required this.menu,
   });
   final DailyFolder folder;
   final List<Widget> childRows;
   final VoidCallback onOpen;
-  final VoidCallback onAdd;
+  final Widget menu;
+
+  @override
+  State<_FolderTreeRow> createState() => _FolderTreeRowState();
+}
+
+class _FolderTreeRowState extends State<_FolderTreeRow> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) => ExpansionTile(
+    onExpansionChanged: (value) => setState(() => _expanded = value),
     leading: const Icon(LucideIcons.folder),
     title: InkWell(
-      onTap: onOpen,
+      onTap: widget.onOpen,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Text(folder.name),
+        child: Text(widget.folder.name),
       ),
     ),
-    trailing: IconButton(
-      onPressed: onAdd,
-      tooltip: context.l10n.dailynotes.newFolder,
-      icon: const Icon(LucideIcons.folderPlus, size: 18),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          _expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+          size: 18,
+        ),
+        widget.menu,
+      ],
     ),
     childrenPadding: const EdgeInsets.only(left: 16),
-    children: childRows.isEmpty
-        ? [ListTile(title: Text(context.l10n.dailynotes.folder), onTap: onOpen)]
-        : childRows,
+    children: widget.childRows.isEmpty
+        ? [
+            ListTile(
+              title: Text(context.l10n.dailynotes.folder),
+              onTap: widget.onOpen,
+            ),
+          ]
+        : widget.childRows,
   );
 }

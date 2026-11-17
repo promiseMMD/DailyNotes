@@ -55,6 +55,128 @@ void main() {
   );
 
   test(
+    'folder removal moves notes and promotes children without merging names',
+    () async {
+      final parent = await store.createFolder('Projects');
+      final removed = await store.createFolder('Old', parentId: parent.id);
+      final existing = await store.createFolder('Plans', parentId: parent.id);
+      final child = await store.createFolder('Plans', parentId: removed.id);
+      final grandchild = await store.createFolder('2026', parentId: child.id);
+      final note = await store.saveNote(
+        title: 'Keep',
+        body: 'Body',
+        folderId: removed.id,
+      );
+      final trashed = await store.saveNote(
+        title: 'Trash',
+        body: 'Recover',
+        folderId: removed.id,
+      );
+      await store.deleteNote(trashed.id);
+      final plan = await store.planFolderRemoval(removed.id);
+      expect(plan.noteCount, 1);
+      expect(plan.trashedNoteCount, 1);
+      expect(plan.childFolderCount, 1);
+      await store.removeFolder(plan);
+      expect(store.folders.any((f) => f.id == removed.id), isFalse);
+      final promoted = store.folders.singleWhere((f) => f.id == child.id);
+      expect(promoted.parentId, parent.id);
+      expect(promoted.name, isNot(existing.name));
+      expect(
+        store.folders.singleWhere((f) => f.id == grandchild.id).parentId,
+        child.id,
+      );
+      expect(
+        store.notes.singleWhere((n) => n.id == note.id).folderId,
+        parent.id,
+      );
+      expect(store.deletedNotes.single.folderId, parent.id);
+      await store.restoreNote(trashed.id);
+      expect(
+        store.notes.singleWhere((n) => n.id == trashed.id).body,
+        'Recover',
+      );
+      final reopened = DailyNotesStore(db);
+      await reopened.open();
+      expect(
+        reopened.folders.singleWhere((f) => f.id == child.id).parentId,
+        parent.id,
+      );
+      expect(reopened.notes.singleWhere((n) => n.id == note.id).body, 'Body');
+      reopened.dispose();
+    },
+  );
+
+  test(
+    'a stale folder impact preview cannot move newly added records',
+    () async {
+      final folder = await store.createFolder('Work');
+      final plan = await store.planFolderRemoval(folder.id);
+      final added = await store.saveNote(
+        title: 'New',
+        body: '',
+        folderId: folder.id,
+      );
+      await expectLater(store.removeFolder(plan), throwsStateError);
+      expect(store.folders.any((f) => f.id == folder.id), isTrue);
+      expect(
+        store.notes.singleWhere((n) => n.id == added.id).folderId,
+        folder.id,
+      );
+    },
+  );
+
+  test(
+    'failure during folder transfer rolls back every change and event',
+    () async {
+      final folder = await store.createFolder('Work');
+      final child = await store.createFolder('Child', parentId: folder.id);
+      final note = await store.saveNote(
+        title: 'Note',
+        body: '',
+        folderId: folder.id,
+      );
+      final oldOutbox = store.pendingOperationCount;
+      var attempts = 0;
+      final failing = DailyNotesStore(
+        db,
+        beforeOutboxWrite: () async {
+          if (++attempts == 2) throw StateError('disk');
+        },
+      );
+      await failing.open();
+      final plan = await failing.planFolderRemoval(folder.id);
+      await expectLater(failing.removeFolder(plan), throwsStateError);
+      final reopened = DailyNotesStore(db);
+      await reopened.open();
+      expect(reopened.folders.any((f) => f.id == folder.id), isTrue);
+      expect(
+        reopened.folders.singleWhere((f) => f.id == child.id).parentId,
+        folder.id,
+      );
+      expect(
+        reopened.notes.singleWhere((n) => n.id == note.id).folderId,
+        folder.id,
+      );
+      expect(reopened.pendingOperationCount, oldOutbox);
+      failing.dispose();
+      reopened.dispose();
+    },
+  );
+
+  test(
+    'renaming a folder preserves identity and avoids sibling name collisions',
+    () async {
+      final a = await store.createFolder('A');
+      final b = await store.createFolder('B');
+      final renamed = await store.renameFolder(b.id, ' A ');
+      expect(renamed.id, b.id);
+      expect(renamed.name, isNot(a.name));
+      expect(store.folders.length, 2);
+    },
+  );
+
+  test(
     'outbox failure rolls back business row and never publishes success',
     () async {
       final failing = DailyNotesStore(
