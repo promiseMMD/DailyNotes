@@ -2,7 +2,6 @@ import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
 
 import '../data/daily_notes_store.dart';
-import 'note_editor_page.dart';
 import 'rich_note_editor_page.dart';
 import 'appflowy_preview_page.dart';
 
@@ -57,17 +56,11 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
 
   Future<void> _openNote([DailyNote? note]) => Navigator.of(context).push<void>(
     MaterialPageRoute(
-      builder: (_) => note == null || note.documentJson != null
-          ? RichNoteEditorPage(
-              store: widget.store,
-              note: note,
-              folderId: _folderId,
-            )
-          : DailyNoteEditorPage(
-              store: widget.store,
-              note: note,
-              initialFolderId: _folderId,
-            ),
+      builder: (_) => RichNoteEditorPage(
+        store: widget.store,
+        note: note,
+        folderId: _folderId,
+      ),
     ),
   );
 

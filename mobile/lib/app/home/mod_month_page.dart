@@ -151,6 +151,7 @@ class _ModMonthPageState extends State<ModMonthPage>
               context: context,
               repository: widget.repository,
               topicId: widget.topicId,
+              topicTitle: _snapshot?.topic.title,
               monthKey: draft?.monthKey ?? _month,
               block: block,
               summary: summary,

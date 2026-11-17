@@ -6,9 +6,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:moodiary_data/moodiary_data.dart';
-import 'package:moodiary_utils/moodiary_utils.dart';
 
-import 'mod_lan_rich.dart';
+import 'mod_month_document.dart';
 
 class ModMonthStoreException implements Exception {
   final String code;
@@ -72,6 +71,16 @@ class ModMonthStore {
 
   static const _topicPattern = r'^[a-zA-Z0-9_-]{1,120}$';
   static const _idPattern = r'^[a-zA-Z0-9_-]{8,120}$';
+
+  /// Legacy LAN clients cannot safely replace an AppFlowy revision.
+  Future<bool> isNativeRevision(String blockId, String revisionId) async {
+    final rows = await db.customSelect(
+      'SELECT body_json FROM mod_month_revisions WHERE block_id = ? AND revision_id = ?',
+      variables: [Variable.withString(blockId), Variable.withString(revisionId)],
+    ).get();
+    return rows.isNotEmpty &&
+        isNativeModMonthDocument(rows.single.read<String>('body_json'));
+  }
 
   static Never _bad(String code) => throw ModMonthStoreException(code);
 
@@ -215,10 +224,10 @@ class ModMonthStore {
     if (occurredAtMs < 0) _bad('invalid_event_time');
     if (parent == revision) _bad('revision_self_parent');
 
-    // W6's supported rich subset is the only editable type for this first
-    // milestone. The original JSON is preserved exactly after validation.
+    // Preserve either a validated native AppFlowy document or the existing
+    // strict legacy format exactly; the LAN adapter has a narrower contract.
     try {
-      ModLanRichDocument.validate(jsonDecode(tiptapJson));
+      validateModMonthDocument(tiptapJson);
     } catch (_) {
       _bad('unsupported_block_document');
     }

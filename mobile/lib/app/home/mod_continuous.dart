@@ -356,7 +356,7 @@ class _ModPinnedStripState extends State<ModPinnedStrip> {
                   constraints: const BoxConstraints(minHeight: 34, minWidth: 34),
                   padding: EdgeInsets.zero,
                   onPressed: () => ModDiary.isTopic(d)
-                    ? _quickAppend(context, d.id)
+                    ? _quickAppend(context, d.id, d.title)
                     : _open(context, d),
                 ),
               ])),
@@ -371,7 +371,7 @@ class _ModPinnedStripState extends State<ModPinnedStrip> {
       ]),
     );
   }
-  Future<void> _quickAppend(BuildContext context, String topicId) async {
+  Future<void> _quickAppend(BuildContext context, String topicId, String topicTitle) async {
     if (_adding) return;
     _adding = true;
     try {
@@ -381,7 +381,7 @@ class _ModPinnedStripState extends State<ModPinnedStrip> {
           store: ModMonthStore(getIt<MoodiaryDatabase>()),
           diaries: ModDiary.repo,
           onCommitted: ModLanServer.instance.notifyMonthCommitted),
-        topicId: topicId, monthKey: modMonthKey(now), initialDayKey: modDayKey(now));
+        topicId: topicId, topicTitle: topicTitle, monthKey: modMonthKey(now), initialDayKey: modDayKey(now));
       if (saved != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.month.savedLocal)));

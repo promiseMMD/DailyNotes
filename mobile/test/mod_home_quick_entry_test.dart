@@ -49,12 +49,10 @@ void main(){
     expect(find.byType(ModMonthComposer),findsOneWidget);
     expect(find.byType(ModTopicPage),findsNothing);
     expect(find.byType(ModMonthPage),findsNothing);
-    await tester.tapAt(const Offset(5,5));
+    await tester.tapAt(const Offset(380,500));
     await tester.pumpAndSettle();
     expect(find.byType(ModMonthComposer),findsOneWidget);
     await tester.tap(find.byTooltip(l10n.common.close));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton,l10n.month.discard));
     await tester.pumpAndSettle();
     expect(find.byType(ModMonthComposer),findsNothing);
     expect(find.text('Original home'),findsOneWidget);

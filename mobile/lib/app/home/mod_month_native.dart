@@ -4,7 +4,7 @@ import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_models/moodiary_models.dart';
 
 import 'mod_continuous.dart' show ModDiary;
-import 'mod_lan_rich.dart';
+import 'mod_month_document.dart';
 import 'mod_month_store.dart';
 
 String modMonthKey(DateTime value) =>
@@ -88,7 +88,7 @@ class ModNativeMonthRepository {
     final blocks = await store.readMonth(topicId: topicId, monthKey: monthKey,
       includeDeleted: true);
     for (final block in blocks) {
-      ModLanRichDocument.validate(jsonDecode(block.tiptapJson));
+      validateModMonthDocument(block.tiptapJson);
       // A corrupt/imported timestamp or date must fail this snapshot before
       // native date widgets can throw or normalize it into another archive day.
       if (block.occurredAtMs < 0) {

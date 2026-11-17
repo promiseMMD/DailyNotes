@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:appflowy_editor/appflowy_editor.dart' as af;
 import 'package:flutter/services.dart';
 import 'package:moodiary_editor/moodiary_editor.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_utils/moodiary_utils.dart';
 import 'package:mui/mui.dart';
 
-import 'mod_lan_rich.dart';
+import '../dailynotes/editor/document_canvas.dart';
+import '../dailynotes/editor/document_envelope.dart';
+import 'mod_month_document.dart';
 import 'mod_month_native.dart';
 import 'mod_month_store.dart';
 import 'mod_month_order.dart';
@@ -147,6 +150,7 @@ Future<ModStoredBlock?> showModMonthComposer({
   required BuildContext context,
   required ModNativeMonthRepository repository,
   required String topicId,
+  String? topicTitle,
   required String monthKey,
   ModStoredBlock? block,
   bool summary = false,
@@ -186,6 +190,7 @@ Future<ModStoredBlock?> showModMonthComposer({
         builder: (_) => ModMonthComposer(
           repository: repository,
           topicId: topicId,
+          topicTitle: topicTitle,
           monthKey: monthKey,
           block: block,
           summary: summary,
@@ -213,6 +218,7 @@ Future<ModStoredBlock?> showModMonthComposer({
 class ModMonthComposer extends StatefulWidget {
   final ModNativeMonthRepository repository;
   final String topicId;
+  final String? topicTitle;
   final String monthKey;
   final ModStoredBlock? block;
   final bool summary;
@@ -226,6 +232,7 @@ class ModMonthComposer extends StatefulWidget {
     super.key,
     required this.repository,
     required this.topicId,
+    this.topicTitle,
     required this.monthKey,
     this.block,
     this.summary = false,
@@ -243,6 +250,14 @@ class ModMonthComposer extends StatefulWidget {
 class _ModMonthComposerState extends State<ModMonthComposer>
     with WidgetsBindingObserver {
   late final _editor = widget.editorController ?? MoodiaryEditorController();
+  final FocusNode _documentFocus = FocusNode(
+    debugLabel: 'long-record-document',
+  );
+  af.EditorState? _documentEditor;
+  af.EditorScrollController? _documentScroll;
+  StreamSubscription<dynamic>? _documentChanges;
+  String? _initialNativeDocument;
+  late bool _documentUnlocked;
   late final String _blockId;
   late final String? _parentRevisionId;
   late final String _initialBody;
@@ -274,12 +289,14 @@ class _ModMonthComposerState extends State<ModMonthComposer>
   bool get _summary => widget.block?.kind == 'summary' || widget.summary;
   bool get _editing => widget.action == 'edit';
   bool get _locked => _busy || _leaving || _attempt != null;
+  bool get _documentEditable => _editing && _documentUnlocked && !_locked;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final block = widget.block;
+    _documentUnlocked = block == null || widget.editorController != null;
     final draft = widget.initialDraft;
     _blockId = draft?['blockId'] as String? ?? block?.blockId ?? uuidV7();
     _parentRevisionId = draft != null
@@ -316,13 +333,60 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       }
     }
     _initialBody = _body;
+    if (_editing && widget.editorController == null) {
+      try {
+        _documentEditor = af.EditorState(
+          document: DailyNotesDocumentEnvelope.decode(_body),
+        );
+        _initialNativeDocument = jsonEncode(_documentEditor!.document.toJson());
+        _documentScroll = af.EditorScrollController(
+          editorState: _documentEditor!,
+        );
+        _documentChanges = _documentEditor!.transactionStream.listen((event) {
+          if (event.$1 != af.TransactionTime.after || _locked) return;
+          try {
+            _body = DailyNotesDocumentEnvelope.encode(
+              _documentEditor!.document,
+            );
+            _snapshotUncertain = false;
+            _draftChanged();
+          } catch (_) {
+            _snapshotUncertain = true;
+            _draftWriteFailed = true;
+            if (mounted) setState(() {});
+          }
+        });
+      } catch (_) {
+        // Keep unsupported previous content intact and fail closed.
+        _documentEditor = null;
+      }
+    }
   }
 
   @override
   void dispose() {
     _draftTimer?.cancel();
+    _documentChanges?.cancel();
+    _documentScroll?.dispose();
+    _documentEditor?.dispose();
+    _documentFocus.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<String> _snapshot() async {
+    if (widget.editorController != null) return _editor.snapshot();
+    final editor = _documentEditor;
+    if (editor == null) throw const FormatException('unsupported_document');
+    return DailyNotesDocumentEnvelope.encode(editor.document);
+  }
+
+  Future<void> _blur() async {
+    if (widget.editorController != null) {
+      await _editor.blur();
+    } else {
+      _documentFocus.unfocus();
+    }
   }
 
   @override
@@ -379,7 +443,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
     if (!_autoDraft || _locked) return;
     final before = _draftRevision;
     try {
-      final snapshot = await _editor.snapshot();
+      final snapshot = await _snapshot();
       jsonDecode(snapshot);
       if (!mounted || _locked) return;
       // A newer editor callback supersedes an older asynchronous snapshot.
@@ -471,7 +535,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       if (_editing && _attempt == null && !_busy) {
         // Copy uses the same acknowledged read as Save; never claims an older
         // debounced value is the complete current draft.
-        _body = await _editor.snapshot();
+        _body = await _snapshot();
       }
       final payload =
           _attempt?.toJson() ??
@@ -551,12 +615,19 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       if (_editing && _attempt == null) {
         // An acknowledged snapshot includes the final keystroke, even when the
         // WebView's debounced onChanged callback has not reached Flutter yet.
-        await _editor.blur();
-        _body = await _editor.snapshot();
+        await _blur();
+        _body = await _snapshot();
       }
       final unchanged =
           _attempt == null &&
           ((!_editing) ||
+              (widget.editorController == null &&
+                  widget.block != null &&
+                  _documentEditor != null &&
+                  jsonEncode(_documentEditor!.document.toJson()) ==
+                      _initialNativeDocument &&
+                  _day == _baselineDay &&
+                  _event.millisecondsSinceEpoch == _baselineEventMs) ||
               (_body == _baselineBody &&
                   _day == _baselineDay &&
                   _event.millisecondsSinceEpoch == _baselineEventMs) ||
@@ -611,11 +682,11 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       await _draftWrites;
       if (_attempt == null) {
         if (_editing) {
-          await _editor.blur();
-          final current = await _editor.snapshot();
+          await _blur();
+          final current = await _snapshot();
           // Keep unsupported pasted nodes in the editor and fail closed. No
           // flattening, normalization, or temporary Diary can lose that draft.
-          ModLanRichDocument.validate(jsonDecode(current));
+          validateModMonthDocument(current);
           if (modBlockText(current).isEmpty) {
             if (mounted)
               setState(() {
@@ -715,6 +786,25 @@ class _ModMonthComposerState extends State<ModMonthComposer>
             icon: const Icon(LucideIcons.x),
           ),
           actions: [
+            if (_editing &&
+                widget.block != null &&
+                widget.editorController == null &&
+                _documentEditor != null &&
+                _attempt == null)
+              IconButton(
+                tooltip: _documentUnlocked
+                    ? l10n.dailynotes.lockEditing
+                    : l10n.dailynotes.unlockEditing,
+                icon: Icon(
+                  _documentUnlocked ? LucideIcons.lock : LucideIcons.lockOpen,
+                ),
+                onPressed: _locked
+                    ? null
+                    : () {
+                        if (_documentUnlocked) _documentFocus.unfocus();
+                        setState(() => _documentUnlocked = !_documentUnlocked);
+                      },
+              ),
             if (showDraftStatus)
               IconButton(
                 tooltip: draftStatus,
@@ -744,16 +834,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
         body: SafeArea(
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  l10n.month.localOnly,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.theme.typography.bodySmall.secondary,
-                ),
-              ),
-              if (_editing && !_summary)
+              if (_editing && widget.editorController != null && !_summary)
                 Wrap(
                   spacing: 8,
                   children: [
@@ -808,26 +889,81 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                 ),
               Expanded(
                 child: _editing
-                    ? AbsorbPointer(
-                        absorbing: _locked,
-                        child: MoodiaryEditor(
-                          controller: _editor,
-                          bodyOnly: true,
-                          initialContent: _initialBody,
-                          onChanged: (value) {
-                            if (!_locked && value != _body) {
-                              _body = value;
-                              _draftChanged();
-                            }
-                          },
-                        ),
-                      )
+                    ? widget.editorController != null
+                          ? AbsorbPointer(
+                              absorbing: _locked,
+                              child: MoodiaryEditor(
+                                controller: _editor,
+                                bodyOnly: true,
+                                initialContent: _initialBody,
+                                onChanged: (value) {
+                                  if (!_locked && value != _body) {
+                                    _body = value;
+                                    _draftChanged();
+                                  }
+                                },
+                              ),
+                            )
+                          : _documentEditor == null
+                          ? Center(
+                              child: Text(
+                                l10n.dailynotes.richDocumentUnsupported,
+                              ),
+                            )
+                          : AbsorbPointer(
+                              absorbing: _locked,
+                              child: DailyNotesDocumentCanvas(
+                                editor: _documentEditor!,
+                                focusNode: _documentFocus,
+                                scrollController: _documentScroll!,
+                                editable: _documentEditable,
+                                autoFocus:
+                                    widget.block == null && _attempt == null,
+                                header: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (widget.topicTitle case final name?)
+                                      Text(
+                                        name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge,
+                                      ),
+                                    if (!_summary)
+                                      Wrap(
+                                        spacing: 8,
+                                        children: [
+                                          TextButton.icon(
+                                            onPressed: _documentEditable
+                                                ? _date
+                                                : null,
+                                            icon: const Icon(
+                                              LucideIcons.calendar,
+                                            ),
+                                            label: Text(_day!),
+                                          ),
+                                          TextButton.icon(
+                                            onPressed: _documentEditable
+                                                ? _time
+                                                : null,
+                                            icon: const Icon(LucideIcons.clock),
+                                            label: Text(
+                                              TimeOfDay.fromDateTime(_event)
+                                                  .format(context),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            )
                     : SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
                         child: SelectableText(modBlockText(_body)),
                       ),
               ),
-              if (_editing)
+              if (_editing && widget.editorController != null)
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -899,7 +1035,17 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: _busy || _leaving || _conflict ? null : _save,
+                    onPressed:
+                        _busy ||
+                            _leaving ||
+                            _conflict ||
+                            (_editing &&
+                                widget.block != null &&
+                                widget.editorController == null &&
+                                !_documentUnlocked &&
+                                _attempt == null)
+                        ? null
+                        : _save,
                     child: Text(
                       _busy
                           ? l10n.diary.saving

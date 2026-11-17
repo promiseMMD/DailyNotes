@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:appflowy_editor/appflowy_editor.dart' as af;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
 import 'package:moodiary_mobile/app/home/mod_continuous.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_envelope.dart';
 import 'package:moodiary_mobile/app/home/mod_lan_month_http.dart';
 import 'package:moodiary_mobile/app/home/mod_month_native.dart';
 import 'package:moodiary_mobile/app/home/mod_month_store.dart';
@@ -212,8 +214,22 @@ void main() {
       await expectLater(native.commit(operation(base:first,text:'过期手机草稿')),
         throwsA(isA<ModMonthStoreException>()));
       final latest = (await native.load(topicId,month)).blocks.single;
-      await native.commit(operation(base:latest,text:'来自手机的后续版本'));
+      final phone = await native.commit(operation(base:latest,text:'来自手机的后续版本'));
       expect((await send(mutation:operation(base:latest,text:'过期 PC 草稿'))).status,409);
+      final nativeDoc = DailyNotesDocumentEnvelope.encode(af.Document(root: af.pageNode(children: [
+        af.headingNode(level: 2, text: '完整原生格式'),
+        af.bulletedListNode(text: '列表'),
+      ])));
+      final rich = await native.commit(ModMonthMutation(
+        operationId:'native-op-appflowy', revisionId:'native-rev-appflowy',
+        blockId:phone.blockId, topicId:topicId, monthKey:month, kind:'entry',
+        parentRevisionId:phone.revisionId, dayKey:phone.dayKey,
+        occurredAtMs:phone.occurredAtMs, tiptapJson:nativeDoc,
+      ));
+      final blocked = await send(mutation:operation(base:rich,text:'丢失格式的旧客户端内容'));
+      expect(blocked.status,409);
+      expect(blocked.body['error'],'native_document_read_only');
+      expect((await native.load(topicId,month)).blocks.single.tiptapJson,nativeDoc);
     } finally {
       client.close(force:true);
       await server.close(force:true);

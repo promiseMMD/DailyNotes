@@ -11,6 +11,7 @@ import 'package:moodiary_logging/moodiary_logging.dart';
 
 import 'mod_continuous.dart' show ModDiary;
 import 'mod_lan_write.dart';
+import 'mod_lan_rich.dart';
 import 'mod_month_store.dart';
 
 class ModLanMonthHttp {
@@ -195,9 +196,16 @@ class ModLanMonthHttp {
             body['occurredAtMs'] is! int || body['deleted'] is! bool) {
           _reject(422, 'invalid_month_revision');
         }
+        // LAN clients only understand the original strict Tiptap format.
+        ModLanRichDocument.validate(body['document']);
         final saved = await store.db.transaction(() async {
           _active(isSessionActive);
           await _requireTopic(topicId);
+          final parent = body['parentRevisionId'] as String?;
+          if (parent != null &&
+              await store.isNativeRevision(body['blockId'] as String, parent)) {
+            _reject(409, 'native_document_read_only');
+          }
           final result = await store.appendRevision(
             operationId: body['operationId'] as String,
             blockId: body['blockId'] as String,

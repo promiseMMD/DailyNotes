@@ -428,6 +428,36 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     }
   }
 
+  Future<void> _openColor() async {
+    final session = _capture();
+    if (session == null || !_textOnly(session.selection)) return;
+    final keyboardWasVisible =
+        View.of(context).viewInsets.bottom > 0 && widget.focusNode.hasFocus;
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    if (!mounted || !_sessionValid(session)) return;
+    final done = await showModalBottomSheet<bool>(
+      context: context,
+      requestFocus: false,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _QuickColorSheet(
+        editor: widget.editor,
+        valid: () => _sessionValid(session) && !_busy,
+        execute: (command) => _runSession(session, command),
+        color: _color,
+      ),
+    );
+    if (done == true &&
+        keyboardWasVisible &&
+        mounted &&
+        widget.focusNode.hasFocus &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        _sessionValid(session)) {
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+    }
+  }
+
   void _selectionExpired() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(context.l10n.dailynotes.editorSelectionChanged)),
@@ -452,7 +482,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       isSelected: selected,
       style: selected
           ? IconButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+              backgroundColor: context.theme.colors.secondaryContainer,
             )
           : null,
       onPressed: onPressed,
@@ -487,7 +517,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       children: [
         Expanded(child: widget.child),
         Material(
-          color: Theme.of(context).colorScheme.surface,
+          color: context.theme.colors.surface,
           child: SizedBox(
             height: 42,
             child: Row(
@@ -647,6 +677,12 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
                             af.AppFlowyRichTextKeys.strikethrough,
                           ),
                         ),
+                        _button(
+                          'color',
+                          l10n.dailynotes.editorTextColor,
+                          LucideIcons.baseline,
+                          canText ? _openColor : null,
+                        ),
                         if (!isRange) ...[
                           _button(
                             'undo',
@@ -692,6 +728,158 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
           ),
         ),
       ],
+    );
+  }
+}
+
+List<(String, String?, Color)> _editorColors(BuildContext context) {
+  final t = context.l10n.dailynotes;
+  final choices = <(String, String?)>[
+    (t.editorColorDefault, null),
+    (t.editorColorRed, '0xffd32f2f'),
+    (t.editorColorOrange, '0xffef6c00'),
+    (t.editorColorYellow, '0xffffc107'),
+    (t.editorColorGreen, '0xff388e3c'),
+    (t.editorColorBlue, '0xff1976d2'),
+    (t.editorColorPurple, '0xff7b1fa2'),
+  ];
+  // Swatches and persisted colors must share exactly the same value.
+  return [
+    for (final (label, value) in choices)
+      (
+        label,
+        value,
+        value == null ? context.theme.colors.surface : Color(int.parse(value)),
+      ),
+  ];
+}
+
+String? _colorValue(String key, String? value) =>
+    value != null && key == af.AppFlowyRichTextKeys.backgroundColor
+    ? value.replaceFirst('0xff', '0x4d')
+    : value;
+
+class _QuickColorSheet extends StatefulWidget {
+  const _QuickColorSheet({
+    required this.editor,
+    required this.valid,
+    required this.execute,
+    required this.color,
+  });
+  final af.EditorState editor;
+  final bool Function() valid;
+  final Future<bool> Function(_FormatCommand) execute;
+  final Future<void> Function(af.Selection, String, String?) color;
+
+  @override
+  State<_QuickColorSheet> createState() => _QuickColorSheetState();
+}
+
+class _QuickColorSheetState extends State<_QuickColorSheet> {
+  late final StreamSubscription<dynamic> _changes;
+  bool _running = false;
+  bool _expired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.editor.selectionNotifier.addListener(_changed);
+    _changes = widget.editor.transactionStream.listen((event) {
+      if (event.$1 == af.TransactionTime.after) _changed();
+    });
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.editor.selectionNotifier.removeListener(_changed);
+    _changes.cancel();
+    super.dispose();
+  }
+
+  Future<void> _select(String key, String? value) async {
+    if (_running || _expired || !widget.valid()) return;
+    setState(() => _running = true);
+    final success = await widget.execute(
+      (selection) => widget.color(selection, key, _colorValue(key, value)),
+    );
+    if (!mounted) return;
+    setState(() {
+      _running = false;
+      _expired = !success;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.l10n.dailynotes;
+    final valid = !_expired && widget.valid();
+    final enabled = !_running && valid;
+    Widget palette(String key, String identifier) => Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (label, value, color) in _editorColors(context))
+          Tooltip(
+            message: label,
+            child: InkWell(
+              key: ValueKey(
+                'rich-quick-color-$identifier-${value ?? 'default'}',
+              ),
+              onTap: enabled ? () => _select(key, value) : null,
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: context.theme.colors.outline),
+                ),
+                child: value == null
+                    ? const Icon(LucideIcons.ban, size: 20)
+                    : null,
+              ),
+            ),
+          ),
+      ],
+    );
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    t.editorTextColor,
+                    style: context.theme.typography.titleMedium.onSurface,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(t.editorFormatDone),
+                ),
+              ],
+            ),
+            if (!valid && !_running) Text(t.editorSelectionChanged),
+            palette(af.AppFlowyRichTextKeys.textColor, 'text'),
+            const SizedBox(height: 18),
+            Text(
+              t.editorHighlightColor,
+              style: context.theme.typography.titleMedium.onSurface,
+            ),
+            const SizedBox(height: 8),
+            palette(af.AppFlowyRichTextKeys.backgroundColor, 'background'),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -833,7 +1021,7 @@ class _FormatSheetState extends State<_FormatSheet> {
       isSelected: selected,
       style: selected
           ? IconButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+              backgroundColor: context.theme.colors.secondaryContainer,
             )
           : null,
       onPressed: onPressed,
@@ -874,7 +1062,7 @@ class _FormatSheetState extends State<_FormatSheet> {
                   height: 4,
                   margin: const EdgeInsets.only(top: 8),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.outlineVariant,
+                    color: context.theme.colors.outlineVariant,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -1160,16 +1348,7 @@ class _FormatSheetState extends State<_FormatSheet> {
     ScrollController controller,
     bool enabled,
   ) {
-    final t = context.l10n.dailynotes;
-    final values = <(String, String?, Color)>[
-      (t.editorColorDefault, null, Theme.of(context).colorScheme.surface),
-      (t.editorColorRed, '0xffd32f2f', const Color(0xffd32f2f)),
-      (t.editorColorOrange, '0xffef6c00', const Color(0xffef6c00)),
-      (t.editorColorYellow, '0xffffc107', const Color(0xffffc107)),
-      (t.editorColorGreen, '0xff388e3c', const Color(0xff388e3c)),
-      (t.editorColorBlue, '0xff1976d2', const Color(0xff1976d2)),
-      (t.editorColorPurple, '0xff7b1fa2', const Color(0xff7b1fa2)),
-    ];
+    final values = _editorColors(context);
     return ListView(
       controller: controller,
       padding: const EdgeInsets.all(16),
@@ -1188,11 +1367,7 @@ class _FormatSheetState extends State<_FormatSheet> {
                           (s) => widget.color(
                             s,
                             _colorKey!,
-                            value != null &&
-                                    _colorKey ==
-                                        af.AppFlowyRichTextKeys.backgroundColor
-                                ? value.replaceFirst('0xff', '0x4d')
-                                : value,
+                            _colorValue(_colorKey!, value),
                           ),
                           closeColor: true,
                         )
@@ -1204,9 +1379,7 @@ class _FormatSheetState extends State<_FormatSheet> {
                     decoration: BoxDecoration(
                       color: color,
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
+                      border: Border.all(color: context.theme.colors.outline),
                     ),
                     child: value == null
                         ? const Icon(LucideIcons.ban, size: 20)

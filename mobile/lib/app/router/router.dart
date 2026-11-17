@@ -1,4 +1,6 @@
 import 'package:moodiary_assistant/moodiary_assistant.dart';
+import 'package:moodiary_data/moodiary_data.dart';
+import 'package:moodiary_di/moodiary_di.dart';
 import 'package:moodiary_diary/moodiary_diary.dart';
 import 'package:moodiary_editor/moodiary_editor.dart'
     show EditorMigrationService, editorRoutes;
@@ -7,6 +9,8 @@ import 'package:moodiary_lock/moodiary_lock.dart';
 import 'package:moodiary_media/moodiary_media.dart' show mediaRoutes;
 import 'package:moodiary_migration/moodiary_migration.dart'
     show EngineMigrationService;
+import 'package:moodiary_mobile/app/dailynotes/diary/diary_entry_gateway.dart';
+import 'package:moodiary_mobile/app/dailynotes/diary/rich_diary_page.dart';
 import 'package:moodiary_mobile/app/router/route_error_page.dart';
 import 'package:moodiary_mobile/app/settings/setting_routes.dart';
 import 'package:moodiary_mobile/app/shell/root_shell.dart' show MobileRootShell;
@@ -59,7 +63,35 @@ List<RouteBase> _mobileRoutes() => [
     path: DiaryHomeRoute.path,
     builder: (_, _) => const MobileRootShell(),
   ),
-  ...diaryRoutes(),
+  ...diaryRoutes().map((route) {
+    if (route is! GoRoute) return route;
+    if (route.path == NewDiaryRoute.path) {
+      return GoRoute(
+        path: route.path,
+        builder: (_, state) => RichDiaryPage(
+          repository: getIt<DiaryRepository>(),
+          registry: getIt<OpenDiaryRegistry>(),
+          categoryId: state.params['category_id'] as String?,
+        ),
+      );
+    }
+    if (route.path == DiaryRoute.path) {
+      return GoRoute(
+        path: route.path,
+        builder: (context, state) {
+          final id = state.params['diary_id'] as String?;
+          if (id == null) return route.builder!(context, state);
+          return DailyNotesDiaryEntryGateway(
+            repository: getIt<DiaryRepository>(),
+            registry: getIt<OpenDiaryRegistry>(),
+            diaryId: id,
+            legacy: (context) => route.builder!(context, state),
+          );
+        },
+      );
+    }
+    return route;
+  }),
   ...mediaRoutes(),
   ...settingRoutes(),
   ...syncRoutes(),

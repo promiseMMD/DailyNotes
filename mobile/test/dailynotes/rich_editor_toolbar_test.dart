@@ -69,6 +69,37 @@ void main() {
     ),
   );
 
+  testWidgets('quick color applies text and highlight to the same selection', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    final selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    editor.selection = selection;
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-color')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('rich-quick-color-background-0xff1976d2')),
+    );
+    await tester.pumpAndSettle();
+    final serialized = jsonEncode(editor.document.toJson());
+    expect(serialized, contains('0xffd32f2f'));
+    expect(serialized, contains('0x4d1976d2'));
+    expect(editor.selection, selection);
+    expect(find.text(l10n.dailynotes.editorSelectionChanged), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
   testWidgets('toolbar changes with selection without rebuilding the editor', (
     tester,
   ) async {
@@ -178,7 +209,9 @@ void main() {
             .isSelected,
         isTrue,
       );
-      await tester.tap(find.byTooltip(l10n.dailynotes.editorTextColor));
+      await tester.tap(
+        find.byKey(ValueKey('rich-format-${l10n.dailynotes.editorTextColor}')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('rich-color-0xffd32f2f')));
       await tester.pumpAndSettle();
@@ -255,7 +288,9 @@ void main() {
       final original = jsonEncode(editor.document.toJson());
       await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip(l10n.dailynotes.editorTextColor));
+      await tester.tap(
+        find.byKey(ValueKey('rich-format-${l10n.dailynotes.editorTextColor}')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('rich-color-0xffd32f2f')));
       await tester.pumpAndSettle();
@@ -491,7 +526,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip(l10n.dailynotes.editorTextColor));
+    await tester.tap(
+      find.byKey(ValueKey('rich-format-${l10n.dailynotes.editorTextColor}')),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('rich-color-0xffd32f2f')), findsOneWidget);
     await tester.binding.handlePopRoute();

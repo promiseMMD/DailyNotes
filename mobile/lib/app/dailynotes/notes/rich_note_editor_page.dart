@@ -13,7 +13,7 @@ import 'package:mui/mui.dart';
 import '../data/daily_notes_store.dart';
 import '../recovery/emergency_note_export.dart';
 import '../data/rich_document_guard.dart';
-import 'rich_editor_toolbar.dart';
+import '../editor/document_canvas.dart';
 import 'rich_note_outline.dart';
 
 /// AppFlowy document is the source of truth; text is only a list preview.
@@ -65,11 +65,27 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     _title = TextEditingController(text: widget.note?.title ?? '')
       ..addListener(_changed);
     try {
-      if (widget.note != null && widget.note!.documentVersion != 1)
+      if (widget.note != null &&
+          ((widget.note!.documentJson == null &&
+                  widget.note!.documentVersion != null) ||
+              (widget.note!.documentJson != null &&
+                  widget.note!.documentVersion != 1)))
         throw StateError('unsupported');
       final json = widget.note?.documentJson;
       _editor = json == null
-          ? widget.testEditor ?? EditorState.blank(withInitialText: true)
+          ? widget.testEditor ??
+                (widget.note == null
+                    ? EditorState.blank(withInitialText: true)
+                    : EditorState(
+                        document: Document(
+                          root: pageNode(
+                            children: widget.note!.body
+                                .split('\n')
+                                .map((line) => paragraphNode(text: line))
+                                .toList(),
+                          ),
+                        ),
+                      ))
           : EditorState(
               document: Document.fromJson(validateRichDocument(json)),
             );
@@ -97,8 +113,8 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
             startNode: _editor!.document.root,
           )
           .toList()
-          .map((node) => node.delta?.toPlainText() ?? '')
-          .where((text) => text.isNotEmpty)
+          .map((node) => node.delta?.toPlainText())
+          .whereType<String>()
           .join('\n');
 
   Future<void> _save() async {
@@ -666,22 +682,23 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                     if (_tags.isNotEmpty)
                       Text(_tags.map((tag) => '#$tag').join('  ')),
                     Expanded(
-                      child: RichEditorToolbar(
+                      child: DailyNotesDocumentCanvas(
                         editor: editor,
                         focusNode: _editorFocus,
+                        scrollController: _scrollController!,
                         editable: _editing,
-                        child: AppFlowyEditor(
-                          editorState: editor,
-                          focusNode: _editorFocus,
-                          editorScrollController: _scrollController,
-                          editable: _editing,
-                          autoFocus: widget.note == null,
-                          header: TextField(
-                            controller: _title,
-                            readOnly: !_editing,
-                            decoration: InputDecoration(
-                              hintText: t.noteTitle,
-                              border: InputBorder.none,
+                        autoFocus: widget.note == null,
+                        header: TextField(
+                          controller: _title,
+                          readOnly: !_editing,
+                          style:
+                              context.theme.typography.headlineSmall.onSurface,
+                          decoration: InputDecoration(
+                            hintText: t.noteTitle,
+                            border: InputBorder.none,
+                            filled: false,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
                             ),
                           ),
                         ),

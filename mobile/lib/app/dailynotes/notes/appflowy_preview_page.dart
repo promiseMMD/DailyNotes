@@ -2,6 +2,8 @@ import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
 
+import '../editor/document_canvas.dart';
+
 /// Isolated preview: never reads or writes the user's saved notes.
 class AppFlowyPreviewPage extends StatefulWidget {
   const AppFlowyPreviewPage({super.key});
@@ -12,10 +14,16 @@ class AppFlowyPreviewPage extends StatefulWidget {
 
 class _AppFlowyPreviewPageState extends State<AppFlowyPreviewPage> {
   final EditorState _editor = EditorState.blank(withInitialText: true);
+  final FocusNode _focus = FocusNode(debugLabel: 'preview-document');
+  late final EditorScrollController _scroll = EditorScrollController(
+    editorState: _editor,
+  );
 
   @override
   void dispose() {
+    _scroll.dispose();
     _editor.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -32,15 +40,12 @@ class _AppFlowyPreviewPageState extends State<AppFlowyPreviewPage> {
               child: Text(text.editorPreviewNotice),
             ),
             Expanded(
-              child: MobileToolbarV2(
-                editorState: _editor,
-                toolbarHeight: 48,
-                toolbarItems: [
-                  textDecorationMobileToolbarItemV2,
-                  blocksMobileToolbarItem,
-                  linkMobileToolbarItem,
-                ],
-                child: AppFlowyEditor(editorState: _editor),
+              child: DailyNotesDocumentCanvas(
+                editor: _editor,
+                focusNode: _focus,
+                scrollController: _scroll,
+                editable: true,
+                autoFocus: true,
               ),
             ),
           ],
