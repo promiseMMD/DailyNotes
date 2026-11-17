@@ -707,6 +707,24 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get enterFolderBranch => 'Browse next folder level';
 	@override String get searchNotesEverywhere => 'Search notes and tags in all folders';
 	@override String get noteSearchResults => 'Search results';
+	@override String get editorSelectionChanged => 'The selection or document changed. Return to the document and select again.';
+	@override String get editorBackToFormat => 'Back to formatting';
+	@override String get editorTextColor => 'Text color';
+	@override String get editorHighlightColor => 'Highlight color';
+	@override String get editorFormatDone => 'Done';
+	@override String get editorAlignLeft => 'Align left';
+	@override String get editorAlignCenter => 'Align center';
+	@override String get editorAlignRight => 'Align right';
+	@override String get editorColorDefault => 'Default color';
+	@override String get editorColorRed => 'Red';
+	@override String get editorColorOrange => 'Orange';
+	@override String get editorColorYellow => 'Yellow';
+	@override String get editorColorGreen => 'Green';
+	@override String get editorColorBlue => 'Blue';
+	@override String get editorColorPurple => 'Purple';
+	@override String get editorHeading1 => 'Heading 1';
+	@override String get editorHeading2 => 'Heading 2';
+	@override String get editorHeading3 => 'Heading 3';
 }
 
 // Path: dailynotesNavigation

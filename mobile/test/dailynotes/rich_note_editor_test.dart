@@ -20,6 +20,80 @@ void main() {
   });
   tearDownAll(() => getIt.reset());
 
+  testWidgets(
+    'toolbar formatting is saved as rich content and reopens read-only',
+    (tester) async {
+      final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+      final store = DailyNotesStore(db);
+      await store.open();
+      final editor = EditorState(
+        document: Document(
+          root: pageNode(children: [paragraphNode(text: 'alpha beta')]),
+        ),
+      );
+      tester.view.physicalSize = const Size(430, 900);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      Widget app(Widget home) => TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+            GlobalMuiLocalizations.delegate,
+          ],
+          builder: (context, child) =>
+              MaterialUiCompatibilityBridge(child: child!),
+          home: home,
+        ),
+      );
+      await tester.pumpWidget(
+        app(RichNoteEditorPage(store: store, testEditor: editor)),
+      );
+      await tester.pumpAndSettle();
+      editor.selection = Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DraggableScrollableSheet),
+          matching: find.byTooltip(l10n.editor.toolbar.bold),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(store.notes, hasLength(1));
+      expect(store.notes.single.documentJson, contains('"bold":true'));
+      expect(store.notes.single.body, 'alpha beta');
+      final saved = store.notes.single;
+      await tester.pumpWidget(const SizedBox());
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pumpWidget(
+        app(RichNoteEditorPage(store: store, note: saved)),
+      );
+      await tester.pumpAndSettle();
+      final reopened = tester.widget<AppFlowyEditor>(
+        find.byType(AppFlowyEditor),
+      );
+      expect(reopened.editorState.editable, isFalse);
+      expect(
+        jsonEncode(reopened.editorState.document.toJson()),
+        contains('"bold":true'),
+      );
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+    },
+  );
+
   testWidgets('rich editor changes are saved in the note and its outbox', (
     tester,
   ) async {

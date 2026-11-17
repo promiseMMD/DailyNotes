@@ -1949,6 +1949,60 @@ class Translations$dailynotes$zh {
 
 	/// zh: '搜索结果'
 	String get noteSearchResults => '搜索结果';
+
+	/// zh: '选区或正文已变化，请返回正文重新选择。'
+	String get editorSelectionChanged => '选区或正文已变化，请返回正文重新选择。';
+
+	/// zh: '返回排版'
+	String get editorBackToFormat => '返回排版';
+
+	/// zh: '文字颜色'
+	String get editorTextColor => '文字颜色';
+
+	/// zh: '文字高亮'
+	String get editorHighlightColor => '文字高亮';
+
+	/// zh: '完成'
+	String get editorFormatDone => '完成';
+
+	/// zh: '左对齐'
+	String get editorAlignLeft => '左对齐';
+
+	/// zh: '居中'
+	String get editorAlignCenter => '居中';
+
+	/// zh: '右对齐'
+	String get editorAlignRight => '右对齐';
+
+	/// zh: '默认颜色'
+	String get editorColorDefault => '默认颜色';
+
+	/// zh: '红色'
+	String get editorColorRed => '红色';
+
+	/// zh: '橙色'
+	String get editorColorOrange => '橙色';
+
+	/// zh: '黄色'
+	String get editorColorYellow => '黄色';
+
+	/// zh: '绿色'
+	String get editorColorGreen => '绿色';
+
+	/// zh: '蓝色'
+	String get editorColorBlue => '蓝色';
+
+	/// zh: '紫色'
+	String get editorColorPurple => '紫色';
+
+	/// zh: '一级标题'
+	String get editorHeading1 => '一级标题';
+
+	/// zh: '二级标题'
+	String get editorHeading2 => '二级标题';
+
+	/// zh: '三级标题'
+	String get editorHeading3 => '三级标题';
 }
 
 // Path: dailynotesNavigation

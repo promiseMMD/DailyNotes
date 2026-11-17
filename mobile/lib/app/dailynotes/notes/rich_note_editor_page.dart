@@ -13,6 +13,7 @@ import 'package:mui/mui.dart';
 import '../data/daily_notes_store.dart';
 import '../recovery/emergency_note_export.dart';
 import '../data/rich_document_guard.dart';
+import 'rich_editor_toolbar.dart';
 import 'rich_note_outline.dart';
 
 /// AppFlowy document is the source of truth; text is only a list preview.
@@ -37,6 +38,7 @@ class RichNoteEditorPage extends StatefulWidget {
 class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     with WidgetsBindingObserver {
   late final TextEditingController _title;
+  final FocusNode _editorFocus = FocusNode(debugLabel: 'daily-note-editor');
   EditorState? _editor;
   EditorScrollController? _scrollController;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -476,6 +478,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     _title.dispose();
     _scrollController?.dispose();
     _editor?.dispose();
+    _editorFocus.dispose();
     super.dispose();
   }
 
@@ -663,14 +666,13 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                     if (_tags.isNotEmpty)
                       Text(_tags.map((tag) => '#$tag').join('  ')),
                     Expanded(
-                      child: MobileToolbarV2(
-                        editorState: editor,
-                        toolbarHeight: 48,
-                        toolbarItems: _editing
-                            ? [textDecorationMobileToolbarItemV2]
-                            : [],
+                      child: RichEditorToolbar(
+                        editor: editor,
+                        focusNode: _editorFocus,
+                        editable: _editing,
                         child: AppFlowyEditor(
                           editorState: editor,
+                          focusNode: _editorFocus,
                           editorScrollController: _scrollController,
                           editable: _editing,
                           autoFocus: widget.note == null,
