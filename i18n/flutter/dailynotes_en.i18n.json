@@ -158,5 +158,14 @@
   "editorColorPurple": "Purple",
   "editorHeading1": "Heading 1",
   "editorHeading2": "Heading 2",
-  "editorHeading3": "Heading 3"
+  "editorHeading3": "Heading 3",
+  "editorFont": "Font",
+  "editorFontDefault": "Default font",
+  "editorFontSans": "Sans serif",
+  "editorFontSerif": "Serif",
+  "editorFontMono": "Monospace",
+  "editorFontLoadFailed": "Some fonts could not be loaded. Check the font files.",
+  "editorLinkAddress": "Link address",
+  "editorLinkInvalid": "Enter a valid web, email, or telephone link.",
+  "editorLinkRemove": "Remove link"
 }

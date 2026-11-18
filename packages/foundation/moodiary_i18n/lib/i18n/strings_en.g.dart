@@ -725,6 +725,15 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get editorHeading1 => 'Heading 1';
 	@override String get editorHeading2 => 'Heading 2';
 	@override String get editorHeading3 => 'Heading 3';
+	@override String get editorFont => 'Font';
+	@override String get editorFontDefault => 'Default font';
+	@override String get editorFontSans => 'Sans serif';
+	@override String get editorFontSerif => 'Serif';
+	@override String get editorFontMono => 'Monospace';
+	@override String get editorFontLoadFailed => 'Some fonts could not be loaded. Check the font files.';
+	@override String get editorLinkAddress => 'Link address';
+	@override String get editorLinkInvalid => 'Enter a valid web, email, or telephone link.';
+	@override String get editorLinkRemove => 'Remove link';
 }
 
 // Path: dailynotesNavigation

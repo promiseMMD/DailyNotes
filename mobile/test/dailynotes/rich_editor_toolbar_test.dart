@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:appflowy_editor/appflowy_editor.dart' as af;
@@ -21,6 +22,9 @@ void main() {
     WidgetTester tester,
     af.EditorState editor, {
     bool editable = true,
+    af.EditorScrollController? scrollController,
+    Future<({List<String> families, bool hasUnavailable})> Function()?
+    loadFonts,
   }) async {
     final focus = FocusNode();
     addTearDown(focus.dispose);
@@ -46,10 +50,13 @@ void main() {
               editor: editor,
               focusNode: focus,
               editable: editable,
+              loadFonts: loadFonts,
+              scrollController: scrollController,
               child: af.AppFlowyEditor(
                 editorState: editor,
                 editable: editable,
                 focusNode: focus,
+                editorScrollController: scrollController,
               ),
             ),
           ),
@@ -579,4 +586,303 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     editor.dispose();
   });
+
+  testWidgets('Aa fonts apply to selection and survive serialization', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(
+      tester,
+      editor,
+      loadFonts: () async =>
+          (families: ['Imported Font'], hasUnavailable: false),
+    );
+    final selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    editor.selection = selection;
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-font-Imported Font')));
+    await tester.pumpAndSettle();
+    final serialized = jsonEncode(editor.document.toJson());
+    expect(serialized, contains('"font_family":"Imported Font"'));
+    expect(
+      jsonEncode(af.Document.fromJson(jsonDecode(serialized)).toJson()),
+      serialized,
+    );
+    expect(editor.selection, selection);
+    expect(find.byKey(const ValueKey('rich-format-font')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('font picker sets typing style for a caret and returns to Aa', (
+    tester,
+  ) async {
+    final editor = document('alpha');
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(path: [0], startOffset: 2);
+    await tester.pumpAndSettle();
+    final original = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-font-serif')));
+    await tester.pumpAndSettle();
+    expect(editor.toggledStyle[af.AppFlowyRichTextKeys.fontFamily], 'serif');
+    expect(jsonEncode(editor.document.toJson()), original);
+    expect(find.byKey(const ValueKey('rich-format-font')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.dailynotes.editorFormatDone));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-format-font')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('font load completion cannot revive a changed selection', (
+    tester,
+  ) async {
+    final pending = Completer<({List<String> families, bool hasUnavailable})>();
+    final editor = document('alpha beta');
+    await mount(tester, editor, loadFonts: () => pending.future);
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    await tester.pumpAndSettle();
+    final original = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+    await tester.pump();
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 6,
+      endOffset: 10,
+    );
+    pending.complete((families: ['Imported Font'], hasUnavailable: false));
+    await tester.pumpAndSettle();
+    final tile = tester.widget<ListTile>(
+      find.byKey(const ValueKey('rich-font-Imported Font')),
+    );
+    expect(tile.onTap, isNull);
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('selection link validates and writes the AppFlowy href', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('rich-toolbar-link')));
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-link')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('rich-link-address')),
+      'javascript:alert(1)',
+    );
+    await tester.tap(find.byKey(const ValueKey('rich-link-save')));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.dailynotes.editorLinkInvalid), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('rich-link-address')),
+      'example.com',
+    );
+    await tester.tap(find.byKey(const ValueKey('rich-link-save')));
+    await tester.pumpAndSettle();
+    final serialized = jsonEncode(editor.document.toJson());
+    expect(serialized, contains('"href":"https://example.com"'));
+    expect(
+      editor.document.root.children.single.delta!.toPlainText(),
+      'alpha beta',
+    );
+    expect(
+      jsonEncode(af.Document.fromJson(jsonDecode(serialized)).toJson()),
+      serialized,
+    );
+    await tester.ensureVisible(find.byKey(const ValueKey('rich-toolbar-link')));
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-link')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-link-remove')));
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), isNot(contains('"href"')));
+    expect(
+      editor.document.root.children.single.delta!.toPlainText(),
+      'alpha beta',
+    );
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('link dialog rejects selection changes while it is open', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    await tester.pumpAndSettle();
+    final original = jsonEncode(editor.document.toJson());
+    await tester.ensureVisible(find.byKey(const ValueKey('rich-toolbar-link')));
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-link')));
+    await tester.pumpAndSettle();
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 6,
+      endOffset: 10,
+    );
+    // Simulate a remote selection change without depending on which text
+    // input client the test binding currently considers focused.
+    tester
+            .widget<TextField>(find.byKey(const ValueKey('rich-link-address')))
+            .controller!
+            .text =
+        'https://example.com';
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('rich-link-save')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(jsonEncode(editor.document.toJson()), original);
+    expect(find.text(l10n.dailynotes.editorSelectionChanged), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('Aa scrolls only when it covers the selected text', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            for (var i = 0; i < 80; i++) af.paragraphNode(text: 'Line $i text'),
+          ],
+        ),
+      ),
+    );
+    final scroll = af.EditorScrollController(editorState: editor);
+    await mount(tester, editor, scrollController: scroll);
+    tester.view.viewInsets = FakeViewPadding.zero;
+    scroll.itemScrollController.jumpTo(index: 30, alignment: .65);
+    await tester.pumpAndSettle();
+    editor.selection = af.Selection.single(
+      path: [30],
+      startOffset: 0,
+      endOffset: 4,
+    );
+    await tester.pumpAndSettle();
+    final before = editor.selectionRects().single;
+    expect(before.bottom, greaterThan(450));
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    final after = editor.selectionRects().single;
+    final sheetHeader = tester
+        .getTopLeft(find.text(l10n.dailynotes.editorFormatDone))
+        .dy;
+    expect(after.bottom, lessThan(sheetHeader));
+    expect(after.bottom, lessThan(before.bottom));
+    await tester.pumpWidget(const SizedBox());
+    scroll.dispose();
+    editor.dispose();
+  });
+
+  testWidgets('Aa keeps the scroll anchor when selection is already visible', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            for (var i = 0; i < 80; i++) af.paragraphNode(text: 'Line $i text'),
+          ],
+        ),
+      ),
+    );
+    final scroll = af.EditorScrollController(editorState: editor);
+    await mount(tester, editor, scrollController: scroll);
+    tester.view.viewInsets = FakeViewPadding.zero;
+    scroll.itemScrollController.jumpTo(index: 30, alignment: .15);
+    await tester.pumpAndSettle();
+    editor.selection = af.Selection.single(
+      path: [30],
+      startOffset: 0,
+      endOffset: 4,
+    );
+    await tester.pumpAndSettle();
+    final before = editor.selectionRects().single;
+    expect(before.bottom, lessThan(450));
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    expect(editor.selectionRects().single.top, closeTo(before.top, .1));
+    await tester.pumpWidget(const SizedBox());
+    scroll.dispose();
+    editor.dispose();
+  });
+
+  testWidgets(
+    'dragging the Aa handle expands the sheet and reveals covered text',
+    (tester) async {
+      final editor = af.EditorState(
+        document: af.Document(
+          root: af.pageNode(
+            children: [
+              for (var i = 0; i < 80; i++)
+                af.paragraphNode(text: 'Line $i text'),
+            ],
+          ),
+        ),
+      );
+      final scroll = af.EditorScrollController(editorState: editor);
+      await mount(tester, editor, scrollController: scroll);
+      tester.view.viewInsets = FakeViewPadding.zero;
+      scroll.itemScrollController.jumpTo(index: 30, alignment: .4);
+      await tester.pumpAndSettle();
+      editor.selection = af.Selection.single(
+        path: [30],
+        startOffset: 0,
+        endOffset: 4,
+      );
+      await tester.pumpAndSettle();
+      final before = editor.selectionRects().single;
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.pumpAndSettle();
+      expect(editor.selectionRects().single.top, closeTo(before.top, .1));
+      final handle = find.byKey(const ValueKey('rich-format-drag-handle'));
+      final sheetTop = tester.getTopLeft(handle).dy;
+      await tester.drag(handle, const Offset(0, -220));
+      await tester.pumpAndSettle();
+      final expandedTop = tester.getTopLeft(handle).dy;
+      final after = editor.selectionRects().single;
+      expect(expandedTop, lessThan(sheetTop - 100));
+      expect(after.bottom, lessThan(expandedTop));
+      await tester.drag(handle, const Offset(0, 140));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(handle).dy, greaterThan(expandedTop + 70));
+      expect(editor.selectionRects().single.top, closeTo(after.top, .1));
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+    },
+  );
 }

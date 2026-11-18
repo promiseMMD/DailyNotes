@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:appflowy_editor/appflowy_editor.dart' as af;
+import 'package:moodiary_data/moodiary_data.dart';
+import 'package:moodiary_di/moodiary_di.dart';
+import 'package:moodiary_files/moodiary_files.dart';
+import 'package:moodiary_logging/moodiary_logging.dart';
+import 'package:moodiary_theme/moodiary_theme.dart';
 import 'package:mui/mui.dart';
 
 import '../notes/rich_editor_toolbar.dart';
 
 /// One mobile document surface for notes, diaries and long-record drafts.
 /// The owning page remains responsible for its own persistence lifecycle.
-class DailyNotesDocumentCanvas extends StatelessWidget {
+class DailyNotesDocumentCanvas extends StatefulWidget {
   const DailyNotesDocumentCanvas({
     super.key,
     required this.editor,
@@ -24,19 +31,88 @@ class DailyNotesDocumentCanvas extends StatelessWidget {
   final Widget? header;
 
   @override
+  State<DailyNotesDocumentCanvas> createState() =>
+      _DailyNotesDocumentCanvasState();
+}
+
+class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
+  Future<({List<String> families, bool hasUnavailable})>? _loadingFonts;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreDocumentFonts();
+  }
+
+  @override
+  void didUpdateWidget(covariant DailyNotesDocumentCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.editor, widget.editor)) _restoreDocumentFonts();
+  }
+
+  Future<({List<String> families, bool hasUnavailable})> _loadFonts() =>
+      _loadingFonts ??= _readFonts().whenComplete(() => _loadingFonts = null);
+
+  Future<({List<String> families, bool hasUnavailable})> _readFonts() async {
+    final repository = getIt.maybeGet<FontRepository>();
+    if (repository == null) {
+      return (families: <String>[], hasUnavailable: false);
+    }
+    final fonts = await repository.getAllFonts();
+    final available = <String>[];
+    var hasUnavailable = false;
+    for (final font in fonts) {
+      final loaded = await FontManager.loadFont(
+        fontName: font.fontFamily,
+        fontPath: AppFiles.getRealPath('font', font.fontFileName),
+      );
+      if (loaded) {
+        available.add(font.fontFamily);
+      } else {
+        hasUnavailable = true;
+      }
+    }
+    return (families: available, hasUnavailable: hasUnavailable);
+  }
+
+  void _restoreDocumentFonts() {
+    final editor = widget.editor;
+    unawaited(
+      _loadFonts()
+          .then((catalog) {
+            if (mounted &&
+                identical(widget.editor, editor) &&
+                !editor.isDisposed &&
+                catalog.families.isNotEmpty) {
+              editor.reload();
+            }
+          })
+          .catchError((Object error, StackTrace stack) {
+            logger.e(
+              'Unable to load document fonts',
+              error: error,
+              stackTrace: stack,
+            );
+          }),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = context.theme.colors;
     const horizontalPadding = 20.0;
     return RichEditorToolbar(
-      editor: editor,
-      focusNode: focusNode,
-      editable: editable,
+      editor: widget.editor,
+      focusNode: widget.focusNode,
+      editable: widget.editable,
+      loadFonts: _loadFonts,
+      scrollController: widget.scrollController,
       child: af.AppFlowyEditor(
-        editorState: editor,
-        focusNode: focusNode,
-        editorScrollController: scrollController,
-        editable: editable,
-        autoFocus: autoFocus,
+        editorState: widget.editor,
+        focusNode: widget.focusNode,
+        editorScrollController: widget.scrollController,
+        editable: widget.editable,
+        autoFocus: widget.autoFocus,
         // The SDK defaults to desktop styling, including 100 px margins and
         // no mobile selection handles. Use its mobile configuration explicitly.
         editorStyle: af.EditorStyle.mobile(
@@ -48,13 +124,13 @@ class DailyNotesDocumentCanvas extends StatelessWidget {
             text: context.theme.typography.bodyLarge.onSurface,
           ),
         ),
-        header: header == null
+        header: widget.header == null
             ? null
             : Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: horizontalPadding,
                 ),
-                child: header!,
+                child: widget.header!,
               ),
       ),
     );

@@ -158,5 +158,14 @@
   "editorColorPurple": "紫色",
   "editorHeading1": "一级标题",
   "editorHeading2": "二级标题",
-  "editorHeading3": "三级标题"
+  "editorHeading3": "三级标题",
+  "editorFont": "字体",
+  "editorFontDefault": "默认字体",
+  "editorFontSans": "无衬线",
+  "editorFontSerif": "衬线",
+  "editorFontMono": "等宽字体",
+  "editorFontLoadFailed": "部分字体无法加载，请检查字体文件。",
+  "editorLinkAddress": "链接地址",
+  "editorLinkInvalid": "请输入有效的网址、邮箱或电话号码链接。",
+  "editorLinkRemove": "移除链接"
 }

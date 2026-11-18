@@ -68,10 +68,18 @@ void main() {
           matching: find.byTooltip(l10n.editor.toolbar.bold),
         ),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-font-serif')));
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pumpAndSettle();
       expect(store.notes, hasLength(1));
       expect(store.notes.single.documentJson, contains('"bold":true'));
+      expect(
+        store.notes.single.documentJson,
+        contains('"font_family":"serif"'),
+      );
       expect(store.notes.single.body, 'alpha beta');
       final saved = store.notes.single;
       await tester.pumpWidget(const SizedBox());
@@ -87,6 +95,10 @@ void main() {
       expect(
         jsonEncode(reopened.editorState.document.toJson()),
         contains('"bold":true'),
+      );
+      expect(
+        jsonEncode(reopened.editorState.document.toJson()),
+        contains('"font_family":"serif"'),
       );
       await tester.pumpWidget(const SizedBox());
       store.dispose();

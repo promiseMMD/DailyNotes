@@ -44,25 +44,13 @@ Future<void> resetAllData() async {
     }
   }
 
-  var dbCleared = false;
+  // Never fall back to deleting database files after an error: the failed
+  // database may contain revisions that cannot be inspected or reconstructed.
   final db = getIt.maybeGet<MoodiaryDatabase>();
-  if (db != null) {
-    await step('database.clearAll', () async {
-      await db.clearAll();
-      dbCleared = true;
-    });
+  if (db == null) {
+    throw StateError('Reset blocked: cannot verify protected history.');
   }
-  if (!dbCleared) {
-    await step(
-      'database.deleteFiles',
-      () => Future.wait([
-        for (final suffix in const ['', '-wal', '-shm', '-journal'])
-          AppFiles.deleteFile(
-            AppFiles.getRealPath('database', 'moodiary.db$suffix'),
-          ),
-      ]),
-    );
-  }
+  await db.clearAll();
   await step('kv.clear', () async => getIt.maybeGet<IKVStorage>()?.clear());
   await Future.wait([
     step('secureKv.clear', () async {

@@ -135,12 +135,45 @@ void main() {
     expect(await map.readTopic(topic), hasLength(1));
   });
 
-  test('clearAll clears day mapping as well as W9 month blocks', () async {
-    await seed();
-    await map.ensureFromLiveBlock(topicId:topic,dayKey:day);
+  test(
+    'automatic clearing preserves revisions and all related day data',
+    () async {
+      await seed();
+      await map.ensureFromLiveBlock(topicId: topic, dayKey: day);
+      await expectLater(
+        db.clearAll(),
+        throwsA(isA<HistoryRetentionException>()),
+      );
+      expect(await map.readTopic(topic), hasLength(1));
+      for (final table in [
+        'mod_month_blocks',
+        'mod_month_revisions',
+        'mod_month_heads',
+      ]) {
+        expect(
+          (await db
+                  .customSelect('SELECT COUNT(*) AS n FROM $table')
+                  .getSingle())
+              .read<int>('n'),
+          1,
+        );
+      }
+    },
+  );
+
+  test('clearing an empty history does not block ordinary cleanup', () async {
+    await db.customStatement(
+      'INSERT INTO mod_month_pages(topic_id,month_key,diary_id,created_ms) '
+      'VALUES(?,?,NULL,?)',
+      [topic, month, 10],
+    );
     await db.clearAll();
-    expect(await map.readTopic(topic),isEmpty);
-    expect((await db.customSelect('SELECT COUNT(*) AS n FROM mod_month_blocks')
-        .getSingle()).read<int>('n'),0);
+    expect(
+      (await db
+              .customSelect('SELECT COUNT(*) AS n FROM mod_month_pages')
+              .getSingle())
+          .read<int>('n'),
+      0,
+    );
   });
 }

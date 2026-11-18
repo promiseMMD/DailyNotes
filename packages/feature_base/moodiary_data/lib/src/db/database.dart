@@ -9,12 +9,19 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 import 'package:sqlite3_simple/sqlite3_simple.dart';
 import 'package:sqlite3_vec/sqlite3_vec.dart';
 
+import '../mod_day_schema.dart';
+import '../mod_month_schema.dart';
 import 'database.steps.dart';
 import 'db_codec.dart';
-import '../mod_month_schema.dart';
-import '../mod_day_schema.dart';
 
 part 'database.g.dart';
+
+/// Automatic replacement or clearing cannot authorize deletion of revisions.
+/// A separate explicit deletion workflow is required before this can proceed.
+class HistoryRetentionException extends StateError {
+  HistoryRetentionException()
+    : super('DailyNotes history is protected; automatic clearing is blocked.');
+}
 
 @DriftDatabase(
   include: {
@@ -248,6 +255,18 @@ class MoodiaryDatabase extends _$MoodiaryDatabase {
 
   Future<void> clearAll() async {
     await transaction(() async {
+      // Migration and recovery both use this entry point. Keep the guard and
+      // deletion in the same transaction, before touching any table.
+      final revisionTable = await customSelect(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        variables: [const Variable('mod_month_revisions')],
+      ).get();
+      if (revisionTable.isNotEmpty &&
+          (await customSelect(
+            'SELECT 1 FROM mod_month_revisions LIMIT 1',
+          ).get()).isNotEmpty) {
+        throw HistoryRetentionException();
+      }
       await customStatement('PRAGMA defer_foreign_keys = ON');
       // DailyNotes preview extensions are optional in untouched Moodiary DBs.
       // Keep reset atomic and remove links before referenced records.

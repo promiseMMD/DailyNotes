@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_files/moodiary_files.dart';
 import 'package:moodiary_mobile/app/di/bootstrap.dart';
 import 'package:mui/mui.dart';
@@ -125,7 +126,10 @@ class _BootFailurePageState extends State<BootFailurePage> {
                       TextButton(
                         onPressed: _reset,
                         child: Text(
-                          _resetError != null
+                          _resetError is HistoryRetentionException
+                              ? '历史版本受保护，暂不能通过此处清空。\n'
+                                    'Protected history cannot be erased here.'
+                              : _resetError != null
                               ? '清空失败 / Reset failed: $_resetError'
                               : _resetArmed
                               ? '再点一次确认清空所有数据 / Tap again to confirm'

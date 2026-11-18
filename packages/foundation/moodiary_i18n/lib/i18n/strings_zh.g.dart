@@ -2003,6 +2003,33 @@ class Translations$dailynotes$zh {
 
 	/// zh: '三级标题'
 	String get editorHeading3 => '三级标题';
+
+	/// zh: '字体'
+	String get editorFont => '字体';
+
+	/// zh: '默认字体'
+	String get editorFontDefault => '默认字体';
+
+	/// zh: '无衬线'
+	String get editorFontSans => '无衬线';
+
+	/// zh: '衬线'
+	String get editorFontSerif => '衬线';
+
+	/// zh: '等宽字体'
+	String get editorFontMono => '等宽字体';
+
+	/// zh: '部分字体无法加载，请检查字体文件。'
+	String get editorFontLoadFailed => '部分字体无法加载，请检查字体文件。';
+
+	/// zh: '链接地址'
+	String get editorLinkAddress => '链接地址';
+
+	/// zh: '请输入有效的网址、邮箱或电话号码链接。'
+	String get editorLinkInvalid => '请输入有效的网址、邮箱或电话号码链接。';
+
+	/// zh: '移除链接'
+	String get editorLinkRemove => '移除链接';
 }
 
 // Path: dailynotesNavigation
