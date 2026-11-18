@@ -1,7 +1,7 @@
 # DailyNotes 需求规范索引
 
-> **当前设计规范**：[DailyNotes开发规范_V3.67.md](./DailyNotes开发规范_V3.67.md)（2026-11-18，承接 V3.66，新增 DN-252，DN-001～DN-252）  
-> **上一版本**：[DailyNotes开发规范_V3.66.md](./DailyNotes开发规范_V3.66.md)（DN-001～DN-251）  \n> **更早版本**：[DailyNotes开发规范_V3.49.md](./DailyNotes开发规范_V3.49.md)（DN-001～DN-240，保留不删除）  
+> **当前设计规范**：[DailyNotes开发规范_V3.68.md](./DailyNotes开发规范_V3.68.md)（2026-11-18，承接 V3.67，新增 DN-253～DN-254，DN-001～DN-254）  
+> **上一版本**：[DailyNotes开发规范_V3.67.md](./DailyNotes开发规范_V3.67.md)（DN-001～DN-252）  \n> **更早版本**：[DailyNotes开发规范_V3.49.md](./DailyNotes开发规范_V3.49.md)（DN-001～DN-240，保留不删除）  
 > **较早完整版本**：[DailyNotes开发规范_V3.27.md](./DailyNotes开发规范_V3.27.md)（DN-001～DN-228，保留不删除）  
 > **上一份完整规范**：[DailyNotes开发规范_V3.12.md](./DailyNotes开发规范_V3.12.md)（DN-001～DN-216）  
 > **最近的完整历史基线**：[DailyNotes开发规范_V2.77.md](./DailyNotes开发规范_V2.77.md)（DN-001～DN-203）  
@@ -73,3 +73,10 @@
 - 压缩格式、校验、索引、恢复与用户授权删除交互待讨论；生成过程中的未登记临时产物另行定义安全清理规则。
 - 本条不自动决定 Operation Event Log、Checkpoint、附件、Recovery ZIP 或 WebDAV 远端副本的生命周期；规范确认不等于功能已实现。
 - 后续每项用户明确确认的设计决策均应及时增量归档并读回验证。
+
+
+## V3.68 新增确认项（DN-253～DN-254）
+
+- **DN-253：** 用户确认方案 A——手机本地 Snapshot 独立管理；Sync Snapshot 仅在用户主动手动 WebDAV 同步时按需上传；Recovery Snapshot 不自动上传；Recovery ZIP 由用户主动创建并可另行主动上传；Operation Log、Checkpoint 与附件继续遵守既有手动增量同步规则。
+- **DN-254：** 用户确认方案 A——Recovery Snapshot 仅在关键高风险数据操作前自动生成，或由用户手动创建；不设置每日/固定周期自动生成；普通编辑和普通 WebDAV 增量同步不触发自动生成。关键操作前快照创建或验证失败时，默认阻止操作继续，任何应急例外须另行明确设计与授权。
+- 上述内容是已确认需求，不代表代码或端到端功能已经实现；快照数据范围、协议、WAL 一致性、附件校验、故障注入与恢复验收仍待设计。
