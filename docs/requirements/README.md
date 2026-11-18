@@ -1,7 +1,7 @@
 # DailyNotes 需求规范索引
 
-> **当前设计规范**：[DailyNotes开发规范_V3.69.md](./DailyNotes开发规范_V3.69.md)（2026-11-18，承接 V3.68，新增 DN-255，DN-001～DN-255）  
-> **上一版本**：[DailyNotes开发规范_V3.68.md](./DailyNotes开发规范_V3.68.md)（DN-001～DN-254）  \n> **更早版本**：[DailyNotes开发规范_V3.49.md](./DailyNotes开发规范_V3.49.md)（DN-001～DN-240，保留不删除）  
+> **当前设计规范**：[DailyNotes开发规范_V3.70.md](./DailyNotes开发规范_V3.70.md)（2026-11-18，承接 V3.69，新增 DN-256，DN-001～DN-256）  
+> **上一版本**：[DailyNotes开发规范_V3.69.md](./DailyNotes开发规范_V3.69.md)（DN-001～DN-255）  \n> **更早版本**：[DailyNotes开发规范_V3.49.md](./DailyNotes开发规范_V3.49.md)（DN-001～DN-240，保留不删除）  
 > **较早完整版本**：[DailyNotes开发规范_V3.27.md](./DailyNotes开发规范_V3.27.md)（DN-001～DN-228，保留不删除）  
 > **上一份完整规范**：[DailyNotes开发规范_V3.12.md](./DailyNotes开发规范_V3.12.md)（DN-001～DN-216）  
 > **最近的完整历史基线**：[DailyNotes开发规范_V2.77.md](./DailyNotes开发规范_V2.77.md)（DN-001～DN-203）  
@@ -90,3 +90,13 @@
 - 附件缺失/哈希不匹配时标记异常，优先从其他已验证副本修复；无可用副本时明确报告，不伪装完整恢复、不破坏历史引用。
 - 不得仅凭当前引用计数为零清理附件。DN-124/127 等既有 30 天隔离与自动清理规则尚未被本条废止；必须进一步协调其适用条件与 Revision、Snapshot、回收站、同步及恢复依赖，冲突时不得破坏可恢复历史。
 - 本条不代表附件仓库、去重、Manifest、Recovery ZIP 或修复功能已实现；工程细节与验收待后续讨论。
+
+
+## V3.70 新增确认项（DN-256）
+
+- 用户明确确认：DailyNotes 采用 **AppFlowy × Moodiary 融合编辑器方向**，不是只复制 AppFlowy 外观，也不是简单替换 Moodiary 编辑器。
+- AppFlowy 侧重点：完整区块编辑体验、+ / Aa、选区工具栏、列表/清单、引用、代码、表格、媒体、区块移动、撤销重做及移动端键盘交互。
+- Moodiary 侧重点：Flutter 原生编辑器集成、长期主题/月度/按日时间线/独立记录块、PC React + Tiptap 编辑路径，以及快照队列、请求回执、Revision/CAS、冲突保留草稿和不可变重试等机制；采用前必须核对源代码与各层验收状态。
+- 延续 DN-183：AppFlowy Document JSON 是既定正文正本路线；Moodiary Tiptap JSON 必须通过无损适配层转换，不能擅自替代正本。Android 与 PC 可采用不同引擎，但必须保持文档语义一致及往返无损。
+- 不改变 DN-187 手机唯一权威存储、PC 远程编辑、WebDAV 完全手动，以及日记/笔记/长期追加各自保存语义。
+- DN-256 只确认融合方向与研究边界，不代表已选定引擎、许可证路线或开始编码。
