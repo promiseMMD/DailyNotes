@@ -1,7 +1,7 @@
 # DailyNotes 需求规范索引
 
-> **当前设计规范**：[DailyNotes开发规范_V3.70.md](./DailyNotes开发规范_V3.70.md)（2026-11-18，承接 V3.69，新增 DN-256，DN-001～DN-256）  
-> **上一版本**：[DailyNotes开发规范_V3.69.md](./DailyNotes开发规范_V3.69.md)（DN-001～DN-255）  \n> **更早版本**：[DailyNotes开发规范_V3.49.md](./DailyNotes开发规范_V3.49.md)（DN-001～DN-240，保留不删除）  
+> **当前设计规范**：[DailyNotes开发规范_V3.71.md](./DailyNotes开发规范_V3.71.md)（2026-11-19，承接 V3.70，新增 DN-257，DN-001～DN-257）  
+> **上一版本**：[DailyNotes开发规范_V3.70.md](./DailyNotes开发规范_V3.70.md)（DN-001～DN-256）  \n> **更早版本**：[DailyNotes开发规范_V3.49.md](./DailyNotes开发规范_V3.49.md)（DN-001～DN-240，保留不删除）  
 > **较早完整版本**：[DailyNotes开发规范_V3.27.md](./DailyNotes开发规范_V3.27.md)（DN-001～DN-228，保留不删除）  
 > **上一份完整规范**：[DailyNotes开发规范_V3.12.md](./DailyNotes开发规范_V3.12.md)（DN-001～DN-216）  
 > **最近的完整历史基线**：[DailyNotes开发规范_V2.77.md](./DailyNotes开发规范_V2.77.md)（DN-001～DN-203）  
@@ -100,3 +100,11 @@
 - 延续 DN-183：AppFlowy Document JSON 是既定正文正本路线；Moodiary Tiptap JSON 必须通过无损适配层转换，不能擅自替代正本。Android 与 PC 可采用不同引擎，但必须保持文档语义一致及往返无损。
 - 不改变 DN-187 手机唯一权威存储、PC 远程编辑、WebDAV 完全手动，以及日记/笔记/长期追加各自保存语义。
 - DN-256 只确认融合方向与研究边界，不代表已选定引擎、许可证路线或开始编码。
+
+## V3.71 新增确认项（DN-257）
+
+- 用户选择表格删除安全方案 A：删除行/列立即执行并提供撤销；删除整张表格必须二次确认；所有修改保留历史记录。
+- 行/列删除后的撤销入口不能只依赖短暂 Toast；清空行/列内容与删除结构必须区分，并支持撤销。
+- 撤销不得改写或删除旧 Revision；Undo/Redo、Operation 与历史 Revision 必须保留可恢复关系。整表删除确认取消不得产生数据修改。
+- 表格操作遵循手机唯一权威存储、Revision/CAS、PC 远程编辑回执和附件历史引用保护。
+- 删除最后一行/列的边界、具体确认文案和撤销入口样式仍待讨论；DN-257 不代表代码已实现或验收。
