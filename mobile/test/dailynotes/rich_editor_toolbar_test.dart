@@ -76,6 +76,13 @@ void main() {
     ),
   );
 
+  Future<void> tapOverflow(WidgetTester tester, String action) async {
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('rich-overflow-$action')));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('quick color applies text and highlight to the same selection', (
     tester,
   ) async {
@@ -88,7 +95,7 @@ void main() {
     );
     editor.selection = selection;
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('rich-toolbar-color')));
+    await tapOverflow(tester, 'color');
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
@@ -136,7 +143,12 @@ void main() {
       endOffset: 5,
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('rich-toolbar-insert')), findsNothing);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const ValueKey('rich-toolbar-insert')))
+          .onPressed,
+      isNull,
+    );
     expect(find.byKey(const ValueKey('rich-toolbar-bold')), findsOneWidget);
     expect(
       identical(before, tester.state(find.byType(af.AppFlowyEditor))),
@@ -330,17 +342,13 @@ void main() {
           .level],
       2,
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('rich-toolbar-undo')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('rich-toolbar-undo')));
+    await tapOverflow(tester, 'undo');
     await tester.pumpAndSettle();
     expect(
       editor.document.root.children.single.type,
       af.ParagraphBlockKeys.type,
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('rich-toolbar-redo')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('rich-toolbar-redo')));
+    await tapOverflow(tester, 'redo');
     await tester.pumpAndSettle();
     expect(editor.document.root.children.single.type, af.HeadingBlockKeys.type);
     await tester.pumpWidget(const SizedBox());
@@ -500,6 +508,52 @@ void main() {
     editor.dispose();
   });
 
+  testWidgets(
+    'divider reuses the following empty paragraph and can be undone',
+    (tester) async {
+      final editor = af.EditorState(
+        document: af.Document(
+          root: af.pageNode(
+            children: [
+              af.paragraphNode(text: 'alpha'),
+              af.paragraphNode(),
+            ],
+          ),
+        ),
+      );
+      await mount(tester, editor);
+      editor.selection = af.Selection.single(path: [0], startOffset: 2);
+      await tester.pumpAndSettle();
+      final original = jsonEncode(editor.document.toJson());
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+      await tester.pumpAndSettle();
+      final divider = find.byKey(const ValueKey('rich-insert-divider'));
+      await tester.scrollUntilVisible(
+        divider,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(BottomSheet),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(divider);
+      await tester.pumpAndSettle();
+      expect(editor.document.root.children.map((n) => n.type), [
+        af.ParagraphBlockKeys.type,
+        af.DividerBlockKeys.type,
+        af.ParagraphBlockKeys.type,
+      ]);
+      expect(editor.selection?.start.path, [2]);
+      editor.undoManager.undo();
+      await tester.pumpAndSettle();
+      expect(jsonEncode(editor.document.toJson()), original);
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
+
   testWidgets('locked editor never exposes editing controls', (tester) async {
     final editor = document('read only');
     await mount(tester, editor, editable: false);
@@ -641,12 +695,80 @@ void main() {
     expect(find.byKey(const ValueKey('rich-format-font')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('rich-format-font')));
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const ValueKey('rich-font-serif')))
+          .selected,
+      isTrue,
+    );
     await tester.tap(find.text(l10n.dailynotes.editorFormatDone));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('rich-format-font')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     editor.dispose();
   });
+
+  testWidgets(
+    'font picker indicates a uniform font but not a mixed selection',
+    (tester) async {
+      final editor = document('alpha beta');
+      await mount(tester, editor);
+      final first = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      editor.selection = first;
+      await editor.formatDelta(first, {
+        af.AppFlowyRichTextKeys.fontFamily: 'serif',
+      });
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const ValueKey('rich-font-serif')))
+            .selected,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const ValueKey('rich-font-default')))
+            .selected,
+        isFalse,
+      );
+      await tester.tap(find.text(l10n.dailynotes.editorFormatDone));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.dailynotes.editorFormatDone));
+      await tester.pumpAndSettle();
+      editor.selection = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 10,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const ValueKey('rich-font-serif')))
+            .selected,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const ValueKey('rich-font-default')))
+            .selected,
+        isFalse,
+      );
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
 
   testWidgets('font load completion cannot revive a changed selection', (
     tester,
@@ -885,4 +1007,134 @@ void main() {
       editor.dispose();
     },
   );
+  testWidgets(
+    'Aa converts selected sibling blocks together and undo restores them',
+    (tester) async {
+      final editor = af.EditorState(
+        document: af.Document(
+          root: af.pageNode(
+            children: [
+              af.paragraphNode(text: 'first'),
+              af.headingNode(level: 2, text: 'second'),
+              af.paragraphNode(text: 'outside'),
+            ],
+          ),
+        ),
+      );
+      await mount(tester, editor);
+      final selection = af.Selection(
+        start: af.Position(path: [0], offset: 1),
+        end: af.Position(path: [1], offset: 4),
+      );
+      editor.selection = selection;
+      await tester.pumpAndSettle();
+      final before = jsonEncode(editor.document.toJson());
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ValueKey('rich-format-${l10n.editor.toolbar.bulletList}')),
+      );
+      await tester.pumpAndSettle();
+      final nodes = editor.document.root.children.toList();
+      expect(nodes.map((n) => n.type).toList(), [
+        af.BulletedListBlockKeys.type,
+        af.BulletedListBlockKeys.type,
+        af.ParagraphBlockKeys.type,
+      ]);
+      expect(nodes.map((n) => n.delta!.toPlainText()).toList(), [
+        'first',
+        'second',
+        'outside',
+      ]);
+      expect(editor.selection, selection);
+      final encoded = jsonEncode(editor.document.toJson());
+      expect(
+        jsonEncode(af.Document.fromJson(jsonDecode(encoded)).toJson()),
+        encoded,
+      );
+      editor.undoManager.undo();
+      await tester.pumpAndSettle();
+      expect(jsonEncode(editor.document.toJson()), before);
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
+
+  testWidgets('Aa refuses cross-level block conversion', (tester) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            af.bulletedListNode(
+              text: 'parent',
+              children: [af.paragraphNode(text: 'child')],
+            ),
+            af.paragraphNode(text: 'next'),
+          ],
+        ),
+      ),
+    );
+    await mount(tester, editor);
+    editor.selection = af.Selection(
+      start: af.Position(path: [0], offset: 0),
+      end: af.Position(path: [1], offset: 2),
+    );
+    await tester.pumpAndSettle();
+    final before = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    final button = tester.widget<IconButton>(
+      find.byKey(ValueKey('rich-format-${l10n.editor.toolbar.bulletList}')),
+    );
+    expect(button.onPressed, isNull);
+    expect(jsonEncode(editor.document.toJson()), before);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+  testWidgets('more menu never applies an action to a changed selection', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    await tester.pumpAndSettle();
+    final original = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-more')));
+    await tester.pumpAndSettle();
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 6,
+      endOffset: 10,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('rich-overflow-color')));
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), original);
+    expect(
+      find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('narrow toolbar fits without horizontal scrolling', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    tester.view.physicalSize = const Size(320, 700);
+    editor.selection = af.Selection.single(path: [0], startOffset: 2);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-toolbar-insert')), findsOneWidget);
+    expect(find.byKey(const ValueKey('rich-toolbar-format')), findsOneWidget);
+    expect(find.byKey(const ValueKey('rich-toolbar-more')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
 }

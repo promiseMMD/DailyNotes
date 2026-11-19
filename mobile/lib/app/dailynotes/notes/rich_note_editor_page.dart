@@ -51,6 +51,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   int _revision = 0, _savedRevision = 0;
   bool _failed = false, _allowPop = false, _leaving = false;
   late bool _editing;
+  int _outlineJumpGeneration = 0;
   bool _exporting = false;
   bool _deleting = false;
 
@@ -499,22 +500,40 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   }
 
   Future<void> _jumpToOutline(Node target) async {
-    _scaffoldKey.currentState?.closeEndDrawer();
-    await WidgetsBinding.instance.endOfFrame;
     final editor = _editor;
     final scroll = _scrollController;
-    if (!mounted || editor == null || scroll == null) return;
-    final path = target.path;
-    if (path.isEmpty ||
-        editor.document.nodeAtPath(path) != target ||
-        !scroll.itemScrollController.isAttached) {
+    final generation = ++_outlineJumpGeneration;
+    if (editor == null || scroll == null) return;
+    bool current() =>
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        generation == _outlineJumpGeneration &&
+        identical(_editor, editor) &&
+        identical(_scrollController, scroll) &&
+        !editor.isDisposed;
+    bool targetIsCurrent() {
+      final path = target.path;
+      return path.isNotEmpty &&
+          identical(editor.document.nodeAtPath(path), target);
+    }
+
+    _scaffoldKey.currentState?.closeEndDrawer();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!current()) return;
+    if (!targetIsCurrent() || !scroll.itemScrollController.isAttached) {
       _outlineUnavailable();
       return;
     }
     // The document header is item zero; root document blocks start at one.
-    scroll.itemScrollController.jumpTo(index: path.first + 1);
+    scroll.itemScrollController.jumpTo(index: target.path.first + 1);
     await WidgetsBinding.instance.endOfFrame;
-    if (!mounted || editor.document.nodeAtPath(target.path) != target) return;
+    if (!current()) return;
+    if (!targetIsCurrent()) {
+      _outlineUnavailable();
+      return;
+    }
     final targetContext = target.key.currentContext;
     if (targetContext == null || !targetContext.mounted) {
       _outlineUnavailable();

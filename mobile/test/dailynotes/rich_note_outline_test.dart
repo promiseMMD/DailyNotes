@@ -8,6 +8,7 @@ import 'package:moodiary_di/moodiary_di.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_mobile/app/dailynotes/data/daily_notes_store.dart';
 import 'package:moodiary_mobile/app/dailynotes/notes/rich_note_editor_page.dart';
+import 'package:moodiary_mobile/app/dailynotes/notes/rich_note_outline.dart';
 import 'package:moodiary_storage/moodiary_storage.dart';
 import 'package:moodiary_storage/testing.dart';
 import 'package:mui/mui.dart';
@@ -178,6 +179,119 @@ void main() {
       expect(find.byKey(ValueKey('outline-${heading.id}')), findsNothing);
       expect(editor.document.toJson().toString(), contains('latest'));
       expect(store.notes, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+    },
+  );
+
+  testWidgets(
+    'switching outline documents resets the search and follows the new editor',
+    (tester) async {
+      final oldEditor = EditorState(
+        document: Document(
+          root: pageNode(
+            children: [headingNode(level: 1, text: 'Old heading')],
+          ),
+        ),
+      );
+      final newEditor = EditorState(
+        document: Document(
+          root: pageNode(
+            children: [headingNode(level: 1, text: 'New heading')],
+          ),
+        ),
+      );
+      Widget screen(EditorState editor) => TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+            GlobalMuiLocalizations.delegate,
+          ],
+          builder: (context, child) =>
+              MaterialUiCompatibilityBridge(child: child!),
+          home: Scaffold(
+            body: RichNoteOutline(editor: editor, onSelect: (_) {}),
+          ),
+        ),
+      );
+      await tester.pumpWidget(screen(oldEditor));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Old');
+      await tester.pumpAndSettle();
+      expect(find.text('Old heading'), findsOneWidget);
+      await tester.pumpWidget(screen(newEditor));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        isEmpty,
+      );
+      expect(find.text('New heading'), findsOneWidget);
+      expect(find.text('Old heading'), findsNothing);
+      await newEditor.insertText(3, ' changed', path: [0]);
+      await tester.pumpAndSettle();
+      expect(find.text('New changed heading'), findsOneWidget);
+      await oldEditor.insertText(3, ' stale', path: [0]);
+      await tester.pumpAndSettle();
+      expect(find.text('New changed heading'), findsOneWidget);
+      expect(find.text('Old stale heading'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      oldEditor.dispose();
+      newEditor.dispose();
+    },
+  );
+
+  testWidgets(
+    'deleting an outline target before navigation cannot scroll to another block',
+    (tester) async {
+      final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+      final store = DailyNotesStore(db);
+      await store.open();
+      final heading = headingNode(level: 1, text: 'Transient heading');
+      final editor = EditorState(
+        document: Document(
+          root: pageNode(
+            children: [
+              heading,
+              paragraphNode(text: 'Keep this paragraph'),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        TranslationProvider(
+          child: MaterialApp(
+            theme: buildMuiTheme(brightness: Brightness.light),
+            localizationsDelegates: const [
+              AppFlowyEditorLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+              GlobalMuiLocalizations.delegate,
+            ],
+            builder: (context, child) =>
+                MaterialUiCompatibilityBridge(child: child!),
+            home: RichNoteEditorPage(store: store, testEditor: editor),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(l10n.dailynotes.documentOutline));
+      await tester.pumpAndSettle();
+      final outline = tester.widget<RichNoteOutline>(
+        find.byType(RichNoteOutline),
+      );
+      outline.onSelect(heading);
+      await editor.apply(editor.transaction..deleteNode(heading));
+      final afterDeletion = jsonEncode(editor.document.toJson());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(jsonEncode(editor.document.toJson()), afterDeletion);
+      expect(
+        editor.document.root.children.single.delta!.toPlainText(),
+        'Keep this paragraph',
+      );
+      expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       store.dispose();
       await db.close();

@@ -21,15 +21,33 @@ class RichNoteOutline extends StatefulWidget {
 }
 
 class _RichNoteOutlineState extends State<RichNoteOutline> {
-  late final StreamSubscription<dynamic> _changes;
+  late StreamSubscription<dynamic> _changes;
   String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _changes = widget.editor.transactionStream.listen((event) {
-      if (event.$1 == TransactionTime.after && mounted) setState(() {});
+    _listen(widget.editor);
+  }
+
+  void _listen(EditorState editor) {
+    _changes = editor.transactionStream.listen((event) {
+      if (event.$1 == TransactionTime.after &&
+          mounted &&
+          identical(editor, widget.editor)) {
+        setState(() {});
+      }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant RichNoteOutline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.editor, widget.editor)) {
+      unawaited(_changes.cancel());
+      _query = '';
+      _listen(widget.editor);
+    }
   }
 
   @override
@@ -72,6 +90,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
+                key: ObjectKey(widget.editor),
                 onChanged: (value) => setState(() => _query = value),
                 decoration: InputDecoration(
                   labelText: t.searchOutline,

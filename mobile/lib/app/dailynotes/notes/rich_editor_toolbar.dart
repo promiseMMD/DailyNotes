@@ -50,6 +50,21 @@ class _SelectionSession {
   bool expired = false;
 }
 
+class _ToolbarAction {
+  const _ToolbarAction(
+    this.id,
+    this.label,
+    this.icon,
+    this.onPressed, {
+    this.selected = false,
+  });
+  final String id;
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool selected;
+}
+
 enum _InsertBlock {
   h1,
   h2,
@@ -87,6 +102,58 @@ bool _styleActive(af.EditorState editor, af.Selection selection, String key) {
               return attributes is Map && attributes[key] == true;
             });
       });
+}
+
+/// The default family is represented by null; known=false represents a mixed
+/// or otherwise indeterminate selection, not the default font.
+({bool known, String? family}) _currentFont(
+  af.EditorState editor,
+  af.Selection selection,
+) {
+  final key = af.AppFlowyRichTextKeys.fontFamily;
+  ({bool known, String? family}) valueOf(Object? value) => switch (value) {
+    null => (known: true, family: null),
+    final String family => (known: true, family: family),
+    _ => (known: false, family: null),
+  };
+  if (selection.isCollapsed) {
+    if (editor.toggledStyle.containsKey(key)) {
+      return valueOf(editor.toggledStyle[key]);
+    }
+    if (!editor.sliceUpcomingAttributes) return (known: true, family: null);
+    final node = editor.document.nodeAtPath(selection.start.path);
+    final delta = node?.delta;
+    if (delta == null) return (known: false, family: null);
+    return valueOf(delta.sliceAttributes(selection.start.offset)?[key]);
+  }
+  final normalized = selection.normalized;
+  final start = editor.document.nodeAtPath(normalized.start.path);
+  final end = editor.document.nodeAtPath(normalized.end.path);
+  final nodes = editor.getNodesInSelection(normalized);
+  if (start == null || end == null || nodes.isEmpty) {
+    return (known: false, family: null);
+  }
+  var seen = false;
+  String? family;
+  for (final node in nodes) {
+    final delta = node.delta;
+    if (delta == null) return (known: false, family: null);
+    final from = identical(node, start) ? normalized.start.offset : 0;
+    final to = identical(node, end) ? normalized.end.offset : delta.length;
+    if (from < 0 || to > delta.length || from > to) {
+      return (known: false, family: null);
+    }
+    for (final op in delta.slice(from, to)) {
+      if (op is! af.TextInsert || op.length == 0) continue;
+      final current = valueOf(op.attributes?[key]);
+      if (!current.known || (seen && current.family != family)) {
+        return (known: false, family: null);
+      }
+      seen = true;
+      family = current.family;
+    }
+  }
+  return (known: seen, family: family);
 }
 
 af.Selection? _selectionSnapshot(af.Selection? selection) => selection == null
@@ -278,6 +345,15 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         );
   }
 
+  bool _canConvert(af.Selection selection) {
+    if (!_textOnly(selection)) return false;
+    final nodes = widget.editor.getNodesInSelection(selection);
+    // AppFlowy's conversion replaces each selected node. Never replace an
+    // ancestor and descendant in the same transaction.
+    return nodes.isNotEmpty &&
+        nodes.every((node) => identical(node.parent, nodes.first.parent));
+  }
+
   Future<void> _toggle(af.Selection selection, String key) =>
       widget.editor.toggleAttribute(
         key,
@@ -290,13 +366,14 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     String type, {
     int? level,
   }) async {
-    if (!selection.isSingle || !_textOnly(selection)) return;
-    final current = widget.editor.document.nodeAtPath(selection.start.path);
-    if (current == null) return;
-    final selected =
-        current.type == type &&
-        (type != af.HeadingBlockKeys.type ||
-            current.attributes[af.HeadingBlockKeys.level] == level);
+    if (!_canConvert(selection)) return;
+    final nodes = widget.editor.getNodesInSelection(selection);
+    final selected = nodes.every(
+      (node) =>
+          node.type == type &&
+          (type != af.HeadingBlockKeys.type ||
+              node.attributes[af.HeadingBlockKeys.level] == level),
+    );
     final destination = selected && type != af.ParagraphBlockKeys.type
         ? af.ParagraphBlockKeys.type
         : type;
@@ -308,7 +385,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         attrs[af.HeadingBlockKeys.level] = level;
       }
       if (destination == af.TodoListBlockKeys.type) {
-        attrs[af.TodoListBlockKeys.checked] = false;
+        attrs[af.TodoListBlockKeys.checked] =
+            node.type == af.TodoListBlockKeys.type
+            ? (node.attributes[af.TodoListBlockKeys.checked] ?? false)
+            : false;
       }
       return node.copyWith(type: destination, attributes: attrs);
     }, selectionExtraInfo: {af.selectionExtraInfoDoNotAttachTextService: true});
@@ -373,8 +453,23 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       throw StateError('invalid_selection');
     }
     if (item == _InsertBlock.divider) {
-      // The editor library inserts a divider and maintains a following text block.
-      af.dividerMobileToolbarItem.actionHandler!(context, widget.editor);
+      // Match AppFlowy's insertion order but await the transaction so the
+      // selection session cannot complete before the document is updated.
+      final insertedPath = current.delta!.isEmpty
+          ? path
+          : ([...path]..last += 1);
+      final next = current.next;
+      final transaction = widget.editor.transaction
+        ..insertNode(insertedPath, af.dividerNode());
+      if (next == null ||
+          next.type != af.ParagraphBlockKeys.type ||
+          next.delta?.isNotEmpty == true) {
+        transaction.insertNode(insertedPath, af.paragraphNode());
+      }
+      transaction.afterSelection = af.Selection.collapsed(
+        af.Position(path: [...insertedPath]..last += 1),
+      );
+      await widget.editor.apply(transaction);
       return;
     }
     final block = switch (item) {
@@ -427,6 +522,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         align: _align,
         loadFonts: widget.loadFonts,
         scrollController: widget.scrollController,
+        canConvert: () => _canConvert(session.selection),
       ),
     );
     if (done == true &&
@@ -554,6 +650,8 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     ),
   );
 
+  _SelectionSession? _overflowSession;
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -564,11 +662,11 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         widget.focusNode.hasFocus &&
         _validSelection(selection) &&
         (keyboard || !selection!.isCollapsed);
-    // Keep the editor at the same element-tree position as keyboard and
-    // selection state change; rebuilding the editor would lose IME state.
+    // Preserve the editor's position in the tree and its IME state.
     if (!show) return Column(children: [Expanded(child: widget.child)]);
-    final isRange = !selection!.isCollapsed;
-    final node = widget.editor.document.nodeAtPath(selection.start.path);
+    final selected = selection!;
+    final isRange = !selected.isCollapsed;
+    final node = widget.editor.document.nodeAtPath(selected.start.path);
     final isList =
         node != null &&
         const {
@@ -576,8 +674,138 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
           af.BulletedListBlockKeys.type,
           af.NumberedListBlockKeys.type,
         }.contains(node.type);
-    final canText = !_busy && _textOnly(selection);
-    final canBlock = canText && selection.isSingle;
+    final canText = !_busy && _textOnly(selected);
+    final canBlock = canText && selected.isSingle;
+    final actions = <_ToolbarAction>[
+      _ToolbarAction(
+        'todo',
+        l10n.editor.toolbar.taskList,
+        LucideIcons.listTodo,
+        !isRange && canBlock
+            ? () => _quick((s) => _convert(s, af.TodoListBlockKeys.type))
+            : null,
+      ),
+      _ToolbarAction(
+        'bullet',
+        l10n.editor.toolbar.bulletList,
+        LucideIcons.list,
+        !isRange && canBlock
+            ? () => _quick((s) => _convert(s, af.BulletedListBlockKeys.type))
+            : null,
+      ),
+      _ToolbarAction(
+        'numbered',
+        l10n.editor.toolbar.orderedList,
+        LucideIcons.listOrdered,
+        !isRange && canBlock
+            ? () => _quick((s) => _convert(s, af.NumberedListBlockKeys.type))
+            : null,
+      ),
+      _ToolbarAction(
+        'outdent',
+        l10n.editor.toolbar.outdent,
+        LucideIcons.outdent,
+        !isRange && isList && canBlock && af.isOutdentable(widget.editor)
+            ? () {
+                if (_editable && af.isOutdentable(widget.editor)) {
+                  af.outdentCommand.execute(widget.editor);
+                }
+              }
+            : null,
+      ),
+      _ToolbarAction(
+        'indent',
+        l10n.editor.toolbar.indent,
+        LucideIcons.indent,
+        !isRange && isList && canBlock && af.isIndentable(widget.editor)
+            ? () {
+                if (_editable && af.isIndentable(widget.editor)) {
+                  af.indentCommand.execute(widget.editor);
+                }
+              }
+            : null,
+      ),
+      for (final (id, label, icon, attribute) in [
+        (
+          'bold',
+          l10n.editor.toolbar.bold,
+          LucideIcons.bold,
+          af.AppFlowyRichTextKeys.bold,
+        ),
+        (
+          'italic',
+          l10n.editor.toolbar.italic,
+          LucideIcons.italic,
+          af.AppFlowyRichTextKeys.italic,
+        ),
+        (
+          'underline',
+          l10n.editor.toolbar.underline,
+          LucideIcons.underline,
+          af.AppFlowyRichTextKeys.underline,
+        ),
+        (
+          'strike',
+          l10n.editor.toolbar.strike,
+          LucideIcons.strikethrough,
+          af.AppFlowyRichTextKeys.strikethrough,
+        ),
+      ])
+        _ToolbarAction(
+          id,
+          label,
+          icon,
+          canText ? () => _quick((s) => _toggle(s, attribute)) : null,
+          selected: _styleActive(widget.editor, selected, attribute),
+        ),
+      _ToolbarAction(
+        'color',
+        l10n.dailynotes.editorTextColor,
+        LucideIcons.baseline,
+        canText ? _openColor : null,
+      ),
+      if (isRange && selected.isSingle)
+        _ToolbarAction(
+          'link',
+          l10n.editor.toolbar.link,
+          LucideIcons.link,
+          canText ? _openLink : null,
+        ),
+      _ToolbarAction(
+        'undo',
+        l10n.editor.toolbar.undo,
+        LucideIcons.undo2,
+        !_busy && !widget.editor.undoManager.undoStack.isEmpty
+            ? () {
+                if (_editable) af.undoCommand.execute(widget.editor);
+              }
+            : null,
+      ),
+      _ToolbarAction(
+        'redo',
+        l10n.editor.toolbar.redo,
+        LucideIcons.redo2,
+        !_busy && !widget.editor.undoManager.redoStack.isEmpty
+            ? () {
+                if (_editable) af.redoCommand.execute(widget.editor);
+              }
+            : null,
+      ),
+    ];
+    // Context mappings are provisional; all other applicable actions remain
+    // accessible in More. Undo/redo stay there until top navigation owns them.
+    final quickCandidates = isRange
+        ? <String>['bold', 'italic', 'underline', if (selected.isSingle) 'link']
+        : isList
+        ? <String>['outdent', 'indent', 'todo', 'bullet']
+        : <String>['todo', 'bullet', 'numbered', 'bold'];
+    final quickIds = quickCandidates
+        .where((id) => actions.firstWhere((a) => a.id == id).onPressed != null)
+        .toList();
+    final visible = [
+      for (final id in quickIds) actions.firstWhere((a) => a.id == id),
+    ];
+    final overflow = actions.where((a) => !quickIds.contains(a.id)).toList();
     return Column(
       children: [
         Expanded(child: widget.child),
@@ -588,212 +816,79 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
             child: Row(
               children: [
                 Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        if (!isRange)
-                          _button(
-                            'insert',
-                            l10n.editor.toolbar.insert,
-                            LucideIcons.plus,
-                            canBlock ? _openInsert : null,
-                          ),
-                        _button(
-                          'format',
-                          l10n.editor.toolbar.format,
-                          LucideIcons.caseSensitive,
-                          canText ? _openFormat : null,
-                        ),
-                        if (!isRange && isList) ...[
-                          _button(
-                            'outdent',
-                            l10n.editor.toolbar.outdent,
-                            LucideIcons.outdent,
-                            canBlock && af.isOutdentable(widget.editor)
-                                ? () {
-                                    if (_editable &&
-                                        af.isOutdentable(widget.editor)) {
-                                      af.outdentCommand.execute(widget.editor);
-                                    }
-                                  }
-                                : null,
-                          ),
-                          _button(
-                            'indent',
-                            l10n.editor.toolbar.indent,
-                            LucideIcons.indent,
-                            canBlock && af.isIndentable(widget.editor)
-                                ? () {
-                                    if (_editable &&
-                                        af.isIndentable(widget.editor)) {
-                                      af.indentCommand.execute(widget.editor);
-                                    }
-                                  }
-                                : null,
-                          ),
-                        ],
-                        if (!isRange) ...[
-                          _button(
-                            'todo',
-                            l10n.editor.toolbar.taskList,
-                            LucideIcons.listTodo,
-                            canBlock
-                                ? () => _quick(
-                                    (s) =>
-                                        _convert(s, af.TodoListBlockKeys.type),
-                                  )
-                                : null,
-                          ),
-                          _button(
-                            'bullet',
-                            l10n.editor.toolbar.bulletList,
-                            LucideIcons.list,
-                            canBlock
-                                ? () => _quick(
-                                    (s) => _convert(
-                                      s,
-                                      af.BulletedListBlockKeys.type,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          _button(
-                            'numbered',
-                            l10n.editor.toolbar.orderedList,
-                            LucideIcons.listOrdered,
-                            canBlock
-                                ? () => _quick(
-                                    (s) => _convert(
-                                      s,
-                                      af.NumberedListBlockKeys.type,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ],
-                        _button(
-                          'bold',
-                          l10n.editor.toolbar.bold,
-                          LucideIcons.bold,
-                          canText
-                              ? () => _quick(
-                                  (s) =>
-                                      _toggle(s, af.AppFlowyRichTextKeys.bold),
-                                )
-                              : null,
-                          selected: _styleActive(
-                            widget.editor,
-                            selection,
-                            af.AppFlowyRichTextKeys.bold,
-                          ),
-                        ),
-                        _button(
-                          'italic',
-                          l10n.editor.toolbar.italic,
-                          LucideIcons.italic,
-                          canText
-                              ? () => _quick(
-                                  (s) => _toggle(
-                                    s,
-                                    af.AppFlowyRichTextKeys.italic,
-                                  ),
-                                )
-                              : null,
-                          selected: _styleActive(
-                            widget.editor,
-                            selection,
-                            af.AppFlowyRichTextKeys.italic,
-                          ),
-                        ),
-                        _button(
-                          'underline',
-                          l10n.editor.toolbar.underline,
-                          LucideIcons.underline,
-                          canText
-                              ? () => _quick(
-                                  (s) => _toggle(
-                                    s,
-                                    af.AppFlowyRichTextKeys.underline,
-                                  ),
-                                )
-                              : null,
-                          selected: _styleActive(
-                            widget.editor,
-                            selection,
-                            af.AppFlowyRichTextKeys.underline,
-                          ),
-                        ),
-                        _button(
-                          'strike',
-                          l10n.editor.toolbar.strike,
-                          LucideIcons.strikethrough,
-                          canText
-                              ? () => _quick(
-                                  (s) => _toggle(
-                                    s,
-                                    af.AppFlowyRichTextKeys.strikethrough,
-                                  ),
-                                )
-                              : null,
-                          selected: _styleActive(
-                            widget.editor,
-                            selection,
-                            af.AppFlowyRichTextKeys.strikethrough,
-                          ),
-                        ),
-                        _button(
-                          'color',
-                          l10n.dailynotes.editorTextColor,
-                          LucideIcons.baseline,
-                          canText ? _openColor : null,
-                        ),
-                        if (isRange && selection.isSingle)
-                          _button(
-                            'link',
-                            l10n.editor.toolbar.link,
-                            LucideIcons.link,
-                            canText ? _openLink : null,
-                          ),
-                        if (!isRange) ...[
-                          _button(
-                            'undo',
-                            l10n.editor.toolbar.undo,
-                            LucideIcons.undo2,
-                            _busy || widget.editor.undoManager.undoStack.isEmpty
-                                ? null
-                                : () {
-                                    if (_editable) {
-                                      af.undoCommand.execute(widget.editor);
-                                    }
-                                  },
-                          ),
-                          _button(
-                            'redo',
-                            l10n.editor.toolbar.redo,
-                            LucideIcons.redo2,
-                            _busy || widget.editor.undoManager.redoStack.isEmpty
-                                ? null
-                                : () {
-                                    if (_editable) {
-                                      af.redoCommand.execute(widget.editor);
-                                    }
-                                  },
-                          ),
-                        ],
-                      ],
-                    ),
+                  child: _button(
+                    'insert',
+                    l10n.editor.toolbar.insert,
+                    LucideIcons.plus,
+                    !isRange && canBlock ? _openInsert : null,
                   ),
                 ),
-                _button(
-                  'close',
-                  l10n.editor.toolbar.hideKeyboard,
-                  LucideIcons.chevronDown,
-                  () {
-                    SystemChannels.textInput.invokeMethod<void>(
+                Expanded(
+                  child: _button(
+                    'format',
+                    l10n.editor.toolbar.format,
+                    LucideIcons.caseSensitive,
+                    canText ? _openFormat : null,
+                  ),
+                ),
+                for (final action in visible)
+                  Expanded(
+                    child: _button(
+                      action.id,
+                      action.label,
+                      action.icon,
+                      action.onPressed,
+                      selected: action.selected,
+                    ),
+                  ),
+                Expanded(
+                  child: PopupMenuButton<String>(
+                    key: const ValueKey('rich-toolbar-more'),
+                    tooltip: l10n.common.more,
+                    icon: const Icon(LucideIcons.ellipsis),
+                    iconSize: 20,
+                    padding: EdgeInsets.zero,
+                    requestFocus: false,
+                    onOpened: () => _overflowSession = _capture(),
+                    onCanceled: () => _overflowSession = null,
+                    onSelected: (id) {
+                      final session = _overflowSession;
+                      _overflowSession = null;
+                      if (session == null || !_sessionValid(session)) {
+                        if (mounted) _selectionExpired();
+                        return;
+                      }
+                      final action = overflow
+                          .where((a) => a.id == id)
+                          .firstOrNull;
+                      action?.onPressed?.call();
+                    },
+                    itemBuilder: (_) => [
+                      for (final action in overflow)
+                        PopupMenuItem<String>(
+                          key: ValueKey('rich-overflow-${action.id}'),
+                          value: action.id,
+                          enabled: action.onPressed != null,
+                          child: Row(
+                            children: [
+                              Icon(action.icon, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(action.label)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _button(
+                    'close',
+                    l10n.editor.toolbar.hideKeyboard,
+                    LucideIcons.chevronDown,
+                    () => SystemChannels.textInput.invokeMethod<void>(
                       'TextInput.hide',
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1094,10 +1189,12 @@ class _FormatSheet extends StatefulWidget {
     required this.align,
     required this.loadFonts,
     required this.scrollController,
+    required this.canConvert,
   });
   final af.EditorState editor;
   final af.EditorScrollController? scrollController;
   final bool Function() valid;
+  final bool Function() canConvert;
   final Future<bool> Function(_FormatCommand) execute;
   final Future<bool> Function(_FormatCommand) executeMove;
   final Future<void> Function(af.Selection, String) toggle;
@@ -1324,7 +1421,7 @@ class _FormatSheetState extends State<_FormatSheet> {
     final t = l10n.dailynotes;
     final selectionValid = !_expired && widget.valid();
     final enabled = !_running && selectionValid;
-    final canBlock = enabled && widget.editor.selection?.isSingle == true;
+    final canBlock = enabled && widget.canConvert();
     return PopScope(
       canPop: _colorKey == null && !_fontView,
       onPopInvokedWithResult: (didPop, _) {
@@ -1682,6 +1779,12 @@ class _FormatSheetState extends State<_FormatSheet> {
       (t.editorFontMono, ios ? 'Menlo' : 'monospace'),
       for (final family in _importedFonts.toSet()) (family, family),
     ];
+    final selection = widget.editor.selection;
+    final current = enabled && selection != null
+        ? _currentFont(widget.editor, selection)
+        : (known: false, family: null);
+    final seen = <String?>{};
+    final uniqueOptions = options.where((option) => seen.add(option.$2));
     return ListView(
       controller: controller,
       children: [
@@ -1691,9 +1794,13 @@ class _FormatSheetState extends State<_FormatSheet> {
             padding: const EdgeInsets.all(16),
             child: Text(t.editorFontLoadFailed),
           ),
-        for (final (label, family) in options)
+        for (final (label, family) in uniqueOptions)
           ListTile(
             key: ValueKey('rich-font-${family ?? 'default'}'),
+            selected: current.known && current.family == family,
+            trailing: current.known && current.family == family
+                ? const Icon(LucideIcons.check)
+                : null,
             title: Text(
               label,
               style: context.theme.typography.bodyLarge.onSurface.copyWith(
