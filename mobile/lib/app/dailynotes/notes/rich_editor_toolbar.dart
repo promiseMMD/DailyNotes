@@ -340,7 +340,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       final last = visible.reduce((a, b) => a.bottom >= b.bottom ? a : b);
       const height = 44.0;
       const gap = 8.0;
-      final width = (session.selection.isSingle ? 210.0 : 168.0).clamp(
+      final width = (session.selection.isSingle ? 252.0 : 210.0).clamp(
         0.0,
         bounds.width,
       );
@@ -460,6 +460,15 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
                       LucideIcons.copy,
                       floating.session,
                       () => af.copyCommand.execute(widget.editor),
+                    ),
+                  ),
+                  Expanded(
+                    child: _floatingButton(
+                      'select-all',
+                      MaterialLocalizations.of(context).selectAllButtonLabel,
+                      Icons.select_all,
+                      floating.session,
+                      () => af.selectAllCommand.execute(widget.editor),
                     ),
                   ),
                 ],

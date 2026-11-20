@@ -1212,6 +1212,27 @@ void main() {
     },
   );
 
+  testWidgets('floating select all expands the selection without changing text', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    await tester.pumpAndSettle();
+    final original = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(const ValueKey('rich-floating-select-all')));
+    await tester.pumpAndSettle();
+    expect(editor.selection!.normalized.start.offset, 0);
+    expect(editor.selection!.normalized.end.offset, 10);
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
   testWidgets('a stale floating command never writes to another selection', (
     tester,
   ) async {
