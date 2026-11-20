@@ -20,6 +20,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
     required this.scrollController,
     required this.editable,
     this.autoFocus = false,
+    this.showHistoryActionsInToolbar = true,
     this.header,
   });
 
@@ -28,6 +29,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
   final af.EditorScrollController scrollController;
   final bool editable;
   final bool autoFocus;
+  final bool showHistoryActionsInToolbar;
   final Widget? header;
 
   @override
@@ -105,6 +107,7 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
       editor: widget.editor,
       focusNode: widget.focusNode,
       editable: widget.editable,
+      showHistoryActionsInToolbar: widget.showHistoryActionsInToolbar,
       loadFonts: _loadFonts,
       scrollController: widget.scrollController,
       child: af.AppFlowyEditor(

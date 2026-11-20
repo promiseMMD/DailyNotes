@@ -139,6 +139,26 @@ void main() {
     expect(find.byType(DailyNotesDocumentCanvas), findsOneWidget);
     expect(find.byType(af.MobileToolbarV2), findsNothing);
     expect(find.byKey(const ValueKey('rich-toolbar-insert')), findsOneWidget);
+    final editor = tester
+        .widget<af.AppFlowyEditor>(find.byType(af.AppFlowyEditor))
+        .editorState;
+    await editor.insertText(0, 'preview', path: [0]);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-overflow-undo')), findsNothing);
+    expect(find.byKey(const ValueKey('rich-overflow-redo')), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('document-top-undo')));
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.single.delta!.toPlainText(), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('document-top-redo')));
+    await tester.pumpAndSettle();
+    expect(
+      editor.document.root.children.single.delta!.toPlainText(),
+      'preview',
+    );
     await tester.pumpWidget(const SizedBox());
   });
 

@@ -224,9 +224,11 @@ class _Link {
 class _State {
   final Map<String, _Stored> records;
   final Map<String, _Link> links;
+  final Set<String> archivedNoteIds;
   final Set<String> writes = {}, linkWrites = {};
   int pending;
-  _State(this.records, this.links, this.pending);
+  _State(this.records, this.links, this.pending, {Set<String>? archivedNoteIds})
+    : archivedNoteIds = archivedNoteIds ?? {};
   void put(String kind, Map<String, dynamic> value) {
     final id = value['id'] as String;
     records[id] = _Stored(kind, (records[id]?.revision ?? 0) + 1, value);
@@ -268,7 +270,13 @@ class DailyNotesStore extends ChangeNotifier {
 
   int get pendingOperationCount => _state.pending;
   bool get isOpen => _opened;
+  // Keep all existing consumers' query semantics until their UI is migrated.
   List<DailyNote> get notes => _notes(deleted: false);
+  List<DailyNote> get unarchivedNotes =>
+      _notes(deleted: false, archived: false);
+  List<DailyNote> get archivedNotes => _notes(deleted: false, archived: true);
+  // Trashed notes remain available to the recycle bin regardless of whether
+  // they had previously been archived.
   List<DailyNote> get deletedNotes => _notes(deleted: true);
   List<DailyTask> get tasks => _tasks(deleted: false);
   List<DailyTask> get deletedTasks => _tasks(deleted: true);
@@ -280,10 +288,14 @@ class DailyNotesStore extends ChangeNotifier {
         .map((r) => DailyFolder.fromJson(r.value)),
   );
 
-  List<DailyNote> _notes({required bool deleted}) {
+  List<DailyNote> _notes({required bool deleted, bool? archived}) {
     final result = _state.records.values
         .where(
-          (r) => r.kind == 'note' && (r.value['deletedAt'] != null) == deleted,
+          (r) =>
+              r.kind == 'note' &&
+              (r.value['deletedAt'] != null) == deleted &&
+              (archived == null ||
+                  _state.archivedNoteIds.contains(r.value['id']) == archived),
         )
         .map((r) => DailyNote.fromJson(r.value))
         .toList();
@@ -323,6 +335,103 @@ class DailyNotesStore extends ChangeNotifier {
         .toSet();
     return List.unmodifiable(topics.where((t) => ids.contains(t.id)));
   }
+
+  /// Archive state is an organizational property, not a replacement note,
+  /// deleted record, user-content revision, or trigger for WebDAV.
+  bool isNoteArchived(String noteId) => _state.archivedNoteIds.contains(noteId);
+
+  /// Explicit filtered counterpart to the existing notesForTopic getter.
+  List<DailyNote> unarchivedNotesForTopic(String topicId) {
+    final archived = _state.archivedNoteIds;
+    return List.unmodifiable(
+      notesForTopic(topicId).where((note) => !archived.contains(note.id)),
+    );
+  }
+
+  List<DailyNote> archivedNotesForTopic(String topicId) {
+    if (!topics.any((t) => t.id == topicId)) return const [];
+    final ids = _state.links.values
+        .where((link) => link.topicId == topicId && link.deletedAt == null)
+        .map((link) => link.noteId)
+        .toSet();
+    return List.unmodifiable(
+      archivedNotes.where((note) => ids.contains(note.id)),
+    );
+  }
+
+  /// Retain the original ancestors of folders containing archived notes. This
+  /// is only a filtered read model; it never modifies folders or relationships.
+  List<DailyFolder> get foldersWithArchivedNotes {
+    final all = folders;
+    final byId = {for (final folder in all) folder.id: folder};
+    final visible = <String>{};
+    for (final note in archivedNotes) {
+      var id = note.folderId;
+      while (id != null && visible.add(id)) {
+        id = byId[id]?.parentId;
+      }
+    }
+    return List.unmodifiable(
+      all.where((folder) => visible.contains(folder.id)),
+    );
+  }
+
+  /// Retain all ancestors of topics directly linked to an archived note.
+  List<KnowledgeTopic> get topicsWithArchivedNotes {
+    final all = topics;
+    final byId = {for (final topic in all) topic.id: topic};
+    final archivedIds = archivedNotes.map((note) => note.id).toSet();
+    final visible = <String>{};
+    for (final link in _state.links.values) {
+      if (link.deletedAt != null || !archivedIds.contains(link.noteId)) {
+        continue;
+      }
+      String? id = link.topicId;
+      while (id != null && visible.add(id)) {
+        id = byId[id]?.parentId;
+      }
+    }
+    return List.unmodifiable(all.where((topic) => visible.contains(topic.id)));
+  }
+
+  /// Persist a desired state, not a toggle: duplicate requests are idempotent.
+  /// Callers must not expose this until an archive browser and failure feedback
+  /// are available. Uncommitted metadata never changes the visible state.
+  Future<void> setNoteArchived(String id, {required bool archived}) =>
+      _serialize(() async {
+        if (!_opened) throw StateError('dailynotes_not_open');
+        final next = await database.transaction(() async {
+          final state = await _readState();
+          state.require(id, 'note');
+          final current = state.archivedNoteIds.contains(id);
+          if (current == archived) return state;
+          final key = 'archive:note:$id';
+          if (archived) {
+            await database.customStatement(
+              'INSERT INTO dn_metadata (key, value) VALUES (?, ?)',
+              [key, '1'],
+            );
+            state.archivedNoteIds.add(id);
+          } else {
+            await database.customStatement(
+              'DELETE FROM dn_metadata WHERE key = ?',
+              [key],
+            );
+            state.archivedNoteIds.remove(id);
+          }
+          return state;
+        });
+        _state = next;
+        notifyListeners();
+      });
+
+  /// Reload the database-backed read model when returning to a browser that
+  /// may have been modified by another store instance.
+  Future<void> refresh() => _serialize(() async {
+    if (!_opened) throw StateError('dailynotes_not_open');
+    _state = await database.transaction(_readState);
+    notifyListeners();
+  });
 
   Future<void> open() => _serialize(() async {
     if (_opened) return;
@@ -402,7 +511,26 @@ class DailyNotesStore extends ChangeNotifier {
     final count = await database
         .customSelect('SELECT COUNT(*) AS count FROM dn_outbox')
         .getSingle();
-    return _State(records, links, count.read<int>('count'));
+    final archives = await database
+        .customSelect(
+          "SELECT key, value FROM dn_metadata WHERE key LIKE 'archive:note:%'",
+        )
+        .get();
+    final archived = <String>{};
+    for (final row in archives) {
+      final key = row.read<String>('key');
+      if (row.read<String>('value') != '1' ||
+          key.length <= 'archive:note:'.length) {
+        throw StateError('invalid_note_archive_metadata');
+      }
+      archived.add(key.substring('archive:note:'.length));
+    }
+    return _State(
+      records,
+      links,
+      count.read<int>('count'),
+      archivedNoteIds: archived,
+    );
   }
 
   Map<String, Object?>? draft(String key) {

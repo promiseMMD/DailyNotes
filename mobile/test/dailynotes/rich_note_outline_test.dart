@@ -62,7 +62,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       final original = jsonEncode(editor.document.toJson());
-      await tester.tap(find.byTooltip(l10n.dailynotes.documentOutline));
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-outline')));
       await tester.pumpAndSettle();
       expect(find.text('Alpha chapter'), findsWidgets);
       expect(find.text('Target chapter'), findsOneWidget);
@@ -119,7 +121,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.byTooltip(l10n.dailynotes.documentOutline), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-document-more')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     store.dispose();
     await tester.runAsync(db.close);
@@ -169,7 +171,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pumpAndSettle();
       expect(find.textContaining('保存失败'), findsOneWidget);
-      await tester.tap(find.byTooltip(l10n.dailynotes.documentOutline));
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-outline')));
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('outline-${heading.id}')), findsOneWidget);
       expect(editor.document.toJson().toString(), contains('latest'));
@@ -276,7 +280,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip(l10n.dailynotes.documentOutline));
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-outline')));
       await tester.pumpAndSettle();
       final outline = tester.widget<RichNoteOutline>(
         find.byType(RichNoteOutline),

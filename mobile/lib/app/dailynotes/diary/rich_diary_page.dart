@@ -10,6 +10,7 @@ import 'package:mui/mui.dart';
 
 import '../editor/document_canvas.dart';
 import '../editor/document_envelope.dart';
+import '../editor/document_history_actions.dart';
 
 /// A diary's AppFlowy document autosaves as the actual diary, not as a draft.
 class RichDiaryPage extends StatefulWidget {
@@ -308,6 +309,17 @@ class _RichDiaryPageState extends State<RichDiaryPage>
           ),
           actions: [
             if (editor != null)
+              DocumentHistoryActions(
+                editor: editor,
+                editable: _editing,
+                canEdit: () =>
+                    mounted &&
+                    _editing &&
+                    !_leaving &&
+                    !_allowPop &&
+                    identical(_editor, editor),
+              ),
+            if (editor != null)
               IconButton(
                 tooltip: status,
                 icon: Icon(
@@ -379,6 +391,7 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                         focusNode: _focus,
                         scrollController: _scroll!,
                         editable: _editing,
+                        showHistoryActionsInToolbar: false,
                         autoFocus: widget.diary == null,
                         header: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

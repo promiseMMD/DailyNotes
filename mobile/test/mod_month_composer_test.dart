@@ -214,7 +214,9 @@ void main() {
         tester.widget<FilledButton>(find.byType(FilledButton).last).onPressed,
         isNull,
       );
-      expect(find.byTooltip(l10n.month.copyDraft), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('long-document-more')));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.month.copyDraft), findsOneWidget);
     },
   );
 

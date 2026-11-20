@@ -8,13 +8,14 @@ import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_utils/moodiary_utils.dart';
 import 'package:mui/mui.dart';
 
+import '../dailynotes/data/daily_notes_store.dart';
 import '../dailynotes/editor/document_canvas.dart';
 import '../dailynotes/editor/document_envelope.dart';
+import '../dailynotes/editor/document_history_actions.dart';
 import 'mod_month_document.dart';
 import 'mod_month_native.dart';
-import 'mod_month_store.dart';
 import 'mod_month_order.dart';
-import '../dailynotes/data/daily_notes_store.dart';
+import 'mod_month_store.dart';
 
 const _emptyBody =
     '{"type":"doc","attrs":{"v":2},"content":[{"type":"paragraph"}]}';
@@ -246,6 +247,8 @@ class ModMonthComposer extends StatefulWidget {
   @override
   State<ModMonthComposer> createState() => _ModMonthComposerState();
 }
+
+enum _ComposerDocumentAction { copyDraft, info }
 
 class _ModMonthComposerState extends State<ModMonthComposer>
     with WidgetsBindingObserver {
@@ -606,6 +609,49 @@ class _ModMonthComposerState extends State<ModMonthComposer>
     Navigator.of(context).pop();
   }
 
+  Future<void> _showDocumentActions() async {
+    final editor = _documentEditor;
+    final action = await showDialog<_ComposerDocumentAction>(
+      context: context,
+      requestFocus: false,
+      builder: (dialog) => SimpleDialog(
+        title: Text(context.l10n.dailynotes.documentActions),
+        children: [
+          SimpleDialogOption(
+            key: const ValueKey('long-document-copy'),
+            onPressed: _busy
+                ? null
+                : () =>
+                      Navigator.pop(dialog, _ComposerDocumentAction.copyDraft),
+            child: Text(context.l10n.month.copyDraft),
+          ),
+          SimpleDialogOption(
+            key: const ValueKey('long-document-info'),
+            onPressed: () =>
+                Navigator.pop(dialog, _ComposerDocumentAction.info),
+            child: Text(context.l10n.month.localOnly),
+          ),
+        ],
+      ),
+    );
+    if (!mounted ||
+        _leaving ||
+        _allowExit ||
+        !identical(editor, _documentEditor) ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        action == null) {
+      return;
+    }
+    switch (action) {
+      case _ComposerDocumentAction.copyDraft:
+        if (!_busy) await _copyDraft();
+      case _ComposerDocumentAction.info:
+        await _details(
+          '${context.l10n.month.localOnly}\n\n${context.l10n.month.timezone}',
+        );
+    }
+  }
+
   Future<void> _leave() async {
     if (_busy || _allowExit || _leaving) return;
     setState(() => _leaving = true);
@@ -779,13 +825,23 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: MediaQuery.sizeOf(context).width >= 400 ? Text(title) : null,
           leading: IconButton(
             onPressed: _busy ? null : _leave,
             tooltip: l10n.common.close,
             icon: const Icon(LucideIcons.x),
           ),
           actions: [
+            if (_documentEditor != null)
+              DocumentHistoryActions(
+                editor: _documentEditor,
+                editable: _documentEditable,
+                canEdit: () =>
+                    mounted &&
+                    _documentEditable &&
+                    _documentEditor != null &&
+                    _documentEditor!.editable,
+              ),
             if (_editing &&
                 widget.block != null &&
                 widget.editorController == null &&
@@ -819,15 +875,10 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                 ),
               ),
             IconButton(
-              onPressed: _busy ? null : _copyDraft,
-              tooltip: l10n.month.copyDraft,
-              icon: const Icon(LucideIcons.copy),
-            ),
-            IconButton(
-              onPressed: () =>
-                  _details('${l10n.month.localOnly}\n\n${l10n.month.timezone}'),
-              tooltip: l10n.common.more,
-              icon: const Icon(LucideIcons.info),
+              key: const ValueKey('long-document-more'),
+              onPressed: _busy ? null : _showDocumentActions,
+              tooltip: l10n.dailynotes.documentActions,
+              icon: const Icon(LucideIcons.ellipsis),
             ),
           ],
         ),
@@ -917,6 +968,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                                 focusNode: _documentFocus,
                                 scrollController: _documentScroll!,
                                 editable: _documentEditable,
+                                showHistoryActionsInToolbar: false,
                                 autoFocus:
                                     widget.block == null && _attempt == null,
                                 header: Column(

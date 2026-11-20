@@ -502,4 +502,157 @@ void main() {
       reopened.dispose();
     },
   );
+
+  test('archive preserves note, folder, links, drafts, revision and events', () async {
+    const doc =
+        '{"document":{"type":"page","children":[{"type":"paragraph","data":{"delta":[{"insert":"original"}]}}]}}';
+    final rootFolder = await store.createFolder('root');
+    final folder = await store.createFolder('child', parentId: rootFolder.id);
+    final otherFolder = await store.createFolder('unrelated');
+    final rootTopic = await store.createTopic('root topic');
+    final topic = await store.createTopic(
+      'child topic',
+      parentId: rootTopic.id,
+    );
+    final otherTopic = await store.createTopic('unrelated topic');
+    final note = await store.saveRichNote(
+      title: 'Keep',
+      plainText: 'original',
+      documentJson: doc,
+      documentVersion: 1,
+      folderId: folder.id,
+      tags: ['one'],
+    );
+    final visible = await store.saveNote(title: 'Visible', body: 'visible');
+    await store.linkNote(note.id, topic.id);
+    await store.linkNote(note.id, otherTopic.id);
+    await store.saveDraft('note:${note.id}', {'body': 'unsaved'});
+    final rowBefore =
+        (await db
+                .customSelect(
+                  'SELECT revision, payload FROM dn_records WHERE id = ?',
+                  variables: [Variable.withString(note.id)],
+                )
+                .getSingle())
+            .data;
+    final linksBefore =
+        (await db.customSelect('SELECT * FROM dn_links ORDER BY id').get())
+            .map((row) => row.data)
+            .toList();
+    final events = store.pendingOperationCount;
+
+    await Future.wait([
+      store.setNoteArchived(note.id, archived: true),
+      store.setNoteArchived(note.id, archived: true),
+    ]);
+    expect(store.unarchivedNotes.map((n) => n.id), [visible.id]);
+    expect(store.archivedNotes.single.id, note.id);
+    expect(store.notes.map((n) => n.id).toSet(), {note.id, visible.id});
+    expect(store.unarchivedNotesForTopic(topic.id), isEmpty);
+    expect(store.notesForTopic(topic.id).single.id, note.id);
+    expect(store.archivedNotesForTopic(topic.id).single.id, note.id);
+    expect(store.topicsForNote(note.id).map((t) => t.id).toSet(), {
+      topic.id,
+      otherTopic.id,
+    });
+    expect(store.topicsWithArchivedNotes.map((t) => t.id).toSet(), {
+      rootTopic.id,
+      topic.id,
+      otherTopic.id,
+    });
+    expect(store.foldersWithArchivedNotes.map((f) => f.id).toSet(), {
+      rootFolder.id,
+      folder.id,
+    });
+    expect(
+      store.foldersWithArchivedNotes.any((f) => f.id == otherFolder.id),
+      isFalse,
+    );
+    expect(store.draft('note:${note.id}')!['body'], 'unsaved');
+    expect(store.pendingOperationCount, events);
+    expect(
+      (await db
+              .customSelect(
+                'SELECT revision, payload FROM dn_records WHERE id = ?',
+                variables: [Variable.withString(note.id)],
+              )
+              .getSingle())
+          .data,
+      rowBefore,
+    );
+    expect(
+      (await db.customSelect('SELECT * FROM dn_links ORDER BY id').get())
+          .map((row) => row.data)
+          .toList(),
+      linksBefore,
+    );
+
+    final reopened = DailyNotesStore(db);
+    await reopened.open();
+    expect(reopened.isNoteArchived(note.id), isTrue);
+    expect(reopened.archivedNotes.single.documentJson, doc);
+    await reopened.saveRichNote(
+      id: note.id,
+      title: 'Keep edited',
+      plainText: 'original',
+      documentJson: doc,
+      documentVersion: 1,
+      folderId: folder.id,
+      tags: ['one'],
+    );
+    expect(reopened.isNoteArchived(note.id), isTrue);
+    expect(reopened.archivedNotes.single.title, 'Keep edited');
+    await reopened.setNoteArchived(note.id, archived: false);
+    await store.refresh();
+    expect(store.isNoteArchived(note.id), isFalse);
+    expect(store.notesForTopic(topic.id).single.id, note.id);
+    expect(store.foldersWithArchivedNotes, isEmpty);
+    expect(store.topicsWithArchivedNotes, isEmpty);
+    expect(store.topicsForNote(note.id).map((t) => t.id).toSet(), {
+      topic.id,
+      otherTopic.id,
+    });
+    reopened.dispose();
+  });
+
+  test(
+    'archive rolls back on metadata failure and rejects trashed notes',
+    () async {
+      final note = await store.saveNote(title: 'Keep', body: 'body');
+      final pending = store.pendingOperationCount;
+      await db.customStatement(
+        "CREATE TRIGGER fail_archive BEFORE INSERT ON dn_metadata "
+        "WHEN NEW.key LIKE 'archive:note:%' BEGIN SELECT RAISE(ABORT, 'disk'); END",
+      );
+      await expectLater(
+        store.setNoteArchived(note.id, archived: true),
+        throwsA(isA<Object>()),
+      );
+      expect(store.isNoteArchived(note.id), isFalse);
+      expect(store.notes.single.id, note.id);
+      expect(store.pendingOperationCount, pending);
+      await db.customStatement('DROP TRIGGER fail_archive');
+      await store.setNoteArchived(note.id, archived: true);
+      await db.customStatement(
+        "CREATE TRIGGER fail_unarchive BEFORE DELETE ON dn_metadata "
+        "WHEN OLD.key LIKE 'archive:note:%' BEGIN SELECT RAISE(ABORT, 'disk'); END",
+      );
+      await expectLater(
+        store.setNoteArchived(note.id, archived: false),
+        throwsA(isA<Object>()),
+      );
+      expect(store.isNoteArchived(note.id), isTrue);
+      expect(store.archivedNotes.single.id, note.id);
+      await db.customStatement('DROP TRIGGER fail_unarchive');
+      await store.deleteNote(note.id);
+      expect(store.archivedNotes, isEmpty);
+      expect(store.deletedNotes.single.id, note.id);
+      await expectLater(
+        store.setNoteArchived(note.id, archived: false),
+        throwsStateError,
+      );
+      await store.restoreNote(note.id);
+      expect(store.archivedNotes.single.id, note.id);
+    },
+  );
 }

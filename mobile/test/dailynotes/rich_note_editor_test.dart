@@ -322,7 +322,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('删除'));
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-delete')));
       await tester.pumpAndSettle();
       expect(find.text('删除这篇笔记？'), findsOneWidget);
       await tester.tap(find.text('删除').last);
@@ -381,7 +383,9 @@ void main() {
     await editor.insertText(8, ' latest', path: [0]);
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('删除'));
+    await tester.tap(find.byKey(const ValueKey('note-document-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-document-delete')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
@@ -427,7 +431,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('解锁编辑'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('选择文件夹'));
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-folder')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('设备').last);
       await tester.pumpAndSettle();
@@ -437,7 +443,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(store.notes.single.folderId, folder.id);
       expect(store.notes.single.documentJson, document);
-      await tester.tap(find.byTooltip('标签'));
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-tags')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, '维护, 观察');
       await tester.tap(find.text('确认').last);

@@ -2030,6 +2030,9 @@ class Translations$dailynotes$zh {
 
 	/// zh: '移除链接'
 	String get editorLinkRemove => '移除链接';
+
+	/// zh: '文档操作'
+	String get documentActions => '文档操作';
 }
 
 // Path: dailynotesNavigation

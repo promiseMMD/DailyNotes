@@ -167,5 +167,6 @@
   "editorFontLoadFailed": "部分字体无法加载，请检查字体文件。",
   "editorLinkAddress": "链接地址",
   "editorLinkInvalid": "请输入有效的网址、邮箱或电话号码链接。",
-  "editorLinkRemove": "移除链接"
+  "editorLinkRemove": "移除链接",
+  "documentActions": "文档操作"
 }

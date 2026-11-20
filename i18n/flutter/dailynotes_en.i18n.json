@@ -167,5 +167,6 @@
   "editorFontLoadFailed": "Some fonts could not be loaded. Check the font files.",
   "editorLinkAddress": "Link address",
   "editorLinkInvalid": "Enter a valid web, email, or telephone link.",
-  "editorLinkRemove": "Remove link"
+  "editorLinkRemove": "Remove link",
+  "documentActions": "Document actions"
 }

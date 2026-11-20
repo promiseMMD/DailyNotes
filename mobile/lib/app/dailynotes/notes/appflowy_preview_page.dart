@@ -3,6 +3,7 @@ import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
 
 import '../editor/document_canvas.dart';
+import '../editor/document_history_actions.dart';
 
 /// Isolated preview: never reads or writes the user's saved notes.
 class AppFlowyPreviewPage extends StatefulWidget {
@@ -31,7 +32,10 @@ class _AppFlowyPreviewPageState extends State<AppFlowyPreviewPage> {
   Widget build(BuildContext context) {
     final text = context.l10n.dailynotes;
     return Scaffold(
-      appBar: AppBar(title: Text(text.editorPreview)),
+      appBar: AppBar(
+        title: Text(text.editorPreview),
+        actions: [DocumentHistoryActions(editor: _editor, editable: true)],
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -45,6 +49,7 @@ class _AppFlowyPreviewPageState extends State<AppFlowyPreviewPage> {
                 focusNode: _focus,
                 scrollController: _scroll,
                 editable: true,
+                showHistoryActionsInToolbar: false,
                 autoFocus: true,
               ),
             ),

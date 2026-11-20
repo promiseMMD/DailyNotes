@@ -2,18 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
-
-import 'package:flutter/services.dart';
-
 import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
 
 import '../data/daily_notes_store.dart';
-import '../recovery/emergency_note_export.dart';
 import '../data/rich_document_guard.dart';
 import '../editor/document_canvas.dart';
+import '../editor/document_history_actions.dart';
+import '../recovery/emergency_note_export.dart';
 import 'rich_note_outline.dart';
 
 /// AppFlowy document is the source of truth; text is only a list preview.
@@ -34,6 +33,8 @@ class RichNoteEditorPage extends StatefulWidget {
   @override
   State<RichNoteEditorPage> createState() => _RichNoteEditorPageState();
 }
+
+enum _NoteDocumentAction { outline, folder, tags, delete }
 
 class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     with WidgetsBindingObserver {
@@ -350,6 +351,63 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     Navigator.pop(context);
   }
 
+  Future<void> _showDocumentActions(EditorState editor) async {
+    final action = await showDialog<_NoteDocumentAction>(
+      context: context,
+      requestFocus: false,
+      builder: (dialog) => SimpleDialog(
+        title: Text(context.l10n.dailynotes.documentActions),
+        children: [
+          SimpleDialogOption(
+            key: const ValueKey('note-document-outline'),
+            onPressed: () => Navigator.pop(dialog, _NoteDocumentAction.outline),
+            child: Text(context.l10n.dailynotes.documentOutline),
+          ),
+          SimpleDialogOption(
+            key: const ValueKey('note-document-folder'),
+            onPressed: _editing
+                ? () => Navigator.pop(dialog, _NoteDocumentAction.folder)
+                : null,
+            child: Text(context.l10n.dailynotes.chooseFolder),
+          ),
+          SimpleDialogOption(
+            key: const ValueKey('note-document-tags'),
+            onPressed: _editing
+                ? () => Navigator.pop(dialog, _NoteDocumentAction.tags)
+                : null,
+            child: Text(context.l10n.dailynotes.noteTags),
+          ),
+          if (_id != null)
+            SimpleDialogOption(
+              key: const ValueKey('note-document-delete'),
+              onPressed: () =>
+                  Navigator.pop(dialog, _NoteDocumentAction.delete),
+              child: Text(context.l10n.dailynotes.delete),
+            ),
+        ],
+      ),
+    );
+    if (!mounted ||
+        action == null ||
+        !identical(_editor, editor) ||
+        editor.isDisposed ||
+        _leaving ||
+        _allowPop ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    switch (action) {
+      case _NoteDocumentAction.outline:
+        _scaffoldKey.currentState?.openEndDrawer();
+      case _NoteDocumentAction.folder:
+        if (_editing && editor.editable) await _chooseFolder();
+      case _NoteDocumentAction.tags:
+        if (_editing && editor.editable) await _editTags();
+      case _NoteDocumentAction.delete:
+        await _delete();
+    }
+  }
+
   Future<void> _chooseFolder() async {
     final result = await showDialog<String>(
       context: context,
@@ -584,18 +642,14 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                 onSelect: (node) => unawaited(_jumpToOutline(node)),
               ),
         appBar: AppBar(
-          title: Text(t.notesTitle),
+          title: MediaQuery.sizeOf(context).width >= 400
+              ? Text(t.notesTitle)
+              : null,
           leading: IconButton(
             icon: const Icon(LucideIcons.arrowLeft),
             onPressed: _leave,
           ),
           actions: [
-            if (editor != null)
-              IconButton(
-                tooltip: t.documentOutline,
-                icon: const Icon(LucideIcons.listTree),
-                onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-              ),
             if (editor != null)
               IconButton(
                 tooltip: status,
@@ -622,23 +676,16 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                   ),
                 ),
               ),
-            if (editor != null) ...[
-              IconButton(
-                onPressed: _editing ? _chooseFolder : null,
-                tooltip: t.chooseFolder,
-                icon: const Icon(LucideIcons.folder),
-              ),
-              IconButton(
-                onPressed: _editing ? _editTags : null,
-                tooltip: t.noteTags,
-                icon: const Icon(LucideIcons.tags),
-              ),
-            ],
-            if (editor != null && _id != null)
-              IconButton(
-                onPressed: _delete,
-                tooltip: t.delete,
-                icon: const Icon(LucideIcons.trash2),
+            if (editor != null)
+              DocumentHistoryActions(
+                editor: editor,
+                editable: _editing,
+                canEdit: () =>
+                    mounted &&
+                    _editing &&
+                    !_leaving &&
+                    !_allowPop &&
+                    identical(_editor, editor),
               ),
             if (editor != null)
               IconButton(
@@ -655,6 +702,13 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                     editor.editable = _editing;
                   });
                 },
+              ),
+            if (editor != null)
+              IconButton(
+                key: const ValueKey('note-document-more'),
+                tooltip: t.documentActions,
+                icon: const Icon(LucideIcons.ellipsis),
+                onPressed: () => _showDocumentActions(editor),
               ),
           ],
         ),
@@ -706,6 +760,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                         focusNode: _editorFocus,
                         scrollController: _scrollController!,
                         editable: _editing,
+                        showHistoryActionsInToolbar: false,
                         autoFocus: widget.note == null,
                         header: TextField(
                           controller: _title,

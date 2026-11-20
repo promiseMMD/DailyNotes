@@ -618,7 +618,7 @@ void main() {
       endOffset: 5,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.tap(find.byKey(const ValueKey('rich-floating-format')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     final sheet = find.byType(DraggableScrollableSheet);
@@ -916,7 +916,7 @@ void main() {
     await tester.pumpAndSettle();
     final before = editor.selectionRects().single;
     expect(before.bottom, greaterThan(450));
-    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.tap(find.byKey(const ValueKey('rich-floating-format')));
     await tester.pumpAndSettle();
     final after = editor.selectionRects().single;
     final sheetHeader = tester
@@ -954,7 +954,7 @@ void main() {
     await tester.pumpAndSettle();
     final before = editor.selectionRects().single;
     expect(before.bottom, lessThan(450));
-    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.tap(find.byKey(const ValueKey('rich-floating-format')));
     await tester.pumpAndSettle();
     expect(editor.selectionRects().single.top, closeTo(before.top, .1));
     await tester.pumpWidget(const SizedBox());
@@ -987,7 +987,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final before = editor.selectionRects().single;
-      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.tap(find.byKey(const ValueKey('rich-floating-format')));
       await tester.pumpAndSettle();
       expect(editor.selectionRects().single.top, closeTo(before.top, .1));
       final handle = find.byKey(const ValueKey('rich-format-drag-handle'));
@@ -1137,4 +1137,124 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     editor.dispose();
   });
+
+  testWidgets(
+    'hidden keyboard uses a selection menu without rebuilding editor',
+    (tester) async {
+      final editor = document('alpha beta');
+      await mount(tester, editor);
+      final beforeState = tester.state(find.byType(af.AppFlowyEditor));
+      tester.view.viewInsets = FakeViewPadding.zero;
+      final selection = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      editor.selection = selection;
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-toolbar-format')), findsNothing);
+      expect(find.byKey(const ValueKey('rich-selection-menu')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rich-floating-link')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rich-floating-copy')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('rich-floating-bold')));
+      await tester.pumpAndSettle();
+      expect(jsonEncode(editor.document.toJson()), contains('"bold":true'));
+      expect(editor.selection, selection);
+      expect(
+        identical(beforeState, tester.state(find.byType(af.AppFlowyEditor))),
+        isTrue,
+      );
+      await tester.tap(find.byKey(const ValueKey('rich-floating-format')));
+      await tester.pumpAndSettle();
+      expect(find.byType(DraggableScrollableSheet), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
+
+  testWidgets('a stale floating command never writes to another selection', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    tester.view.viewInsets = FakeViewPadding.zero;
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    await tester.pumpAndSettle();
+    final action = tester
+        .widget<IconButton>(find.byKey(const ValueKey('rich-floating-bold')))
+        .onPressed!;
+    final original = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 6,
+      endOffset: 10,
+    );
+    action();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets(
+    'locking while a floating command is pending cannot modify text',
+    (tester) async {
+      final editor = document('alpha beta');
+      await mount(tester, editor);
+      tester.view.viewInsets = FakeViewPadding.zero;
+      editor.selection = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      await tester.pumpAndSettle();
+      final action = tester
+          .widget<IconButton>(find.byKey(const ValueKey('rich-floating-bold')))
+          .onPressed!;
+      final original = jsonEncode(editor.document.toJson());
+      editor.editable = false;
+      action();
+      await tester.pump();
+      expect(jsonEncode(editor.document.toJson()), original);
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
+
+  testWidgets(
+    'floating menu hides on focus loss and with a collapsed selection',
+    (tester) async {
+      final editor = document('alpha beta');
+      await mount(tester, editor);
+      tester.view.viewInsets = FakeViewPadding.zero;
+      editor.selection = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-selection-menu')), findsOneWidget);
+      editor.selection = af.Selection.single(path: [0], startOffset: 2);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-selection-menu')), findsNothing);
+      editor.selection = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      await tester.pumpAndSettle();
+      tester
+          .widget<RichEditorToolbar>(find.byType(RichEditorToolbar))
+          .focusNode
+          .unfocus();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-selection-menu')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
 }

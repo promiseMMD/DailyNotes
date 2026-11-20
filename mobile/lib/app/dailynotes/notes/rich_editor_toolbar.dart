@@ -18,12 +18,14 @@ class RichEditorToolbar extends StatefulWidget {
     required this.child,
     this.loadFonts,
     this.scrollController,
+    this.showHistoryActionsInToolbar = true,
   });
 
   final af.EditorState editor;
   final FocusNode focusNode;
   final af.EditorScrollController? scrollController;
   final bool editable;
+  final bool showHistoryActionsInToolbar;
   final Widget child;
 
   /// Loads usable user-imported font families for the formatting picker.
@@ -176,12 +178,18 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
   int _selectionRevision = 0;
   af.Selection? _observedSelection;
   bool _busy = false;
+  final _contentKey = GlobalKey();
+  bool _geometryQueued = false;
+  ({Offset position, double width, _SelectionSession session})? _floating;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.focusNode.addListener(_focusChanged);
+    widget.scrollController?.offsetNotifier.addListener(
+      _scheduleFloatingGeometry,
+    );
     _observedSelection = _selectionSnapshot(widget.editor.selection);
     widget.editor.selectionNotifier.addListener(_selectionChanged);
     _listenTransactions();
@@ -191,6 +199,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     _transactions = widget.editor.transactionStream.listen((event) {
       if (event.$1 == af.TransactionTime.after) {
         _revision++;
+        _scheduleFloatingGeometry();
         if (mounted) setState(() {});
       }
     });
@@ -203,11 +212,23 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       oldWidget.focusNode.removeListener(_focusChanged);
       widget.focusNode.addListener(_focusChanged);
     }
+    if (!identical(oldWidget.scrollController, widget.scrollController)) {
+      oldWidget.scrollController?.offsetNotifier.removeListener(
+        _scheduleFloatingGeometry,
+      );
+      widget.scrollController?.offsetNotifier.addListener(
+        _scheduleFloatingGeometry,
+      );
+      _floating = null;
+      _scheduleFloatingGeometry();
+    }
     if (!identical(oldWidget.editor, widget.editor)) {
       oldWidget.editor.selectionNotifier.removeListener(_selectionChanged);
       _transactions.cancel();
       _revision++;
       _selectionRevision++;
+      _floating = null;
+      _scheduleFloatingGeometry();
       _observedSelection = _selectionSnapshot(widget.editor.selection);
       widget.editor.selectionNotifier.addListener(_selectionChanged);
       _listenTransactions();
@@ -218,17 +239,28 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.focusNode.removeListener(_focusChanged);
+    widget.scrollController?.offsetNotifier.removeListener(
+      _scheduleFloatingGeometry,
+    );
     widget.editor.selectionNotifier.removeListener(_selectionChanged);
     _transactions.cancel();
     super.dispose();
   }
 
   void _focusChanged() {
+    _scheduleFloatingGeometry();
     if (mounted) setState(() {});
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleFloatingGeometry();
+  }
+
+  @override
   void didChangeMetrics() {
+    _scheduleFloatingGeometry();
     if (mounted) setState(() {});
   }
 
@@ -240,11 +272,208 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       _selectionRevision++;
       _observedSelection = _selectionSnapshot(current);
     }
+    // The SDK may notify with the same selection when a drag ends.
+    _scheduleFloatingGeometry();
     if (mounted) setState(() {});
   }
 
   bool get _editable =>
       widget.editable && widget.editor.editable && !widget.editor.isDisposed;
+
+  bool get _floatingEligible {
+    if (!mounted ||
+        !_editable ||
+        _busy ||
+        !widget.focusNode.hasFocus ||
+        View.of(context).viewInsets.bottom > 0 ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return false;
+    }
+    final dragMode = widget.editor.selectionExtraInfo?['selection_drag_mode']
+        ?.toString();
+    if (dragMode == 'MobileSelectionDragMode.leftSelectionHandle' ||
+        dragMode == 'MobileSelectionDragMode.rightSelectionHandle') {
+      return false;
+    }
+    final selection = widget.editor.selection;
+    return selection != null &&
+        !selection.isCollapsed &&
+        _validSelection(selection) &&
+        _textOnly(selection);
+  }
+
+  void _scheduleFloatingGeometry() {
+    if (_geometryQueued || !mounted) return;
+    _geometryQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _geometryQueued = false;
+      if (!mounted) return;
+      final session = _floatingEligible ? _capture() : null;
+      final box = _contentKey.currentContext?.findRenderObject();
+      if (session == null ||
+          box is! RenderBox ||
+          !box.attached ||
+          !box.hasSize) {
+        if (_floating != null) setState(() => _floating = null);
+        return;
+      }
+      final bounds = box.localToGlobal(Offset.zero) & box.size;
+      final visible = widget.editor
+          .selectionRects()
+          .where((r) => !r.isEmpty && r.overlaps(bounds))
+          .toList();
+      if (visible.isEmpty) {
+        if (_floating != null) setState(() => _floating = null);
+        return;
+      }
+      final first = visible.reduce((a, b) => a.top <= b.top ? a : b);
+      final last = visible.reduce((a, b) => a.bottom >= b.bottom ? a : b);
+      const height = 44.0;
+      const gap = 8.0;
+      final width = (session.selection.isSingle ? 210.0 : 168.0).clamp(
+        0.0,
+        bounds.width,
+      );
+      final above = first.top - bounds.top - height - gap;
+      final below = last.bottom - bounds.top + gap;
+      final double? top = above >= 0
+          ? above
+          : below + height <= bounds.height
+          ? below
+          : null;
+      if (top == null || width < 42) {
+        if (_floating != null) setState(() => _floating = null);
+        return;
+      }
+      final left = (first.center.dx - bounds.left - width / 2).clamp(
+        0.0,
+        bounds.width - width,
+      );
+      final position = Offset(left, top);
+      final previous = _floating;
+      if (previous == null ||
+          previous.position != position ||
+          previous.width != width ||
+          previous.session.revision != session.revision ||
+          previous.session.selectionRevision != session.selectionRevision) {
+        setState(
+          () =>
+              _floating = (position: position, width: width, session: session),
+        );
+      }
+    });
+  }
+
+  void _floatingAction(_SelectionSession session, VoidCallback action) {
+    if (!_floatingEligible || !_sessionValid(session)) {
+      if (mounted) _selectionExpired();
+      return;
+    }
+    action();
+  }
+
+  Widget _surface(Widget child, bool showFloating) {
+    if (showFloating) _scheduleFloatingGeometry();
+    final floating = _floating;
+    final valid =
+        showFloating && floating != null && _sessionValid(floating.session);
+    return Stack(
+      key: _contentKey,
+      fit: StackFit.expand,
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: (_) {
+            _scheduleFloatingGeometry();
+            return false;
+          },
+          child: child,
+        ),
+        if (valid)
+          Positioned(
+            left: floating.position.dx,
+            top: floating.position.dy,
+            width: floating.width,
+            height: 44,
+            child: Material(
+              key: const ValueKey('rich-selection-menu'),
+              color: context.theme.colors.surface,
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.antiAlias,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _floatingButton(
+                      'format',
+                      context.l10n.editor.toolbar.format,
+                      LucideIcons.caseSensitive,
+                      floating.session,
+                      _openFormat,
+                    ),
+                  ),
+                  Expanded(
+                    child: _floatingButton(
+                      'bold',
+                      context.l10n.editor.toolbar.bold,
+                      LucideIcons.bold,
+                      floating.session,
+                      () => _quick(
+                        (s) => _toggle(s, af.AppFlowyRichTextKeys.bold),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: _floatingButton(
+                      'italic',
+                      context.l10n.editor.toolbar.italic,
+                      LucideIcons.italic,
+                      floating.session,
+                      () => _quick(
+                        (s) => _toggle(s, af.AppFlowyRichTextKeys.italic),
+                      ),
+                    ),
+                  ),
+                  if (floating.session.selection.isSingle)
+                    Expanded(
+                      child: _floatingButton(
+                        'link',
+                        context.l10n.editor.toolbar.link,
+                        LucideIcons.link,
+                        floating.session,
+                        _openLink,
+                      ),
+                    ),
+                  Expanded(
+                    child: _floatingButton(
+                      'copy',
+                      MaterialLocalizations.of(context).copyButtonLabel,
+                      LucideIcons.copy,
+                      floating.session,
+                      () => af.copyCommand.execute(widget.editor),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _floatingButton(
+    String id,
+    String tooltip,
+    IconData icon,
+    _SelectionSession session,
+    VoidCallback action,
+  ) => IconButton(
+    key: ValueKey('rich-floating-$id'),
+    tooltip: tooltip,
+    iconSize: 20,
+    padding: EdgeInsets.zero,
+    icon: Icon(icon),
+    onPressed: () => _floatingAction(session, action),
+  );
 
   bool _validSelection(af.Selection? selection) {
     if (!_editable || selection == null) return false;
@@ -661,9 +890,15 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         _editable &&
         widget.focusNode.hasFocus &&
         _validSelection(selection) &&
-        (keyboard || !selection!.isCollapsed);
-    // Preserve the editor's position in the tree and its IME state.
-    if (!show) return Column(children: [Expanded(child: widget.child)]);
+        keyboard;
+    final showFloating = _floatingEligible;
+    // Keep the editor at the same position in the tree across mode changes.
+    if (!show) {
+      return _surface(
+        Column(children: [Expanded(child: widget.child)]),
+        showFloating,
+      );
+    }
     final selected = selection!;
     final isRange = !selected.isCollapsed;
     final node = widget.editor.document.nodeAtPath(selected.start.path);
@@ -771,29 +1006,31 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
           LucideIcons.link,
           canText ? _openLink : null,
         ),
-      _ToolbarAction(
-        'undo',
-        l10n.editor.toolbar.undo,
-        LucideIcons.undo2,
-        !_busy && !widget.editor.undoManager.undoStack.isEmpty
-            ? () {
-                if (_editable) af.undoCommand.execute(widget.editor);
-              }
-            : null,
-      ),
-      _ToolbarAction(
-        'redo',
-        l10n.editor.toolbar.redo,
-        LucideIcons.redo2,
-        !_busy && !widget.editor.undoManager.redoStack.isEmpty
-            ? () {
-                if (_editable) af.redoCommand.execute(widget.editor);
-              }
-            : null,
-      ),
+      if (widget.showHistoryActionsInToolbar)
+        _ToolbarAction(
+          'undo',
+          l10n.editor.toolbar.undo,
+          LucideIcons.undo2,
+          !_busy && !widget.editor.undoManager.undoStack.isEmpty
+              ? () {
+                  if (_editable) af.undoCommand.execute(widget.editor);
+                }
+              : null,
+        ),
+      if (widget.showHistoryActionsInToolbar)
+        _ToolbarAction(
+          'redo',
+          l10n.editor.toolbar.redo,
+          LucideIcons.redo2,
+          !_busy && !widget.editor.undoManager.redoStack.isEmpty
+              ? () {
+                  if (_editable) af.redoCommand.execute(widget.editor);
+                }
+              : null,
+        ),
     ];
     // Context mappings are provisional; all other applicable actions remain
-    // accessible in More. Undo/redo stay there until top navigation owns them.
+    // accessible in More. Screens with top history actions omit duplicates.
     final quickCandidates = isRange
         ? <String>['bold', 'italic', 'underline', if (selected.isSingle) 'link']
         : isList
@@ -806,95 +1043,98 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       for (final id in quickIds) actions.firstWhere((a) => a.id == id),
     ];
     final overflow = actions.where((a) => !quickIds.contains(a.id)).toList();
-    return Column(
-      children: [
-        Expanded(child: widget.child),
-        Material(
-          color: context.theme.colors.surface,
-          child: SizedBox(
-            height: 42,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _button(
-                    'insert',
-                    l10n.editor.toolbar.insert,
-                    LucideIcons.plus,
-                    !isRange && canBlock ? _openInsert : null,
-                  ),
-                ),
-                Expanded(
-                  child: _button(
-                    'format',
-                    l10n.editor.toolbar.format,
-                    LucideIcons.caseSensitive,
-                    canText ? _openFormat : null,
-                  ),
-                ),
-                for (final action in visible)
+    return _surface(
+      Column(
+        children: [
+          Expanded(child: widget.child),
+          Material(
+            color: context.theme.colors.surface,
+            child: SizedBox(
+              height: 42,
+              child: Row(
+                children: [
                   Expanded(
                     child: _button(
-                      action.id,
-                      action.label,
-                      action.icon,
-                      action.onPressed,
-                      selected: action.selected,
+                      'insert',
+                      l10n.editor.toolbar.insert,
+                      LucideIcons.plus,
+                      !isRange && canBlock ? _openInsert : null,
                     ),
                   ),
-                Expanded(
-                  child: PopupMenuButton<String>(
-                    key: const ValueKey('rich-toolbar-more'),
-                    tooltip: l10n.common.more,
-                    icon: const Icon(LucideIcons.ellipsis),
-                    iconSize: 20,
-                    padding: EdgeInsets.zero,
-                    requestFocus: false,
-                    onOpened: () => _overflowSession = _capture(),
-                    onCanceled: () => _overflowSession = null,
-                    onSelected: (id) {
-                      final session = _overflowSession;
-                      _overflowSession = null;
-                      if (session == null || !_sessionValid(session)) {
-                        if (mounted) _selectionExpired();
-                        return;
-                      }
-                      final action = overflow
-                          .where((a) => a.id == id)
-                          .firstOrNull;
-                      action?.onPressed?.call();
-                    },
-                    itemBuilder: (_) => [
-                      for (final action in overflow)
-                        PopupMenuItem<String>(
-                          key: ValueKey('rich-overflow-${action.id}'),
-                          value: action.id,
-                          enabled: action.onPressed != null,
-                          child: Row(
-                            children: [
-                              Icon(action.icon, size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(child: Text(action.label)),
-                            ],
+                  Expanded(
+                    child: _button(
+                      'format',
+                      l10n.editor.toolbar.format,
+                      LucideIcons.caseSensitive,
+                      canText ? _openFormat : null,
+                    ),
+                  ),
+                  for (final action in visible)
+                    Expanded(
+                      child: _button(
+                        action.id,
+                        action.label,
+                        action.icon,
+                        action.onPressed,
+                        selected: action.selected,
+                      ),
+                    ),
+                  Expanded(
+                    child: PopupMenuButton<String>(
+                      key: const ValueKey('rich-toolbar-more'),
+                      tooltip: l10n.common.more,
+                      icon: const Icon(LucideIcons.ellipsis),
+                      iconSize: 20,
+                      padding: EdgeInsets.zero,
+                      requestFocus: false,
+                      onOpened: () => _overflowSession = _capture(),
+                      onCanceled: () => _overflowSession = null,
+                      onSelected: (id) {
+                        final session = _overflowSession;
+                        _overflowSession = null;
+                        if (session == null || !_sessionValid(session)) {
+                          if (mounted) _selectionExpired();
+                          return;
+                        }
+                        final action = overflow
+                            .where((a) => a.id == id)
+                            .firstOrNull;
+                        action?.onPressed?.call();
+                      },
+                      itemBuilder: (_) => [
+                        for (final action in overflow)
+                          PopupMenuItem<String>(
+                            key: ValueKey('rich-overflow-${action.id}'),
+                            value: action.id,
+                            enabled: action.onPressed != null,
+                            child: Row(
+                              children: [
+                                Icon(action.icon, size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(child: Text(action.label)),
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: _button(
-                    'close',
-                    l10n.editor.toolbar.hideKeyboard,
-                    LucideIcons.chevronDown,
-                    () => SystemChannels.textInput.invokeMethod<void>(
-                      'TextInput.hide',
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    child: _button(
+                      'close',
+                      l10n.editor.toolbar.hideKeyboard,
+                      LucideIcons.chevronDown,
+                      () => SystemChannels.textInput.invokeMethod<void>(
+                        'TextInput.hide',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
+      false,
     );
   }
 }

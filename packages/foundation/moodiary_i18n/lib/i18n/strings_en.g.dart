@@ -734,6 +734,7 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get editorLinkAddress => 'Link address';
 	@override String get editorLinkInvalid => 'Enter a valid web, email, or telephone link.';
 	@override String get editorLinkRemove => 'Remove link';
+	@override String get documentActions => 'Document actions';
 }
 
 // Path: dailynotesNavigation
