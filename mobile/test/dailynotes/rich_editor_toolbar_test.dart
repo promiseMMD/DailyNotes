@@ -1138,6 +1138,46 @@ void main() {
     editor.dispose();
   });
 
+  testWidgets('selection menu and keyboard toolbar coexist without overlap', (
+    tester,
+  ) async {
+    final editor = document('alpha beta');
+    await mount(tester, editor);
+    final beforeState = tester.state(find.byType(af.AppFlowyEditor));
+    final selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 5,
+    );
+    editor.selection = selection;
+    await tester.pumpAndSettle();
+
+    final menu = find.byKey(const ValueKey('rich-selection-menu'));
+    final toolbar = find.byKey(const ValueKey('rich-keyboard-toolbar'));
+    expect(menu, findsOneWidget);
+    expect(toolbar, findsOneWidget);
+    expect(tester.getRect(menu).overlaps(tester.getRect(toolbar)), isFalse);
+    expect(
+      editor.selectionRects().any((rect) => rect.overlaps(tester.getRect(menu))),
+      isFalse,
+    );
+    await tester.tap(find.byKey(const ValueKey('rich-floating-bold')));
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), contains('"bold":true'));
+    expect(editor.selection, selection);
+
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(toolbar, findsNothing);
+    expect(menu, findsOneWidget);
+    expect(
+      identical(beforeState, tester.state(find.byType(af.AppFlowyEditor))),
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
   testWidgets(
     'hidden keyboard uses a selection menu without rebuilding editor',
     (tester) async {

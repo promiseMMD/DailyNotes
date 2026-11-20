@@ -173,6 +173,7 @@ af.Selection? _selectionSnapshot(af.Selection? selection) => selection == null
 
 class _RichEditorToolbarState extends State<RichEditorToolbar>
     with WidgetsBindingObserver {
+  static const _keyboardToolbarHeight = 42.0;
   late StreamSubscription<dynamic> _transactions;
   int _revision = 0;
   int _selectionRevision = 0;
@@ -285,7 +286,6 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         !_editable ||
         _busy ||
         !widget.focusNode.hasFocus ||
-        View.of(context).viewInsets.bottom > 0 ||
         ModalRoute.of(context)?.isCurrent != true) {
       return false;
     }
@@ -317,7 +317,17 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         if (_floating != null) setState(() => _floating = null);
         return;
       }
-      final bounds = box.localToGlobal(Offset.zero) & box.size;
+      final origin = box.localToGlobal(Offset.zero);
+      // With the keyboard open the bottom area belongs to the fixed toolbar,
+      // so the floating menu must fit inside the remaining editor surface.
+      final toolbarHeight = View.of(context).viewInsets.bottom > 0
+          ? _keyboardToolbarHeight
+          : 0.0;
+      final contentHeight = (box.size.height - toolbarHeight).clamp(
+        0.0,
+        box.size.height,
+      );
+      final bounds = origin & Size(box.size.width, contentHeight);
       final visible = widget.editor
           .selectionRects()
           .where((r) => !r.isEmpty && r.overlaps(bounds))
@@ -1048,9 +1058,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         children: [
           Expanded(child: widget.child),
           Material(
+            key: const ValueKey('rich-keyboard-toolbar'),
             color: context.theme.colors.surface,
             child: SizedBox(
-              height: 42,
+              height: _keyboardToolbarHeight,
               child: Row(
                 children: [
                   Expanded(
@@ -1134,7 +1145,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
           ),
         ],
       ),
-      false,
+      showFloating,
     );
   }
 }
