@@ -37,6 +37,12 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
   late final TextInputService textInputService;
   late final FocusNode focusNode;
 
+  @override
+  bool get isInputSettled => textInputService.isInputSettled;
+
+  @override
+  int get inputRevision => textInputService.inputRevision;
+
   final List<AppFlowyKeyboardServiceInterceptor> interceptors = [];
 
   // previous selection
@@ -68,6 +74,7 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
         .registerGestureInterceptor(interceptor);
 
     textInputService = buildTextInputService();
+    editorState.editableNotifier.addListener(_onEditableChanged);
 
     focusNode = widget.focusNode ?? FocusNode(debugLabel: 'keyboard service');
     focusNode.addListener(_onFocusChanged);
@@ -78,6 +85,7 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
   @override
   void dispose() {
     editorState.selectionNotifier.removeListener(_onSelectionChanged);
+    editorState.editableNotifier.removeListener(_onEditableChanged);
     editorState.service.selectionService.unregisterGestureInterceptor(
       'keyboard',
     );
@@ -121,7 +129,9 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
   // Used in mobile only
   @override
   void enableKeyBoard(Selection selection) {
-    _attachTextInputService(selection);
+    if (editorState.editable && !editorState.isDisposed) {
+      _attachTextInputService(selection);
+    }
   }
 
   @override
@@ -179,6 +189,12 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
     for (final shortcutEvent in widget.commandShortcutEvents) {
       // check if the shortcut event can respond to the raw key event
       if (shortcutEvent.canRespondToRawKeyEvent(event)) {
+        // A command such as undo can mutate its history stack before apply()
+        // notices the reading lock. Permit only known non-mutating commands.
+        if (editorState.isDisposed ||
+            (!editorState.editable && !_allowedInReadOnly(shortcutEvent))) {
+          return KeyEventResult.handled;
+        }
         final result = shortcutEvent.handler(editorState);
         if (result == KeyEventResult.handled) {
           AppFlowyEditorLog.keyboard.debug(
@@ -198,7 +214,36 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
     return KeyEventResult.ignored;
   }
 
+  bool _allowedInReadOnly(CommandShortcutEvent shortcut) =>
+      identical(shortcut, copyCommand) ||
+      identical(shortcut, selectAllCommand) ||
+      identical(shortcut, openInlineLinkCommand) ||
+      identical(shortcut, openLinksCommand) ||
+      identical(shortcut, exitEditingCommand) ||
+      identical(shortcut, homeCommand) ||
+      identical(shortcut, endCommand) ||
+      identical(shortcut, pageUpCommand) ||
+      identical(shortcut, pageDownCommand) ||
+      arrowLeftKeys.contains(shortcut) ||
+      arrowRightKeys.contains(shortcut) ||
+      arrowUpKeys.contains(shortcut) ||
+      arrowDownKeys.contains(shortcut);
+
   void _onSelectionChanged() {
+    // Selection and copy remain available in reading mode, but the mobile
+    // input connection must not show the keyboard or accept edits. Retain
+    // focus for selection handles and keyboard copy shortcuts.
+    if (!editorState.editable) {
+      if (textInputService.attached) {
+        textInputService.close();
+      }
+      if (editorState.selection != null &&
+          editorState.selectionUpdateReason == SelectionUpdateReason.uiEvent) {
+        focusNode.requestFocus();
+      }
+      previousSelection = editorState.selection;
+      return;
+    }
     final doNotAttach = editorState
         .selectionExtraInfo?[selectionExtraInfoDoNotAttachTextService];
     if (doNotAttach == true) {
@@ -228,6 +273,12 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
     }
 
     previousSelection = selection;
+  }
+
+  void _onEditableChanged() {
+    if (!editorState.editable && textInputService.attached) {
+      textInputService.close();
+    }
   }
 
   void _attachTextInputService(Selection selection) {

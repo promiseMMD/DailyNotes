@@ -702,6 +702,8 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get searchOutline => 'Search headings';
 	@override String get outlineEmpty => 'No headings in this document';
 	@override String get outlineNoMatch => 'No matching headings';
+	@override String get outlineExpand => 'Expand heading';
+	@override String get outlineCollapse => 'Collapse heading';
 	@override String get untitledHeading => 'Untitled heading';
 	@override String get outlineUnavailable => 'The heading changed or cannot be located. Reopen the outline.';
 	@override String get enterFolderBranch => 'Browse next folder level';
@@ -732,7 +734,9 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get editorFontMono => 'Monospace';
 	@override String get editorFontLoadFailed => 'Some fonts could not be loaded. Check the font files.';
 	@override String get editorLinkAddress => 'Link address';
+	@override String get editorLinkTextInvalid => 'Link text cannot contain a line break.';
 	@override String get editorLinkInvalid => 'Enter a valid web, email, or telephone link.';
+	@override String get editorLinkApplyFailed => 'The link was not applied. Please try again.';
 	@override String get editorLinkRemove => 'Remove link';
 	@override String get documentActions => 'Document actions';
 }

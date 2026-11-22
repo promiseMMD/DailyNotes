@@ -136,6 +136,8 @@
   "searchOutline": "Search headings",
   "outlineEmpty": "No headings in this document",
   "outlineNoMatch": "No matching headings",
+  "outlineExpand": "Expand heading",
+  "outlineCollapse": "Collapse heading",
   "untitledHeading": "Untitled heading",
   "outlineUnavailable": "The heading changed or cannot be located. Reopen the outline.",
   "enterFolderBranch": "Browse next folder level",
@@ -166,7 +168,9 @@
   "editorFontMono": "Monospace",
   "editorFontLoadFailed": "Some fonts could not be loaded. Check the font files.",
   "editorLinkAddress": "Link address",
+  "editorLinkTextInvalid": "Link text cannot contain a line break.",
   "editorLinkInvalid": "Enter a valid web, email, or telephone link.",
+  "editorLinkApplyFailed": "The link was not applied. Please try again.",
   "editorLinkRemove": "Remove link",
   "documentActions": "Document actions"
 }

@@ -9,8 +9,11 @@ import 'package:moodiary_models/moodiary_models.dart';
 import 'package:mui/mui.dart';
 
 import '../editor/document_canvas.dart';
+import '../editor/document_editor_back_controller.dart';
 import '../editor/document_envelope.dart';
 import '../editor/document_history_actions.dart';
+import '../editor/document_outline_navigation.dart';
+import '../notes/rich_note_outline.dart';
 
 /// A diary's AppFlowy document autosaves as the actual diary, not as a draft.
 class RichDiaryPage extends StatefulWidget {
@@ -32,6 +35,8 @@ class RichDiaryPage extends StatefulWidget {
 
 class _RichDiaryPageState extends State<RichDiaryPage>
     with WidgetsBindingObserver {
+  final _editorBack = DocumentEditorBackController();
+  final _outlineNavigation = DocumentOutlineNavigation();
   late Diary _base;
   Diary? _saved;
   Diary? _unconfirmed;
@@ -179,6 +184,7 @@ class _RichDiaryPageState extends State<RichDiaryPage>
 
   Future<void> _leave() async {
     if (_leaving) return;
+    if (_editorBack.handleBack()) return;
     _leaving = true;
     _timer?.cancel();
     await _save();
@@ -256,6 +262,78 @@ class _RichDiaryPageState extends State<RichDiaryPage>
     }
     setState(() => _allowPop = true);
     Navigator.pop(context);
+  }
+
+  Future<void> _openOutline(af.EditorState editor) async {
+    if (!mounted ||
+        _leaving ||
+        _allowPop ||
+        editor.isDisposed ||
+        !identical(_editor, editor) ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    final target = await showDocumentOutline(
+      context: context,
+      editor: editor,
+      editorFocus: _focus,
+      isCurrent: () =>
+          mounted &&
+          !_leaving &&
+          !_allowPop &&
+          identical(_editor, editor) &&
+          ModalRoute.of(context)?.isCurrent == true,
+    );
+    if (target != null &&
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        !editor.isDisposed &&
+        identical(_editor, editor) &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      await _jumpToOutline(target);
+    }
+  }
+
+  Future<void> _showDocumentActions(af.EditorState editor) async {
+    final openOutline = await showDialog<bool>(
+      context: context,
+      requestFocus: false,
+      builder: (dialog) => SimpleDialog(
+        title: Text(context.l10n.dailynotes.documentActions),
+        children: [
+          SimpleDialogOption(
+            key: const ValueKey('diary-document-outline'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: Text(context.l10n.dailynotes.documentOutline),
+          ),
+        ],
+      ),
+    );
+    if (openOutline == true) await _openOutline(editor);
+  }
+
+  Future<void> _jumpToOutline(af.Node target) async {
+    final editor = _editor;
+    final scroll = _scroll;
+    if (editor == null || scroll == null) return;
+    final reached = await _outlineNavigation.jump(
+      target: target,
+      editor: editor,
+      scroll: scroll,
+      isCurrent: () =>
+          mounted &&
+          !_leaving &&
+          !_allowPop &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          identical(_editor, editor) &&
+          identical(_scroll, scroll),
+    );
+    if (reached == false && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.dailynotes.outlineUnavailable)),
+      );
+    }
   }
 
   @override
@@ -352,6 +430,26 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                   });
                 },
               ),
+            if (editor != null)
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  key: const ValueKey('diary-document-outline-button'),
+                  tooltip: t.documentOutline,
+                  icon: const Icon(LucideIcons.listTree),
+                  onPressed: () => unawaited(_openOutline(editor)),
+                ),
+              ),
+            if (editor != null)
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  key: const ValueKey('diary-document-more'),
+                  tooltip: t.documentActions,
+                  icon: const Icon(LucideIcons.ellipsis),
+                  onPressed: () => _showDocumentActions(editor),
+                ),
+              ),
           ],
         ),
         body: editor == null
@@ -387,6 +485,7 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                       ),
                     Expanded(
                       child: DailyNotesDocumentCanvas(
+                        backController: _editorBack,
                         editor: editor,
                         focusNode: _focus,
                         scrollController: _scroll!,

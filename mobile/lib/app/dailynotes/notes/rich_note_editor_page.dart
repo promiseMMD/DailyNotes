@@ -11,7 +11,9 @@ import 'package:mui/mui.dart';
 import '../data/daily_notes_store.dart';
 import '../data/rich_document_guard.dart';
 import '../editor/document_canvas.dart';
+import '../editor/document_editor_back_controller.dart';
 import '../editor/document_history_actions.dart';
+import '../editor/document_outline_navigation.dart';
 import '../recovery/emergency_note_export.dart';
 import 'rich_note_outline.dart';
 
@@ -38,11 +40,12 @@ enum _NoteDocumentAction { outline, folder, tags, delete }
 
 class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     with WidgetsBindingObserver {
+  final _editorBack = DocumentEditorBackController();
+  final _outlineNavigation = DocumentOutlineNavigation();
   late final TextEditingController _title;
   final FocusNode _editorFocus = FocusNode(debugLabel: 'daily-note-editor');
   EditorState? _editor;
   EditorScrollController? _scrollController;
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription<dynamic>? _changes;
   Timer? _timer;
   Future<void>? _pending;
@@ -52,7 +55,6 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   int _revision = 0, _savedRevision = 0;
   bool _failed = false, _allowPop = false, _leaving = false;
   late bool _editing;
-  int _outlineJumpGeneration = 0;
   bool _exporting = false;
   bool _deleting = false;
 
@@ -263,6 +265,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
 
   Future<void> _leave() async {
     if (_leaving) return;
+    if (_editorBack.handleBack()) return;
     _leaving = true;
     _timer?.cancel();
     await _save();
@@ -351,6 +354,37 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     Navigator.pop(context);
   }
 
+  Future<void> _openOutline(EditorState editor) async {
+    if (!mounted ||
+        _leaving ||
+        _allowPop ||
+        editor.isDisposed ||
+        !identical(_editor, editor) ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    final target = await showDocumentOutline(
+      context: context,
+      editor: editor,
+      editorFocus: _editorFocus,
+      isCurrent: () =>
+          mounted &&
+          !_leaving &&
+          !_allowPop &&
+          identical(_editor, editor) &&
+          ModalRoute.of(context)?.isCurrent == true,
+    );
+    if (target != null &&
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        !editor.isDisposed &&
+        identical(_editor, editor) &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      await _jumpToOutline(target);
+    }
+  }
+
   Future<void> _showDocumentActions(EditorState editor) async {
     final action = await showDialog<_NoteDocumentAction>(
       context: context,
@@ -380,8 +414,9 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
           if (_id != null)
             SimpleDialogOption(
               key: const ValueKey('note-document-delete'),
-              onPressed: () =>
-                  Navigator.pop(dialog, _NoteDocumentAction.delete),
+              onPressed: _editing && editor.editable
+                  ? () => Navigator.pop(dialog, _NoteDocumentAction.delete)
+                  : null,
               child: Text(context.l10n.dailynotes.delete),
             ),
         ],
@@ -398,13 +433,13 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     }
     switch (action) {
       case _NoteDocumentAction.outline:
-        _scaffoldKey.currentState?.openEndDrawer();
+        await _openOutline(editor);
       case _NoteDocumentAction.folder:
         if (_editing && editor.editable) await _chooseFolder();
       case _NoteDocumentAction.tags:
         if (_editing && editor.editable) await _editTags();
       case _NoteDocumentAction.delete:
-        await _delete();
+        if (_editing && editor.editable) await _delete();
     }
   }
 
@@ -488,7 +523,21 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   }
 
   Future<void> _delete() async {
-    if (_deleting || _id == null) return;
+    final editor = _editor;
+    final id = _id;
+    bool canDelete() =>
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        _editing &&
+        editor != null &&
+        !editor.isDisposed &&
+        editor.editable &&
+        identical(_editor, editor) &&
+        id != null &&
+        _id == id &&
+        ModalRoute.of(context)?.isCurrent == true;
+    if (_deleting || !canDelete()) return;
     _deleting = true;
     try {
       final confirmed = await showDialog<bool>(
@@ -508,10 +557,10 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
           ],
         ),
       );
-      if (confirmed != true || !mounted) return;
+      if (confirmed != true || !mounted || !canDelete()) return;
       _timer?.cancel();
       await _save();
-      if (!mounted) return;
+      if (!mounted || !canDelete()) return;
       if (_revision != _savedRevision) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.dailynotes.saveFailed)),
@@ -519,7 +568,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         return;
       }
       try {
-        await widget.store.deleteNote(_id!);
+        await widget.store.deleteNote(id!);
         if (!mounted) return;
         setState(() => _allowPop = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -560,48 +609,20 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   Future<void> _jumpToOutline(Node target) async {
     final editor = _editor;
     final scroll = _scrollController;
-    final generation = ++_outlineJumpGeneration;
     if (editor == null || scroll == null) return;
-    bool current() =>
-        mounted &&
-        !_leaving &&
-        !_allowPop &&
-        ModalRoute.of(context)?.isCurrent == true &&
-        generation == _outlineJumpGeneration &&
-        identical(_editor, editor) &&
-        identical(_scrollController, scroll) &&
-        !editor.isDisposed;
-    bool targetIsCurrent() {
-      final path = target.path;
-      return path.isNotEmpty &&
-          identical(editor.document.nodeAtPath(path), target);
-    }
-
-    _scaffoldKey.currentState?.closeEndDrawer();
-    await WidgetsBinding.instance.endOfFrame;
-    if (!current()) return;
-    if (!targetIsCurrent() || !scroll.itemScrollController.isAttached) {
-      _outlineUnavailable();
-      return;
-    }
-    // The document header is item zero; root document blocks start at one.
-    scroll.itemScrollController.jumpTo(index: target.path.first + 1);
-    await WidgetsBinding.instance.endOfFrame;
-    if (!current()) return;
-    if (!targetIsCurrent()) {
-      _outlineUnavailable();
-      return;
-    }
-    final targetContext = target.key.currentContext;
-    if (targetContext == null || !targetContext.mounted) {
-      _outlineUnavailable();
-      return;
-    }
-    await Scrollable.ensureVisible(
-      targetContext,
-      alignment: 0.08,
-      duration: const Duration(milliseconds: 180),
+    final reached = await _outlineNavigation.jump(
+      target: target,
+      editor: editor,
+      scroll: scroll,
+      isCurrent: () =>
+          mounted &&
+          !_leaving &&
+          !_allowPop &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          identical(_editor, editor) &&
+          identical(_scrollController, scroll),
     );
+    if (reached == false) _outlineUnavailable();
   }
 
   void _outlineUnavailable() {
@@ -633,14 +654,6 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         if (!didPop) unawaited(_leave());
       },
       child: Scaffold(
-        key: _scaffoldKey,
-        endDrawerEnableOpenDragGesture: false,
-        endDrawer: editor == null
-            ? null
-            : RichNoteOutline(
-                editor: editor,
-                onSelect: (node) => unawaited(_jumpToOutline(node)),
-              ),
         appBar: AppBar(
           title: MediaQuery.sizeOf(context).width >= 400
               ? Text(t.notesTitle)
@@ -704,11 +717,24 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                 },
               ),
             if (editor != null)
-              IconButton(
-                key: const ValueKey('note-document-more'),
-                tooltip: t.documentActions,
-                icon: const Icon(LucideIcons.ellipsis),
-                onPressed: () => _showDocumentActions(editor),
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  key: const ValueKey('note-document-outline-button'),
+                  tooltip: t.documentOutline,
+                  icon: const Icon(LucideIcons.listTree),
+                  onPressed: () => unawaited(_openOutline(editor)),
+                ),
+              ),
+            if (editor != null)
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  key: const ValueKey('note-document-more'),
+                  tooltip: t.documentActions,
+                  icon: const Icon(LucideIcons.ellipsis),
+                  onPressed: () => _showDocumentActions(editor),
+                ),
               ),
           ],
         ),
@@ -756,6 +782,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                       Text(_tags.map((tag) => '#$tag').join('  ')),
                     Expanded(
                       child: DailyNotesDocumentCanvas(
+                        backController: _editorBack,
                         editor: editor,
                         focusNode: _editorFocus,
                         scrollController: _scrollController!,

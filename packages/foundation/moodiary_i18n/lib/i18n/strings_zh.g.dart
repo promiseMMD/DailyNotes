@@ -1935,6 +1935,12 @@ class Translations$dailynotes$zh {
 	/// zh: '没有匹配的标题'
 	String get outlineNoMatch => '没有匹配的标题';
 
+	/// zh: '展开标题'
+	String get outlineExpand => '展开标题';
+
+	/// zh: '折叠标题'
+	String get outlineCollapse => '折叠标题';
+
 	/// zh: '无文字标题'
 	String get untitledHeading => '无文字标题';
 
@@ -2025,8 +2031,14 @@ class Translations$dailynotes$zh {
 	/// zh: '链接地址'
 	String get editorLinkAddress => '链接地址';
 
+	/// zh: '显示文字不能换行。'
+	String get editorLinkTextInvalid => '显示文字不能换行。';
+
 	/// zh: '请输入有效的网址、邮箱或电话号码链接。'
 	String get editorLinkInvalid => '请输入有效的网址、邮箱或电话号码链接。';
+
+	/// zh: '链接未应用，请重试。'
+	String get editorLinkApplyFailed => '链接未应用，请重试。';
 
 	/// zh: '移除链接'
 	String get editorLinkRemove => '移除链接';

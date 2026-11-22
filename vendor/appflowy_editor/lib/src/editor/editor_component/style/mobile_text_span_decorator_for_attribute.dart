@@ -36,6 +36,13 @@ TextSpan mobileTextSpanDecoratorForAttribute(
       };
 
     tapGestureRecognizer.onTapDown = (_) {
+      if (editorState.isDisposed) return;
+      if (!editorState.editable) {
+        // A short tap can still open the link in reading mode. Do not select
+        // it as an editing gesture or open the editable link form on hold.
+        timer = Timer(const Duration(milliseconds: 500), () {});
+        return;
+      }
       final selection = Selection.single(
         path: node.path,
         startOffset: index,
@@ -47,6 +54,16 @@ TextSpan mobileTextSpanDecoratorForAttribute(
       );
 
       timer = Timer(const Duration(milliseconds: 500), () {
+        if (!context.mounted ||
+            editorState.isDisposed ||
+            !editorState.editable ||
+            editorState.selection != selection ||
+            !identical(
+              editorState.document.nodeAtPath(selection.start.path),
+              node,
+            )) {
+          return;
+        }
         // Implement long tap logic
         showDialog<void>(
           context: context,

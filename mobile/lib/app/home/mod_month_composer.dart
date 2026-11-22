@@ -10,8 +10,11 @@ import 'package:mui/mui.dart';
 
 import '../dailynotes/data/daily_notes_store.dart';
 import '../dailynotes/editor/document_canvas.dart';
+import '../dailynotes/editor/document_editor_back_controller.dart';
 import '../dailynotes/editor/document_envelope.dart';
 import '../dailynotes/editor/document_history_actions.dart';
+import '../dailynotes/editor/document_outline_navigation.dart';
+import '../dailynotes/notes/rich_note_outline.dart';
 import 'mod_month_document.dart';
 import 'mod_month_native.dart';
 import 'mod_month_order.dart';
@@ -248,10 +251,12 @@ class ModMonthComposer extends StatefulWidget {
   State<ModMonthComposer> createState() => _ModMonthComposerState();
 }
 
-enum _ComposerDocumentAction { copyDraft, info }
+enum _ComposerDocumentAction { outline, copyDraft, info }
 
 class _ModMonthComposerState extends State<ModMonthComposer>
     with WidgetsBindingObserver {
+  final _editorBack = DocumentEditorBackController();
+  final _outlineNavigation = DocumentOutlineNavigation();
   late final _editor = widget.editorController ?? MoodiaryEditorController();
   final FocusNode _documentFocus = FocusNode(
     debugLabel: 'long-record-document',
@@ -609,6 +614,64 @@ class _ModMonthComposerState extends State<ModMonthComposer>
     Navigator.of(context).pop();
   }
 
+  Future<void> _openOutline(af.EditorState editor) async {
+    if (!mounted ||
+        _busy ||
+        _leaving ||
+        _allowExit ||
+        editor.isDisposed ||
+        !identical(_documentEditor, editor) ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    final target = await showDocumentOutline(
+      context: context,
+      editor: editor,
+      editorFocus: _documentFocus,
+      isCurrent: () =>
+          mounted &&
+          !_busy &&
+          !_leaving &&
+          !_allowExit &&
+          identical(_documentEditor, editor) &&
+          ModalRoute.of(context)?.isCurrent == true,
+    );
+    if (target != null &&
+        mounted &&
+        !_busy &&
+        !_leaving &&
+        !_allowExit &&
+        !editor.isDisposed &&
+        identical(_documentEditor, editor) &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      await _jumpToOutline(target);
+    }
+  }
+
+  Future<void> _jumpToOutline(af.Node target) async {
+    final editor = _documentEditor;
+    final scroll = _documentScroll;
+    if (editor == null || scroll == null) return;
+    final reached = await _outlineNavigation.jump(
+      target: target,
+      editor: editor,
+      scroll: scroll,
+      isCurrent: () =>
+          mounted &&
+          !_busy &&
+          !_leaving &&
+          !_allowExit &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          identical(_documentEditor, editor) &&
+          identical(_documentScroll, scroll),
+    );
+    if (reached == false && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.dailynotes.outlineUnavailable)),
+      );
+    }
+  }
+
   Future<void> _showDocumentActions() async {
     final editor = _documentEditor;
     final action = await showDialog<_ComposerDocumentAction>(
@@ -617,6 +680,13 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       builder: (dialog) => SimpleDialog(
         title: Text(context.l10n.dailynotes.documentActions),
         children: [
+          if (editor != null)
+            SimpleDialogOption(
+              key: const ValueKey('long-document-outline'),
+              onPressed: () =>
+                  Navigator.pop(dialog, _ComposerDocumentAction.outline),
+              child: Text(context.l10n.dailynotes.documentOutline),
+            ),
           SimpleDialogOption(
             key: const ValueKey('long-document-copy'),
             onPressed: _busy
@@ -643,6 +713,8 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       return;
     }
     switch (action) {
+      case _ComposerDocumentAction.outline:
+        if (editor != null) await _openOutline(editor);
       case _ComposerDocumentAction.copyDraft:
         if (!_busy) await _copyDraft();
       case _ComposerDocumentAction.info:
@@ -654,6 +726,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
 
   Future<void> _leave() async {
     if (_busy || _allowExit || _leaving) return;
+    if (_editorBack.handleBack()) return;
     setState(() => _leaving = true);
     _draftTimer?.cancel();
     try {
@@ -874,11 +947,26 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                       : LucideIcons.circleCheck,
                 ),
               ),
-            IconButton(
-              key: const ValueKey('long-document-more'),
-              onPressed: _busy ? null : _showDocumentActions,
-              tooltip: l10n.dailynotes.documentActions,
-              icon: const Icon(LucideIcons.ellipsis),
+            if (_documentEditor case final editor?)
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  key: const ValueKey('long-document-outline-button'),
+                  onPressed: _busy
+                      ? null
+                      : () => unawaited(_openOutline(editor)),
+                  tooltip: l10n.dailynotes.documentOutline,
+                  icon: const Icon(LucideIcons.listTree),
+                ),
+              ),
+            SizedBox(
+              width: 40,
+              child: IconButton(
+                key: const ValueKey('long-document-more'),
+                onPressed: _busy ? null : _showDocumentActions,
+                tooltip: l10n.dailynotes.documentActions,
+                icon: const Icon(LucideIcons.ellipsis),
+              ),
             ),
           ],
         ),
@@ -964,6 +1052,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                           : AbsorbPointer(
                               absorbing: _locked,
                               child: DailyNotesDocumentCanvas(
+                                backController: _editorBack,
                                 editor: _documentEditor!,
                                 focusNode: _documentFocus,
                                 scrollController: _documentScroll!,

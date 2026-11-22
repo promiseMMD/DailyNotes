@@ -136,6 +136,8 @@
   "searchOutline": "搜索标题",
   "outlineEmpty": "文档中还没有标题",
   "outlineNoMatch": "没有匹配的标题",
+  "outlineExpand": "展开标题",
+  "outlineCollapse": "折叠标题",
   "untitledHeading": "无文字标题",
   "outlineUnavailable": "当前标题已变化或暂时无法定位，请重新打开目录。",
   "enterFolderBranch": "进入下一级目录",
@@ -166,7 +168,9 @@
   "editorFontMono": "等宽字体",
   "editorFontLoadFailed": "部分字体无法加载，请检查字体文件。",
   "editorLinkAddress": "链接地址",
+  "editorLinkTextInvalid": "显示文字不能换行。",
   "editorLinkInvalid": "请输入有效的网址、邮箱或电话号码链接。",
+  "editorLinkApplyFailed": "链接未应用，请重试。",
   "editorLinkRemove": "移除链接",
   "documentActions": "文档操作"
 }

@@ -25,6 +25,17 @@ abstract class TextInputService {
   TextRange? get composingTextRange;
   bool get attached;
 
+  /// Whether observed text-update callbacks are settled. This is deliberately
+  /// conservative: implementations that cannot observe queued and in-flight
+  /// callbacks must not report a safe state. Platform messages not delivered
+  /// yet and other input commands are not covered; this is not a complete
+  /// safety gate for mutating a document.
+  bool get isInputSettled => false;
+
+  /// Changes whenever observed input state changes, including transitions that
+  /// later return to the same value. A snapshot can invalidate async work.
+  int get inputRevision => 0;
+
   void clearComposingTextRange();
 
   void updateCaretPosition(Size size, Matrix4 transform, Rect rect);

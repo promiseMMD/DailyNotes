@@ -71,7 +71,7 @@ void main() {
       await tester.enterText(find.byType(TextField).last, 'Target');
       await tester.pumpAndSettle();
       expect(find.text('Target chapter'), findsOneWidget);
-      expect(find.byKey(ValueKey('outline-${first.id}')), findsNothing);
+      expect(find.byKey(ValueKey('outline-${first.id}')), findsOneWidget);
       await tester.tap(find.byKey(ValueKey('outline-${second.id}')));
       await tester.pumpAndSettle();
       expect(jsonEncode(editor.document.toJson()), original);
@@ -82,6 +82,73 @@ void main() {
       await db.close();
     },
   );
+
+  testWidgets('outline folds heading branches and search shows their path', (
+    tester,
+  ) async {
+    final parent = headingNode(level: 1, text: '第一章');
+    final child = headingNode(level: 2, text: '第一节');
+    final nested = headingNode(level: 3, text: '目标标题');
+    final sibling = headingNode(level: 2, text: '第二节');
+    final next = headingNode(level: 1, text: '第二章');
+    final editor = EditorState(
+      document: Document(
+        root: pageNode(children: [parent, child, nested, sibling, next]),
+      ),
+    );
+    Node? selected;
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+            GlobalMuiLocalizations.delegate,
+          ],
+          builder: (context, child) =>
+              MaterialUiCompatibilityBridge(child: child!),
+          home: Scaffold(
+            body: RichNoteOutline(
+              editor: editor,
+              onSelect: (node) => selected = node,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final before = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(ValueKey('outline-toggle-${parent.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${child.id}')), findsNothing);
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsNothing);
+    expect(find.byKey(ValueKey('outline-${sibling.id}')), findsNothing);
+    expect(find.byKey(ValueKey('outline-${next.id}')), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '目标');
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${parent.id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('outline-${child.id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('outline-${sibling.id}')), findsNothing);
+    expect(find.byKey(ValueKey('outline-${next.id}')), findsNothing);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${child.id}')), findsNothing);
+
+    await tester.tap(find.byKey(ValueKey('outline-toggle-${parent.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('outline-toggle-${child.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsNothing);
+    expect(find.byKey(ValueKey('outline-${sibling.id}')), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('outline-${sibling.id}')));
+    expect(selected, same(sibling));
+    expect(jsonEncode(editor.document.toJson()), before);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
 
   testWidgets('outline and note actions fit a narrow phone', (tester) async {
     final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
@@ -122,6 +189,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.byKey(const ValueKey('note-document-more')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('note-document-outline-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(RichNoteOutline), findsOneWidget);
+    expect(find.text('Title'), findsWidgets);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(RichNoteOutline), findsNothing);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     store.dispose();
     await tester.runAsync(db.close);

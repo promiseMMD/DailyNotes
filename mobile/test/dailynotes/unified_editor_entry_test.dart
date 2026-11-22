@@ -80,6 +80,35 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
   }
 
+  Future<void> applyInlineCode(WidgetTester tester) async {
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-more')));
+    await tester.pumpAndSettle();
+    final action = find.byKey(const ValueKey('rich-overflow-code'));
+    await tester.ensureVisible(action);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> applyAaLink(WidgetTester tester, {String? text}) async {
+    final link = find.byKey(const ValueKey('rich-format-link'));
+    await tester.ensureVisible(link);
+    await tester.tap(link);
+    await tester.pumpAndSettle();
+    if (text != null) {
+      await tester.enterText(
+        find.byKey(const ValueKey('rich-link-text')),
+        text,
+      );
+    }
+    await tester.enterText(
+      find.byKey(const ValueKey('rich-link-address')),
+      'example.com',
+    );
+    await tester.tap(find.byKey(const ValueKey('rich-link-save')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
+  }
+
   testWidgets('the actual new-diary route opens the shared editor', (
     tester,
   ) async {
@@ -123,6 +152,31 @@ void main() {
     );
     expect(getIt<OpenDiaryRegistry>().snapshot(), hasLength(1));
     expect(getIt<OpenDiaryRegistry>().editingSnapshot(), hasLength(1));
+    await canvasEditor.editorState.insertText(0, '路由测试', path: [0]);
+    canvasEditor.editorState.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 4,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-format-font-page')), findsOneWidget);
+    tester.testTextInput.log.clear();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(RichDiaryPage), findsOneWidget);
+    expect(
+      tester.testTextInput.log.map((call) => call.method),
+      isNot(contains('TextInput.show')),
+    );
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     expect(getIt<OpenDiaryRegistry>().snapshot(), isEmpty);
     router.dispose();
@@ -213,10 +267,31 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('rich-toolbar-bold')));
+      await tester.pumpAndSettle();
+      await applyInlineCode(tester);
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
+      await tester.tap(
+        find.byKey(ValueKey('rich-format-${l10n.dailynotes.editorTextColor}')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-color-done')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
+      await applyAaLink(tester, text: '日记正文参考');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsNothing);
+      expect(find.byType(RichDiaryPage), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
       final saved = (await repository.getAllDiaries()).single;
-      expect(saved.contentText, contains('日记正文'));
+      expect(saved.contentText, contains('日记正文参考'));
       expect(
         DailyNotesDocumentEnvelope.hasNativeDocument(saved.content),
         isTrue,
@@ -224,6 +299,18 @@ void main() {
       expect(
         jsonEncode(DailyNotesDocumentEnvelope.decode(saved.content).toJson()),
         contains('"bold":true'),
+      );
+      expect(
+        jsonEncode(DailyNotesDocumentEnvelope.decode(saved.content).toJson()),
+        contains('"code":true'),
+      );
+      expect(
+        jsonEncode(DailyNotesDocumentEnvelope.decode(saved.content).toJson()),
+        contains('0xffd32f2f'),
+      );
+      expect(
+        jsonEncode(DailyNotesDocumentEnvelope.decode(saved.content).toJson()),
+        contains('"href":"https://example.com"'),
       );
       await tester.pumpWidget(const SizedBox());
       tester.view.viewInsets = FakeViewPadding.zero;
@@ -332,6 +419,10 @@ void main() {
           .widget<af.AppFlowyEditor>(find.byType(af.AppFlowyEditor))
           .editorState;
       await editor.insertText(0, '追加内容', path: [0]);
+      await editor.apply(
+        editor.transaction
+          ..insertNode([1], af.headingNode(level: 2, text: '追加标题')),
+      );
       editor.selection = af.Selection.single(
         path: [0],
         startOffset: 0,
@@ -339,6 +430,47 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('rich-toolbar-bold')));
+      await tester.pumpAndSettle();
+      await applyInlineCode(tester);
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('rich-format-font-page')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('rich-font-serif')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
+      await applyAaLink(tester, text: '追加内容参考');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsNothing);
+      expect(find.byType(ModMonthComposer), findsOneWidget);
+      tester.view.physicalSize = const Size(320, 700);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final heading = editor.document.root.children[1];
+      final beforeOutline = jsonEncode(editor.document.toJson());
+      await tester.tap(
+        find.byKey(const ValueKey('long-document-outline-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('outline-${heading.id}')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('long-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('long-document-outline')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('outline-${heading.id}')));
+      await tester.pumpAndSettle();
+      expect(jsonEncode(editor.document.toJson()), beforeOutline);
+      expect((await repository.load(topic.id, '2026-11')).blocks, isEmpty);
+      tester.view.physicalSize = const Size(430, 900);
+      await tester.pumpAndSettle();
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
       final draft = drafts.draft('unified-test');
@@ -346,6 +478,30 @@ void main() {
       expect(
         DailyNotesDocumentEnvelope.hasNativeDocument(draft!['body'] as String),
         isTrue,
+      );
+      expect(
+        DailyNotesDocumentEnvelope.plainText(
+          DailyNotesDocumentEnvelope.decode(draft['body'] as String),
+        ),
+        contains('追加内容参考'),
+      );
+      expect(
+        jsonEncode(
+          DailyNotesDocumentEnvelope.decode(draft['body'] as String).toJson(),
+        ),
+        contains('"code":true'),
+      );
+      expect(
+        jsonEncode(
+          DailyNotesDocumentEnvelope.decode(draft['body'] as String).toJson(),
+        ),
+        contains('"font_family":"serif"'),
+      );
+      expect(
+        jsonEncode(
+          DailyNotesDocumentEnvelope.decode(draft['body'] as String).toJson(),
+        ),
+        contains('"href":"https://example.com"'),
       );
       expect((await repository.load(topic.id, '2026-11')).blocks, isEmpty);
       await tester.tap(find.widgetWithText(FilledButton, l10n.common.save));
@@ -360,6 +516,18 @@ void main() {
           DailyNotesDocumentEnvelope.decode(block.tiptapJson).toJson(),
         ),
         contains('"bold":true'),
+      );
+      expect(
+        jsonEncode(
+          DailyNotesDocumentEnvelope.decode(block.tiptapJson).toJson(),
+        ),
+        contains('"code":true'),
+      );
+      expect(
+        jsonEncode(
+          DailyNotesDocumentEnvelope.decode(block.tiptapJson).toJson(),
+        ),
+        contains('"href":"https://example.com"'),
       );
       expect(drafts.draft('unified-test'), isNull);
       await tester.pumpWidget(

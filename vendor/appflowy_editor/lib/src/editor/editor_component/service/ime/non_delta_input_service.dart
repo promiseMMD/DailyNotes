@@ -4,6 +4,7 @@ import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:appflowy_editor/src/editor/editor_component/service/ime/text_diff.dart';
 import 'package:appflowy_editor/src/editor/editor_component/service/ime/text_input_service.dart';
 import 'package:appflowy_editor/src/editor/util/platform_extension.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 // string from flutter callback
@@ -18,7 +19,12 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
     required super.onPerformAction,
     super.contentInsertionConfiguration,
     super.onFloatingCursor,
+    @visibleForTesting this.debounceDuration,
   });
+
+  /// Allows tests to exercise the mobile debounce on a desktop test runner.
+  @visibleForTesting
+  final Duration? debounceDuration;
 
   @override
   TextRange? composingTextRange;
@@ -40,7 +46,38 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
 
   TextInputConnection? _textInputConnection;
 
-  final String debounceKey = 'updateEditingValue';
+  // Debounce has a global key map. Different editor instances must never
+  // cancel one another's queued IME updates.
+  static int _nextInputServiceId = 0;
+  final String debounceKey = 'updateEditingValue-${_nextInputServiceId++}';
+
+  bool _inputPending = false;
+  int _inputInFlight = 0;
+  bool _inputHasComposition = false;
+  bool _inputUncertain = false;
+  int _inputRevision = 0;
+
+  @override
+  bool get isInputSettled =>
+      !_inputPending &&
+      _inputInFlight == 0 &&
+      !_inputHasComposition &&
+      !_inputUncertain;
+
+  @override
+  int get inputRevision => _inputRevision;
+
+  bool _hasComposition(TextRange range) =>
+      range != TextRange.empty && (!range.isValid || !range.isCollapsed);
+
+  void _noteConnectionChange() {
+    _inputRevision++;
+    if (_inputPending || _inputInFlight > 0 || _inputHasComposition) {
+      // A cancelled/replaced update cannot be assumed to be in the document.
+      // Keep the state conservative for this service's remaining lifetime.
+      _inputUncertain = true;
+    }
+  }
 
   // when using gesture to move cursor on mobile, the floating cursor will be visible
   bool _isFloatingCursorVisible = false;
@@ -75,6 +112,9 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
       return;
     }
 
+    _noteConnectionChange();
+    _inputHasComposition = _hasComposition(formattedValue.composing);
+
     if (_textInputConnection == null ||
         _textInputConnection!.attached == false) {
       _textInputConnection = TextInput.attach(
@@ -84,6 +124,7 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
     }
 
     Debounce.cancel(debounceKey);
+    _inputPending = false;
 
     _textInputConnection!
       ..setEditingState(formattedValue)
@@ -98,6 +139,24 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
 
   @override
   void updateEditingValue(TextEditingValue value) {
+    _inputRevision++;
+    final composing = value.composing;
+    if (!value.isValid() ||
+        (composing != TextRange.empty &&
+            (!composing.isValid ||
+                composing.start > composing.end ||
+                composing.end > value.text.length))) {
+      // Some malformed values can pass through the diff without throwing.
+      // Preserve existing input behavior but do not certify the result.
+      _inputUncertain = true;
+    }
+    if (_inputInFlight > 0 ||
+        (_inputPending && currentTextEditingValue == value)) {
+      // An overlapping or superseded event cannot be certified as reconciled
+      // merely because an earlier callback eventually completes.
+      _inputUncertain = true;
+    }
+    _inputHasComposition = _hasComposition(value.composing);
     if (currentTextEditingValue == value) {
       return;
     }
@@ -109,24 +168,45 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
       AppFlowyEditorLog.editor.debug(
         'ignore updateEditingValue event when the floating cursor is visible',
       );
+      _inputUncertain = true;
       return;
     }
 
-    final deltas = getTextEditingDeltas(currentTextEditingValue, value);
+    late final List<TextEditingDelta> deltas;
+    try {
+      deltas = getTextEditingDeltas(currentTextEditingValue, value);
+    } catch (_) {
+      _inputUncertain = true;
+      rethrow;
+    }
     // On mobile, the IME will send a lot of updateEditingValue events, so we
     // need to debounce it to combine them together.
+    _inputPending = true;
     Debounce.debounce(
       debounceKey,
-      PlatformExtension.isMobile
-          ? const Duration(milliseconds: 10)
-          : Duration.zero,
+      debounceDuration ??
+          (PlatformExtension.isMobile
+              ? const Duration(milliseconds: 10)
+              : Duration.zero),
       () async {
-        final oldValue = _currentTextEditingValue?.copyWith();
-        currentTextEditingValue = value;
-        final willApply = await apply(deltas);
-        if (!willApply) {
-          currentTextEditingValue = oldValue;
-          _textInputConnection?.setEditingState(oldValue!);
+        _inputPending = false;
+        _inputInFlight++;
+        _inputRevision++;
+        try {
+          final oldValue = _currentTextEditingValue?.copyWith();
+          currentTextEditingValue = value;
+          final willApply = await apply(deltas);
+          if (!willApply) {
+            _inputUncertain = true;
+            currentTextEditingValue = oldValue;
+            _textInputConnection?.setEditingState(oldValue!);
+          }
+        } catch (_) {
+          _inputUncertain = true;
+          rethrow;
+        } finally {
+          _inputInFlight--;
+          _inputRevision++;
         }
       },
     );
@@ -134,6 +214,8 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
 
   @override
   void close() {
+    _noteConnectionChange();
+    _inputHasComposition = false;
     keepEditorFocusNotifier.reset();
     currentTextEditingValue = null;
     composingTextRange = null;
@@ -151,11 +233,15 @@ class NonDeltaTextInputService extends TextInputService with TextInputClient {
 
   @override
   void clearComposingTextRange() {
+    _inputRevision++;
     composingTextRange = TextRange.empty;
   }
 
   @override
-  void connectionClosed() {}
+  void connectionClosed() {
+    _noteConnectionChange();
+    _inputHasComposition = false;
+  }
 
   @override
   void insertTextPlaceholder(Size size) {}

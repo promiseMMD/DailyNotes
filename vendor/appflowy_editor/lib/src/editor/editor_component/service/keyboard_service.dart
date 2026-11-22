@@ -18,6 +18,12 @@ import 'package:flutter/services.dart';
 /// ```
 ///
 abstract class AppFlowyKeyboardService {
+  /// Conservative input-state information for guarding asynchronous edits.
+  /// This alone does not cover undelivered platform messages, other input
+  /// commands, or the route, focus, lock and selection.
+  bool get isInputSettled;
+  int get inputRevision;
+
   /// Enables IME shortcuts service.
   void enable();
 

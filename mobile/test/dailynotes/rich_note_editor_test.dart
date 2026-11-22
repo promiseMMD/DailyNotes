@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -64,23 +65,62 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
-          of: find.byType(DraggableScrollableSheet),
+          of: find.byKey(const ValueKey('rich-format-panel')),
           matching: find.byTooltip(l10n.editor.toolbar.bold),
         ),
       );
       await tester.pumpAndSettle();
+      final inlineCode = find.byKey(
+        ValueKey('rich-format-${l10n.editor.toolbar.inlineCode}'),
+      );
+      final arrow = find.byKey(const ValueKey('rich-format-code-more'));
+      await tester.ensureVisible(arrow);
+      await tester.tap(arrow);
+      await tester.pumpAndSettle();
+      await tester.tap(inlineCode);
+      await tester.pumpAndSettle();
+      final link = find.byKey(const ValueKey('rich-format-link'));
+      await tester.ensureVisible(link);
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('rich-link-text')),
+        'alpha!',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('rich-link-address')),
+        'example.com',
+      );
+      await tester.tap(find.byKey(const ValueKey('rich-link-save')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('rich-format-font')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('rich-font-serif')));
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('rich-format-font')));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rich-format-font')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rich-format-panel')), findsNothing);
+      expect(find.byType(RichNoteEditorPage), findsOneWidget);
       expect(store.notes, hasLength(1));
       expect(store.notes.single.documentJson, contains('"bold":true'));
+      expect(store.notes.single.documentJson, contains('"code":true'));
+      expect(
+        store.notes.single.documentJson,
+        contains('"href":"https://example.com"'),
+      );
       expect(
         store.notes.single.documentJson,
         contains('"font_family":"serif"'),
       );
-      expect(store.notes.single.body, 'alpha beta');
+      expect(store.notes.single.body, 'alpha! beta');
       final saved = store.notes.single;
       await tester.pumpWidget(const SizedBox());
       tester.view.viewInsets = FakeViewPadding.zero;
@@ -95,6 +135,10 @@ void main() {
       expect(
         jsonEncode(reopened.editorState.document.toJson()),
         contains('"bold":true'),
+      );
+      expect(
+        jsonEncode(reopened.editorState.document.toJson()),
+        contains('"code":true'),
       );
       expect(
         jsonEncode(reopened.editorState.document.toJson()),
@@ -236,6 +280,24 @@ void main() {
     expect(editor.autoFocus, isFalse);
     expect(editor.editorState.document.toJson().toString(), contains('已保存文本'));
     expect(find.byTooltip('解锁编辑'), findsOneWidget);
+    final before = jsonEncode(editor.editorState.document.toJson());
+    final pending = store.pendingOperationCount;
+    AppFlowyClipboard.lastText = null;
+    unawaited(
+      editor.editorState.updateSelectionWithReason(
+        Selection.single(path: [0], startOffset: 0, endOffset: 3),
+        reason: SelectionUpdateReason.uiEvent,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-floating-copy')), findsOneWidget);
+    expect(find.byKey(const ValueKey('rich-floating-bold')), findsNothing);
+    expect(tester.testTextInput.isVisible, isFalse);
+    await tester.tap(find.byKey(const ValueKey('rich-floating-copy')));
+    await tester.pumpAndSettle();
+    expect(AppFlowyClipboard.lastText, '已保存');
+    expect(jsonEncode(editor.editorState.document.toJson()), before);
+    expect(store.pendingOperationCount, pending);
     await tester.pumpWidget(const SizedBox());
     store.dispose();
     await db.close();
@@ -322,6 +384,36 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SimpleDialogOption>(
+              find.byKey(const ValueKey('note-document-delete')),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(store.notes.single.id, note.id);
+      expect(store.deletedNotes, isEmpty);
+      await tester.tap(find.byTooltip('解锁编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('note-document-delete')));
+      await tester.pumpAndSettle();
+      final editor = tester
+          .widget<AppFlowyEditor>(find.byType(AppFlowyEditor))
+          .editorState;
+      editor.editable = false;
+      await tester.tap(find.text('删除').last);
+      await tester.pumpAndSettle();
+      expect(store.notes.single.id, note.id);
+      expect(store.deletedNotes, isEmpty);
+      editor.editable = true;
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('note-document-more')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('note-document-delete')));

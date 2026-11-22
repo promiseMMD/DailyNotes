@@ -9,6 +9,7 @@ import 'package:moodiary_theme/moodiary_theme.dart';
 import 'package:mui/mui.dart';
 
 import '../notes/rich_editor_toolbar.dart';
+import 'document_editor_back_controller.dart';
 
 /// One mobile document surface for notes, diaries and long-record drafts.
 /// The owning page remains responsible for its own persistence lifecycle.
@@ -21,6 +22,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
     required this.editable,
     this.autoFocus = false,
     this.showHistoryActionsInToolbar = true,
+    this.backController,
     this.header,
   });
 
@@ -30,6 +32,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
   final bool editable;
   final bool autoFocus;
   final bool showHistoryActionsInToolbar;
+  final DocumentEditorBackController? backController;
   final Widget? header;
 
   @override
@@ -108,6 +111,7 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
       focusNode: widget.focusNode,
       editable: widget.editable,
       showHistoryActionsInToolbar: widget.showHistoryActionsInToolbar,
+      backController: widget.backController,
       loadFonts: _loadFonts,
       scrollController: widget.scrollController,
       child: af.AppFlowyEditor(

@@ -7,6 +7,8 @@ import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_logging/moodiary_logging.dart';
 import 'package:mui/mui.dart';
 
+import '../editor/document_editor_back_controller.dart';
+
 /// Mobile controls for the AppFlowy document. Business persistence remains in
 /// the owning page; no command here reports a local save or submits a draft.
 class RichEditorToolbar extends StatefulWidget {
@@ -19,6 +21,7 @@ class RichEditorToolbar extends StatefulWidget {
     this.loadFonts,
     this.scrollController,
     this.showHistoryActionsInToolbar = true,
+    this.backController,
   });
 
   final af.EditorState editor;
@@ -26,6 +29,7 @@ class RichEditorToolbar extends StatefulWidget {
   final af.EditorScrollController? scrollController;
   final bool editable;
   final bool showHistoryActionsInToolbar;
+  final DocumentEditorBackController? backController;
   final Widget child;
 
   /// Loads usable user-imported font families for the formatting picker.
@@ -52,6 +56,125 @@ class _SelectionSession {
   bool expired = false;
 }
 
+String _selectedLinkText(af.EditorState editor, af.Selection selection) {
+  final normalized = selection.normalized;
+  final delta = editor.document.nodeAtPath(normalized.start.path)?.delta;
+  if (!normalized.isSingle || delta == null || normalized.isCollapsed) {
+    return '';
+  }
+  return delta
+      .slice(normalized.start.offset, normalized.end.offset)
+      .toPlainText();
+}
+
+/// Applies a single-block link as one undoable transaction. Unchanged text is
+/// formatted in place, preserving all existing inline styles. When the label
+/// changes, only its differing middle is replaced; unchanged styled prefix and
+/// suffix retain their original attributes.
+Future<void> _applyLink(
+  af.EditorState editor,
+  af.Selection selection,
+  _LinkResult result,
+) async {
+  final selected = selection.normalized;
+  final node = editor.document.nodeAtPath(selected.start.path);
+  final delta = node?.delta;
+  if (!selected.isSingle || node == null || delta == null) {
+    throw StateError('invalid_link_selection');
+  }
+  if (result.remove) {
+    if (selected.isCollapsed) throw StateError('invalid_link_selection');
+    await editor.formatDelta(
+      selection,
+      {af.AppFlowyRichTextKeys.href: null},
+      selectionExtraInfo: {af.selectionExtraInfoDoNotAttachTextService: true},
+    );
+    return;
+  }
+  final oldText = _selectedLinkText(editor, selected);
+  if (oldText.length != selected.length) {
+    throw StateError('unsupported_link_text');
+  }
+  final newText = result.text.isEmpty ? result.value : result.text;
+  if (!selected.isCollapsed && oldText == newText) {
+    await editor.formatDelta(
+      selection,
+      {af.AppFlowyRichTextKeys.href: result.value},
+      selectionExtraInfo: {af.selectionExtraInfoDoNotAttachTextService: true},
+    );
+    return;
+  }
+
+  // Compare Unicode scalars, then convert lengths to the UTF-16 offsets used
+  // by AppFlowy. This avoids splitting surrogate pairs in emoji or other text.
+  final oldRunes = oldText.runes.toList();
+  final newRunes = newText.runes.toList();
+  var prefix = 0;
+  while (prefix < oldRunes.length &&
+      prefix < newRunes.length &&
+      oldRunes[prefix] == newRunes[prefix]) {
+    prefix++;
+  }
+  var suffix = 0;
+  while (suffix < oldRunes.length - prefix &&
+      suffix < newRunes.length - prefix &&
+      oldRunes[oldRunes.length - 1 - suffix] ==
+          newRunes[newRunes.length - 1 - suffix]) {
+    suffix++;
+  }
+  final prefixLength = String.fromCharCodes(oldRunes.take(prefix)).length;
+  final oldMiddleLength = String.fromCharCodes(
+    oldRunes.skip(prefix).take(oldRunes.length - prefix - suffix),
+  ).length;
+  final newMiddle = String.fromCharCodes(
+    newRunes.skip(prefix).take(newRunes.length - prefix - suffix),
+  );
+  final attributes = <String, dynamic>{};
+  if (selected.isCollapsed) {
+    if (editor.sliceUpcomingAttributes) {
+      attributes.addAll(delta.sliceAttributes(selected.start.offset) ?? {});
+    }
+    attributes.addAll(editor.toggledStyle);
+  } else {
+    final relative = prefixLength < oldText.length
+        ? prefixLength
+        : prefixLength - 1;
+    final at = selected.start.offset + relative;
+    final source = delta.slice(at, at + 1);
+    if (source.isNotEmpty) attributes.addAll(source.first.attributes ?? {});
+  }
+  final transaction = editor.transaction
+    ..replaceText(
+      node,
+      selected.start.offset + prefixLength,
+      oldMiddleLength,
+      newMiddle,
+      attributes: attributes,
+    )
+    ..formatText(node, selected.start.offset, newText.length, {
+      af.AppFlowyRichTextKeys.href: result.value,
+    });
+  transaction.afterSelection = selected.isCollapsed
+      ? af.Selection.collapsed(
+          af.Position(
+            path: selected.start.path,
+            offset: selected.start.offset + newText.length,
+          ),
+        )
+      : af.Selection.single(
+          path: selected.start.path,
+          startOffset: selected.start.offset,
+          endOffset: selected.start.offset + newText.length,
+        );
+  transaction.selectionExtraInfo = {
+    af.selectionExtraInfoDoNotAttachTextService: true,
+  };
+  if (editor.undoManager.undoStack.isNonEmpty) {
+    editor.undoManager.undoStack.last.seal();
+  }
+  await editor.apply(transaction, skipHistoryDebounce: true);
+}
+
 class _ToolbarAction {
   const _ToolbarAction(
     this.id,
@@ -65,6 +188,71 @@ class _ToolbarAction {
   final IconData icon;
   final VoidCallback? onPressed;
   final bool selected;
+}
+
+// A child format route may be covered by another document route while its
+// owner remains offstage. Record that transition so it cannot later revive
+// the old selection when the covering route is popped.
+class _FormatColorRoute extends ModalBottomSheetRoute<bool> {
+  _FormatColorRoute({
+    required super.builder,
+    required super.capturedThemes,
+    required super.barrierLabel,
+    required super.barrierOnTapHint,
+    required this.onCovered,
+  }) : super(
+         isScrollControlled: true,
+         requestFocus: false,
+         useSafeArea: true,
+         showDragHandle: true,
+         modalBarrierColor: Colors.transparent,
+       );
+
+  final VoidCallback onCovered;
+
+  @override
+  void didChangeNext(Route<dynamic>? nextRoute) {
+    super.didChangeNext(nextRoute);
+    if (nextRoute != null) onCovered();
+  }
+}
+
+class _FormatFontRoute extends MaterialPageRoute<void> {
+  _FormatFontRoute({required super.builder, required this.onCovered})
+    : super(requestFocus: false);
+
+  final VoidCallback onCovered;
+
+  @override
+  void didChangeNext(Route<dynamic>? nextRoute) {
+    super.didChangeNext(nextRoute);
+    if (nextRoute != null) onCovered();
+  }
+}
+
+typedef _LinkResult = ({bool remove, String value, String text});
+
+class _FormatLinkRoute extends ModalBottomSheetRoute<_LinkResult> {
+  _FormatLinkRoute({
+    required super.builder,
+    required super.capturedThemes,
+    required super.barrierLabel,
+    required super.barrierOnTapHint,
+    required this.onCovered,
+  }) : super(
+         isScrollControlled: true,
+         requestFocus: false,
+         useSafeArea: true,
+         showDragHandle: true,
+       );
+
+  final VoidCallback onCovered;
+
+  @override
+  void didChangeNext(Route<dynamic>? nextRoute) {
+    super.didChangeNext(nextRoute);
+    if (nextRoute != null) onCovered();
+  }
 }
 
 enum _InsertBlock {
@@ -106,26 +294,54 @@ bool _styleActive(af.EditorState editor, af.Selection selection, String key) {
       });
 }
 
-/// The default family is represented by null; known=false represents a mixed
-/// or otherwise indeterminate selection, not the default font.
-({bool known, String? family}) _currentFont(
+bool _blockTypeActive(
   af.EditorState editor,
   af.Selection selection,
+  String type, {
+  int? level,
+}) {
+  final nodes = editor.getNodesInSelection(selection);
+  return nodes.isNotEmpty &&
+      nodes.every(
+        (node) =>
+            node.type == type &&
+            (type != af.HeadingBlockKeys.type ||
+                node.attributes[af.HeadingBlockKeys.level] == level),
+      );
+}
+
+bool _blockAlignActive(
+  af.EditorState editor,
+  af.Selection selection,
+  String align,
 ) {
-  final key = af.AppFlowyRichTextKeys.fontFamily;
-  ({bool known, String? family}) valueOf(Object? value) => switch (value) {
-    null => (known: true, family: null),
-    final String family => (known: true, family: family),
-    _ => (known: false, family: null),
+  final nodes = editor.getNodesInSelection(selection);
+  return nodes.isNotEmpty &&
+      nodes.every(
+        (node) => (node.attributes[af.blockComponentAlign] ?? 'left') == align,
+      );
+}
+
+/// Null is the default style. A mixed or unsupported selection is unknown,
+/// rather than silently presenting it as the default.
+({bool known, String? value}) _currentInlineString(
+  af.EditorState editor,
+  af.Selection selection,
+  String key,
+) {
+  ({bool known, String? value}) valueOf(Object? value) => switch (value) {
+    null => (known: true, value: null),
+    final String text => (known: true, value: text),
+    _ => (known: false, value: null),
   };
   if (selection.isCollapsed) {
     if (editor.toggledStyle.containsKey(key)) {
       return valueOf(editor.toggledStyle[key]);
     }
-    if (!editor.sliceUpcomingAttributes) return (known: true, family: null);
+    if (!editor.sliceUpcomingAttributes) return (known: true, value: null);
     final node = editor.document.nodeAtPath(selection.start.path);
     final delta = node?.delta;
-    if (delta == null) return (known: false, family: null);
+    if (delta == null) return (known: false, value: null);
     return valueOf(delta.sliceAttributes(selection.start.offset)?[key]);
   }
   final normalized = selection.normalized;
@@ -133,29 +349,29 @@ bool _styleActive(af.EditorState editor, af.Selection selection, String key) {
   final end = editor.document.nodeAtPath(normalized.end.path);
   final nodes = editor.getNodesInSelection(normalized);
   if (start == null || end == null || nodes.isEmpty) {
-    return (known: false, family: null);
+    return (known: false, value: null);
   }
   var seen = false;
-  String? family;
+  String? value;
   for (final node in nodes) {
     final delta = node.delta;
-    if (delta == null) return (known: false, family: null);
+    if (delta == null) return (known: false, value: null);
     final from = identical(node, start) ? normalized.start.offset : 0;
     final to = identical(node, end) ? normalized.end.offset : delta.length;
     if (from < 0 || to > delta.length || from > to) {
-      return (known: false, family: null);
+      return (known: false, value: null);
     }
     for (final op in delta.slice(from, to)) {
       if (op is! af.TextInsert || op.length == 0) continue;
       final current = valueOf(op.attributes?[key]);
-      if (!current.known || (seen && current.family != family)) {
-        return (known: false, family: null);
+      if (!current.known || (seen && current.value != value)) {
+        return (known: false, value: null);
       }
       seen = true;
-      family = current.family;
+      value = current.value;
     }
   }
-  return (known: seen, family: family);
+  return (known: seen, value: value);
 }
 
 af.Selection? _selectionSnapshot(af.Selection? selection) => selection == null
@@ -174,25 +390,64 @@ af.Selection? _selectionSnapshot(af.Selection? selection) => selection == null
 class _RichEditorToolbarState extends State<RichEditorToolbar>
     with WidgetsBindingObserver {
   static const _keyboardToolbarHeight = 42.0;
+  // Reserve a usable horizontal target for each button before showing a
+  // shortcut. The toolbar's existing height is a separate design constraint.
+  static const _minToolbarSlotWidth = 48.0;
   late StreamSubscription<dynamic> _transactions;
   int _revision = 0;
   int _selectionRevision = 0;
   af.Selection? _observedSelection;
   bool _busy = false;
+  late final bool Function() _handleEditorBack = _handleFormatBack;
+  _SelectionSession? _formatSession;
+  af.EditorState? _formatEditor;
+  FocusNode? _formatFocus;
+  ModalRoute<dynamic>? _formatRoute;
+  LocalHistoryEntry? _formatHistory;
+  TransitionRoute<dynamic>? _formatChildRoute;
+  LocalHistoryEntry? _formatMenuHistory;
+  LocalHistoryEntry? _formatInlineHistory;
+  final MenuController _formatMoreController = MenuController();
+  final MenuController _formatInlineController = MenuController();
+  bool _formatOpening = false;
+  bool _formatKeyboardWasVisible = false;
+  bool _formatNeedsInputReconnect = false;
+  bool _disposing = false;
+  double _formatHeight = 280;
+  double? _formatAnchorBottom;
+  int _formatAnchorRevision = 0;
+  int _focusRevision = 0;
+  int _lifecycleRevision = 0;
+  int _formatFocusRevision = 0;
+  int _editableRevision = 0;
+  int _formatEditableRevision = 0;
+  int _routeRevision = 0;
+  int _formatRouteRevision = 0;
+  ModalRoute<dynamic>? _observedRoute;
+  bool? _observedRouteCurrent;
   final _contentKey = GlobalKey();
   bool _geometryQueued = false;
-  ({Offset position, double width, _SelectionSession session})? _floating;
+  ({
+    Offset position,
+    double width,
+    double height,
+    bool editable,
+    _SelectionSession session,
+  })?
+  _floating;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.backController?.attach(_handleEditorBack);
     widget.focusNode.addListener(_focusChanged);
     widget.scrollController?.offsetNotifier.addListener(
       _scheduleFloatingGeometry,
     );
     _observedSelection = _selectionSnapshot(widget.editor.selection);
     widget.editor.selectionNotifier.addListener(_selectionChanged);
+    widget.editor.editableNotifier.addListener(_editorEditableChanged);
     _listenTransactions();
   }
 
@@ -209,7 +464,13 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
   @override
   void didUpdateWidget(covariant RichEditorToolbar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.backController, widget.backController)) {
+      oldWidget.backController?.detach(_handleEditorBack);
+      widget.backController?.attach(_handleEditorBack);
+    }
     if (!identical(oldWidget.focusNode, widget.focusNode)) {
+      _focusRevision++;
+      _scheduleFormatInvalidation();
       oldWidget.focusNode.removeListener(_focusChanged);
       widget.focusNode.addListener(_focusChanged);
     }
@@ -224,7 +485,9 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       _scheduleFloatingGeometry();
     }
     if (!identical(oldWidget.editor, widget.editor)) {
+      _scheduleFormatInvalidation();
       oldWidget.editor.selectionNotifier.removeListener(_selectionChanged);
+      oldWidget.editor.editableNotifier.removeListener(_editorEditableChanged);
       _transactions.cancel();
       _revision++;
       _selectionRevision++;
@@ -232,30 +495,70 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       _scheduleFloatingGeometry();
       _observedSelection = _selectionSnapshot(widget.editor.selection);
       widget.editor.selectionNotifier.addListener(_selectionChanged);
+      widget.editor.editableNotifier.addListener(_editorEditableChanged);
       _listenTransactions();
+    }
+    if (oldWidget.editable != widget.editable) {
+      _editableRevision++;
+      _scheduleFormatInvalidation();
+      _floating = null;
+      _scheduleFloatingGeometry();
     }
   }
 
   @override
   void dispose() {
+    _disposing = true;
+    widget.backController?.detach(_handleEditorBack);
+    _closeFormatPanel(restoreKeyboard: false);
     WidgetsBinding.instance.removeObserver(this);
     widget.focusNode.removeListener(_focusChanged);
     widget.scrollController?.offsetNotifier.removeListener(
       _scheduleFloatingGeometry,
     );
     widget.editor.selectionNotifier.removeListener(_selectionChanged);
+    widget.editor.editableNotifier.removeListener(_editorEditableChanged);
     _transactions.cancel();
     super.dispose();
   }
 
   void _focusChanged() {
+    _focusRevision++;
     _scheduleFloatingGeometry();
     if (mounted) setState(() {});
+  }
+
+  void _editorEditableChanged() {
+    if (!mounted) return;
+    _editableRevision++;
+    _scheduleFormatInvalidation();
+    _floating = null;
+    _scheduleFloatingGeometry();
+    final editor = widget.editor;
+    // The editor may update its editable flag during its parent's build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(widget.editor, editor)) setState(() {});
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    final current = route?.isCurrent;
+    if (!identical(route, _observedRoute) ||
+        (_observedRouteCurrent != null && current != _observedRouteCurrent)) {
+      final child = _formatChildRoute;
+      final expectedChildTransition =
+          identical(route, _formatRoute) &&
+          child != null &&
+          ((current == false && child.isCurrent) ||
+              (current == true && !child.isCurrent));
+      if (!expectedChildTransition) _routeRevision++;
+    }
+    _observedRoute = route;
+    _observedRouteCurrent = current;
     _scheduleFloatingGeometry();
   }
 
@@ -263,6 +566,14 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
   void didChangeMetrics() {
     _scheduleFloatingGeometry();
     if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _focusRevision++;
+      _lifecycleRevision++;
+    }
   }
 
   void _selectionChanged() {
@@ -283,7 +594,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
 
   bool get _floatingEligible {
     if (!mounted ||
-        !_editable ||
+        widget.editor.isDisposed ||
         _busy ||
         !widget.focusNode.hasFocus ||
         ModalRoute.of(context)?.isCurrent != true) {
@@ -292,14 +603,17 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     final dragMode = widget.editor.selectionExtraInfo?['selection_drag_mode']
         ?.toString();
     if (dragMode == 'MobileSelectionDragMode.leftSelectionHandle' ||
-        dragMode == 'MobileSelectionDragMode.rightSelectionHandle') {
+        dragMode == 'MobileSelectionDragMode.rightSelectionHandle' ||
+        widget.editor.selectionExtraInfo?[af
+                .selectionExtraInfoDisableFloatingToolbar] ==
+            true) {
       return false;
     }
     final selection = widget.editor.selection;
     return selection != null &&
         !selection.isCollapsed &&
-        _validSelection(selection) &&
-        _textOnly(selection);
+        _validSelection(selection, allowReadOnly: true) &&
+        (_editable ? _textOnly(selection) : _copyableText(selection));
   }
 
   void _scheduleFloatingGeometry() {
@@ -308,7 +622,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _geometryQueued = false;
       if (!mounted) return;
-      final session = _floatingEligible ? _capture() : null;
+      final session = _floatingEligible ? _capture(allowReadOnly: true) : null;
       final box = _contentKey.currentContext?.findRenderObject();
       if (session == null ||
           box is! RenderBox ||
@@ -320,7 +634,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       final origin = box.localToGlobal(Offset.zero);
       // With the keyboard open the bottom area belongs to the fixed toolbar,
       // so the floating menu must fit inside the remaining editor surface.
-      final toolbarHeight = View.of(context).viewInsets.bottom > 0
+      final toolbarHeight = _editable && View.of(context).viewInsets.bottom > 0
           ? _keyboardToolbarHeight
           : 0.0;
       final contentHeight = (box.size.height - toolbarHeight).clamp(
@@ -338,12 +652,26 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       }
       final first = visible.reduce((a, b) => a.top <= b.top ? a : b);
       final last = visible.reduce((a, b) => a.bottom >= b.bottom ? a : b);
-      const height = 44.0;
+      const itemWidth = 42.0;
+      const itemHeight = 44.0;
       const gap = 8.0;
-      final width = (session.selection.isSingle ? 252.0 : 210.0).clamp(
-        0.0,
-        bounds.width,
-      );
+      final editable = _editable;
+      final itemCount = !editable
+          ? 2
+          : session.selection.isSingle
+          ? 6
+          : 5;
+      final maxColumns = (bounds.width / itemWidth).floor();
+      if (maxColumns < 1) {
+        if (_floating != null) setState(() => _floating = null);
+        return;
+      }
+      // Keep every selection action available without squeezing icons into
+      // unusably narrow columns. Balance the rows when the surface is narrow.
+      final rows = (itemCount / maxColumns.clamp(1, itemCount)).ceil();
+      final columns = (itemCount / rows).ceil();
+      final width = columns * itemWidth;
+      final height = rows * itemHeight;
       final above = first.top - bounds.top - height - gap;
       final below = last.bottom - bounds.top + gap;
       final double? top = above >= 0
@@ -364,18 +692,30 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       if (previous == null ||
           previous.position != position ||
           previous.width != width ||
+          previous.height != height ||
+          previous.editable != editable ||
           previous.session.revision != session.revision ||
           previous.session.selectionRevision != session.selectionRevision) {
         setState(
-          () =>
-              _floating = (position: position, width: width, session: session),
+          () => _floating = (
+            position: position,
+            width: width,
+            height: height,
+            editable: editable,
+            session: session,
+          ),
         );
       }
     });
   }
 
-  void _floatingAction(_SelectionSession session, VoidCallback action) {
-    if (!_floatingEligible || !_sessionValid(session)) {
+  void _floatingAction(
+    _SelectionSession session,
+    VoidCallback action, {
+    bool requiresEditing = true,
+  }) {
+    if (!_floatingEligible ||
+        !_sessionValid(session, allowReadOnly: !requiresEditing)) {
       if (mounted) _selectionExpired();
       return;
     }
@@ -386,7 +726,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     if (showFloating) _scheduleFloatingGeometry();
     final floating = _floating;
     final valid =
-        showFloating && floating != null && _sessionValid(floating.session);
+        showFloating &&
+        floating != null &&
+        floating.editable == _editable &&
+        _sessionValid(floating.session, allowReadOnly: true);
     return Stack(
       key: _contentKey,
       fit: StackFit.expand,
@@ -403,48 +746,59 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
             left: floating.position.dx,
             top: floating.position.dy,
             width: floating.width,
-            height: 44,
+            height: floating.height,
             child: Material(
               key: const ValueKey('rich-selection-menu'),
               color: context.theme.colors.surface,
               elevation: 4,
               borderRadius: BorderRadius.circular(8),
               clipBehavior: Clip.antiAlias,
-              child: Row(
+              child: Wrap(
                 children: [
-                  Expanded(
-                    child: _floatingButton(
-                      'format',
-                      context.l10n.editor.toolbar.format,
-                      LucideIcons.caseSensitive,
-                      floating.session,
-                      _openFormat,
-                    ),
-                  ),
-                  Expanded(
-                    child: _floatingButton(
-                      'bold',
-                      context.l10n.editor.toolbar.bold,
-                      LucideIcons.bold,
-                      floating.session,
-                      () => _quick(
-                        (s) => _toggle(s, af.AppFlowyRichTextKeys.bold),
+                  if (_editable)
+                    SizedBox(
+                      width: 42,
+                      height: 44,
+                      child: _floatingButton(
+                        'format',
+                        context.l10n.editor.toolbar.format,
+                        LucideIcons.caseSensitive,
+                        floating.session,
+                        _openFormat,
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: _floatingButton(
-                      'italic',
-                      context.l10n.editor.toolbar.italic,
-                      LucideIcons.italic,
-                      floating.session,
-                      () => _quick(
-                        (s) => _toggle(s, af.AppFlowyRichTextKeys.italic),
+                  if (_editable)
+                    SizedBox(
+                      width: 42,
+                      height: 44,
+                      child: _floatingButton(
+                        'bold',
+                        context.l10n.editor.toolbar.bold,
+                        LucideIcons.bold,
+                        floating.session,
+                        () => _quick(
+                          (s) => _toggle(s, af.AppFlowyRichTextKeys.bold),
+                        ),
                       ),
                     ),
-                  ),
-                  if (floating.session.selection.isSingle)
-                    Expanded(
+                  if (_editable)
+                    SizedBox(
+                      width: 42,
+                      height: 44,
+                      child: _floatingButton(
+                        'italic',
+                        context.l10n.editor.toolbar.italic,
+                        LucideIcons.italic,
+                        floating.session,
+                        () => _quick(
+                          (s) => _toggle(s, af.AppFlowyRichTextKeys.italic),
+                        ),
+                      ),
+                    ),
+                  if (_editable && floating.session.selection.isSingle)
+                    SizedBox(
+                      width: 42,
+                      height: 44,
                       child: _floatingButton(
                         'link',
                         context.l10n.editor.toolbar.link,
@@ -453,22 +807,28 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
                         _openLink,
                       ),
                     ),
-                  Expanded(
+                  SizedBox(
+                    width: 42,
+                    height: 44,
                     child: _floatingButton(
                       'copy',
                       MaterialLocalizations.of(context).copyButtonLabel,
                       LucideIcons.copy,
                       floating.session,
                       () => af.copyCommand.execute(widget.editor),
+                      requiresEditing: false,
                     ),
                   ),
-                  Expanded(
+                  SizedBox(
+                    width: 42,
+                    height: 44,
                     child: _floatingButton(
                       'select-all',
                       MaterialLocalizations.of(context).selectAllButtonLabel,
                       Icons.select_all,
                       floating.session,
                       () => af.selectAllCommand.execute(widget.editor),
+                      requiresEditing: false,
                     ),
                   ),
                 ],
@@ -484,18 +844,24 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     String tooltip,
     IconData icon,
     _SelectionSession session,
-    VoidCallback action,
-  ) => IconButton(
+    VoidCallback action, {
+    bool requiresEditing = true,
+  }) => IconButton(
     key: ValueKey('rich-floating-$id'),
     tooltip: tooltip,
     iconSize: 20,
     padding: EdgeInsets.zero,
     icon: Icon(icon),
-    onPressed: () => _floatingAction(session, action),
+    onPressed: () =>
+        _floatingAction(session, action, requiresEditing: requiresEditing),
   );
 
-  bool _validSelection(af.Selection? selection) {
-    if (!_editable || selection == null) return false;
+  bool _validSelection(af.Selection? selection, {bool allowReadOnly = false}) {
+    if (widget.editor.isDisposed ||
+        (!allowReadOnly && !_editable) ||
+        selection == null) {
+      return false;
+    }
     bool validPosition(af.Position position) {
       final node = widget.editor.document.nodeAtPath(position.path);
       final delta = node?.delta;
@@ -507,9 +873,9 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     return validPosition(selection.start) && validPosition(selection.end);
   }
 
-  _SelectionSession? _capture() {
+  _SelectionSession? _capture({bool allowReadOnly = false}) {
     final selection = widget.editor.selection;
-    if (!_validSelection(selection)) return null;
+    if (!_validSelection(selection, allowReadOnly: allowReadOnly)) return null;
     final saved = _selectionSnapshot(selection)!;
     return _SelectionSession(
       saved,
@@ -520,10 +886,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     );
   }
 
-  bool _sessionValid(_SelectionSession session) =>
+  bool _sessionValid(_SelectionSession session, {bool allowReadOnly = false}) =>
       mounted &&
       !session.expired &&
-      _validSelection(session.selection) &&
+      _validSelection(session.selection, allowReadOnly: allowReadOnly) &&
       widget.editor.selection == session.selection &&
       session.revision == _revision &&
       session.selectionRevision == _selectionRevision &&
@@ -575,6 +941,11 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  bool _copyableText(af.Selection selection) {
+    final nodes = widget.editor.getNodesInSelection(selection);
+    return nodes.isNotEmpty && nodes.every((node) => node.delta != null);
   }
 
   bool _textOnly(af.Selection selection) {
@@ -664,12 +1035,14 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       );
 
   Future<void> _quick(Future<void> Function(af.Selection) command) async {
-    final session = _capture();
+    final session = _formatSession ?? _capture();
     if (session == null || _busy || !_textOnly(session.selection)) return;
+    if (_formatSession != null && !_formatValid(session)) return;
     await _runSession(session, command);
   }
 
   Future<void> _openInsert() async {
+    if (_formatSession != null) _closeFormatPanel(restoreKeyboard: false);
     final session = _capture();
     if (session == null ||
         !session.selection.isCollapsed ||
@@ -744,46 +1117,251 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     await widget.editor.apply(transaction);
   }
 
-  Future<void> _openFormat() async {
-    final session = _capture();
-    if (session == null || !_textOnly(session.selection)) return;
-    // Scaffold removes bottom viewInsets from its body after resizing it.
-    final keyboardWasVisible =
-        View.of(context).viewInsets.bottom > 0 && widget.focusNode.hasFocus;
-    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-    if (!mounted || !_sessionValid(session)) return;
-    final done = await showModalBottomSheet<bool>(
-      context: context,
-      requestFocus: false,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _FormatSheet(
-        editor: widget.editor,
-        valid: () => _sessionValid(session) && !_busy,
-        execute: (command) => _runSession(session, command),
-        executeMove: (command) =>
-            _runSession(session, command, allowMovedSelection: true),
-        toggle: _toggle,
-        convert: _convert,
-        color: _color,
-        align: _align,
-        loadFonts: widget.loadFonts,
-        scrollController: widget.scrollController,
-        canConvert: () => _canConvert(session.selection),
-      ),
-    );
-    if (done == true &&
-        keyboardWasVisible &&
-        mounted &&
+  bool _formatValid(_SelectionSession session) =>
+      identical(_formatSession, session) &&
+      identical(_formatEditor, widget.editor) &&
+      identical(_formatFocus, widget.focusNode) &&
+      (_formatRoute?.isCurrent == true ||
+          (_formatRoute?.isActive == true &&
+              _formatChildRoute?.isCurrent == true)) &&
+      _formatRouteRevision == _routeRevision &&
+      _formatFocusRevision == _focusRevision &&
+      _formatEditableRevision == _editableRevision &&
+      !_busy &&
+      _sessionValid(session);
+
+  void _scheduleFormatInvalidation() {
+    final session = _formatSession;
+    if (session == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          identical(_formatSession, session) &&
+          (!_editable ||
+              !identical(_formatEditor, widget.editor) ||
+              !identical(_formatFocus, widget.focusNode) ||
+              _formatEditableRevision != _editableRevision)) {
+        _closeFormatPanel(restoreKeyboard: false);
+      }
+    });
+  }
+
+  bool _handleFormatBack() {
+    if (_formatSession == null) return false;
+    final child = _formatChildRoute;
+    if (child != null) {
+      if (child.isCurrent) {
+        child.navigator?.pop();
+      } else if (_formatRoute?.isCurrent == true) {
+        // A child can already be closed while its keyboard response is still
+        // pending. Let a second back cancel the parent session immediately.
+        _closeFormatPanel(restoreKeyboard: false);
+      }
+      return true;
+    }
+    if (_formatInlineController.isOpen) {
+      _formatInlineController.close();
+      return true;
+    }
+    if (_formatMoreController.isOpen) {
+      _formatMoreController.close();
+      return true;
+    }
+    _closeFormatPanel(restoreKeyboard: false);
+    return true;
+  }
+
+  void _formatChildCovered(TransitionRoute<dynamic> child) {
+    if (!identical(_formatChildRoute, child)) return;
+    _routeRevision++;
+  }
+
+  void _pushFormatChild(TransitionRoute<dynamic> child) {
+    final session = _formatSession;
+    if (session == null ||
+        !_formatValid(session) ||
+        _formatRoute?.isCurrent != true ||
+        _formatChildRoute != null) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    _formatChildRoute = child;
+    unawaited(() async {
+      await navigator.push(child);
+      await child.completed;
+      if (mounted && identical(_formatChildRoute, child)) {
+        setState(() => _formatChildRoute = null);
+      }
+    }());
+  }
+
+  void _closeFormatPanel({required bool restoreKeyboard}) {
+    final session = _formatSession;
+    if (session == null) return;
+    final shouldRestore =
+        restoreKeyboard &&
+        _formatKeyboardWasVisible &&
         widget.focusNode.hasFocus &&
-        ModalRoute.of(context)?.isCurrent == true &&
-        _sessionValid(session)) {
-      await SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+        _formatValid(session);
+    final reconnectInput = _formatNeedsInputReconnect;
+    _formatNeedsInputReconnect = false;
+    _formatSession = null;
+    _formatEditor = null;
+    _formatFocus = null;
+    _formatRoute = null;
+    _formatAnchorBottom = null;
+    final child = _formatChildRoute;
+    final history = _formatHistory;
+    final menuHistory = _formatMenuHistory;
+    final inlineHistory = _formatInlineHistory;
+    _formatChildRoute = null;
+    _formatHistory = null;
+    _formatMenuHistory = null;
+    _formatInlineHistory = null;
+    menuHistory?.remove();
+    inlineHistory?.remove();
+    if (_formatMoreController.isOpen) _formatMoreController.close();
+    if (_formatInlineController.isOpen) _formatInlineController.close();
+    if (child != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final navigator = child.navigator;
+        if (navigator != null && navigator.mounted && child.isActive) {
+          navigator.removeRoute(child);
+        }
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    }
+    history?.remove();
+    if (!_disposing && mounted) {
+      setState(() {});
+      _scheduleFloatingGeometry();
+    }
+    if (shouldRestore) {
+      if (reconnectInput) {
+        widget.editor.service.keyboardService?.enableKeyBoard(
+          session.selection,
+        );
+      }
+      unawaited(
+        SystemChannels.textInput
+            .invokeMethod<void>('TextInput.show')
+            .catchError(
+              (Object error, StackTrace stack) => logger.e(
+                'Unable to restore the editor keyboard',
+                error: error,
+                stackTrace: stack,
+              ),
+            ),
+      );
     }
   }
 
+  Future<void> _openFormat() async {
+    if (_formatSession != null) {
+      _handleFormatBack();
+      return;
+    }
+    if (_formatOpening) return;
+    final session = _capture();
+    final route = ModalRoute.of(context);
+    if (session == null ||
+        !_textOnly(session.selection) ||
+        route?.isCurrent != true ||
+        !widget.focusNode.hasFocus) {
+      return;
+    }
+    final editor = widget.editor;
+    final focus = widget.focusNode;
+    final initialRects = editor.selectionRects();
+    final initialBottom = initialRects.isEmpty
+        ? null
+        : initialRects
+              .map((rect) => rect.bottom)
+              .reduce((a, b) => a > b ? a : b);
+    final focusRevision = _focusRevision;
+    final editableRevision = _editableRevision;
+    final routeRevision = _routeRevision;
+    final view = View.of(context);
+    final keyboardHeight = view.viewInsets.bottom / view.devicePixelRatio;
+    final keyboardWasVisible = keyboardHeight > 0;
+    final initialHeight = MediaQuery.sizeOf(context).height * .5;
+    _formatOpening = true;
+    try {
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    } catch (error, stack) {
+      logger.e(
+        'Unable to hide the editor keyboard',
+        error: error,
+        stackTrace: stack,
+      );
+      return;
+    } finally {
+      _formatOpening = false;
+    }
+    if (!mounted ||
+        !identical(editor, widget.editor) ||
+        !identical(focus, widget.focusNode) ||
+        !focus.hasFocus ||
+        _focusRevision != focusRevision ||
+        _editableRevision != editableRevision ||
+        _routeRevision != routeRevision ||
+        route?.isCurrent != true ||
+        !_sessionValid(session)) {
+      return;
+    }
+    _formatSession = session;
+    _formatEditor = editor;
+    _formatFocus = focus;
+    _formatRoute = route;
+    _formatFocusRevision = focusRevision;
+    _formatEditableRevision = editableRevision;
+    _formatRouteRevision = routeRevision;
+    _formatKeyboardWasVisible = keyboardWasVisible;
+    _formatNeedsInputReconnect = false;
+    _formatHeight = initialHeight;
+    _formatAnchorBottom = initialBottom;
+    _formatAnchorRevision++;
+    late final LocalHistoryEntry entry;
+    entry = LocalHistoryEntry(
+      impliesAppBarDismissal: false,
+      onRemove: () {
+        if (!identical(_formatHistory, entry)) return;
+        _formatHistory = null;
+        _closeFormatPanel(restoreKeyboard: false);
+      },
+    );
+    _formatHistory = entry;
+    route!.addLocalHistoryEntry(entry);
+    if (mounted) setState(() => _floating = null);
+  }
+
   Future<void> _openColor() async {
+    if (_formatSession != null) {
+      final session = _formatSession!;
+      if (!_formatValid(session)) return;
+      final navigator = Navigator.of(context);
+      final localizations = MaterialLocalizations.of(context);
+      late final _FormatColorRoute child;
+      child = _FormatColorRoute(
+        onCovered: () => _formatChildCovered(child),
+        capturedThemes: InheritedTheme.capture(
+          from: context,
+          to: navigator.context,
+        ),
+        barrierLabel: localizations.scrimLabel,
+        barrierOnTapHint: localizations.scrimOnTapHint(
+          localizations.bottomSheetLabel,
+        ),
+        builder: (_) => _QuickColorSheet(
+          key: const ValueKey('rich-format-color-sheet'),
+          editor: widget.editor,
+          valid: () => _formatValid(session),
+          execute: (command) => _runSession(session, command),
+          color: _color,
+        ),
+      );
+      _pushFormatChild(child);
+      return;
+    }
     final session = _capture();
     if (session == null || !_textOnly(session.selection)) return;
     final keyboardWasVisible =
@@ -813,10 +1391,181 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     }
   }
 
+  void _openFormatFonts() {
+    final session = _formatSession;
+    if (session == null || !_formatValid(session)) return;
+    late final _FormatFontRoute child;
+    child = _FormatFontRoute(
+      onCovered: () => _formatChildCovered(child),
+      builder: (_) => _FormatFontPage(
+        editor: widget.editor,
+        valid: () => _formatValid(session),
+        execute: (command) => _runSession(session, command),
+        color: _color,
+        loadFonts: widget.loadFonts,
+      ),
+    );
+    _pushFormatChild(child);
+  }
+
+  Future<void> _openFormatLink() async {
+    final session = _formatSession;
+    if (session == null ||
+        !_formatValid(session) ||
+        !session.selection.isSingle ||
+        _formatChildRoute != null) {
+      return;
+    }
+    final editor = widget.editor;
+    final focus = widget.focusNode;
+    final lifecycleRevision = _lifecycleRevision;
+    final initialFocusRevision = _focusRevision;
+    final existing = editor.getDeltaAttributeValueInSelection<String>(
+      af.AppFlowyRichTextKeys.href,
+      session.selection,
+    );
+    final navigator = Navigator.of(context);
+    final localizations = MaterialLocalizations.of(context);
+    late final _FormatLinkRoute child;
+    child = _FormatLinkRoute(
+      onCovered: () => _formatChildCovered(child),
+      capturedThemes: InheritedTheme.capture(
+        from: context,
+        to: navigator.context,
+      ),
+      barrierLabel: localizations.scrimLabel,
+      barrierOnTapHint: localizations.scrimOnTapHint(
+        localizations.bottomSheetLabel,
+      ),
+      builder: (_) => _LinkDialog(
+        key: const ValueKey('rich-format-link-sheet'),
+        existing: existing,
+        initialText: _selectedLinkText(editor, session.selection),
+        asSheet: true,
+      ),
+    );
+    _formatChildRoute = child;
+    final result = await navigator.push(child);
+    await child.completed;
+    if (!mounted ||
+        !identical(_formatSession, session) ||
+        !identical(_formatChildRoute, child)) {
+      return;
+    }
+
+    bool focusCanReturn() {
+      final primary = FocusManager.instance.primaryFocus;
+      return primary == null || focus.hasFocus || primary is FocusScopeNode;
+    }
+
+    bool contextIsCurrent() =>
+        mounted &&
+        identical(_formatSession, session) &&
+        identical(_formatChildRoute, child) &&
+        identical(widget.editor, editor) &&
+        identical(widget.focusNode, focus) &&
+        _formatRoute?.isCurrent == true &&
+        _routeRevision == _formatRouteRevision &&
+        _editableRevision == _formatEditableRevision &&
+        _lifecycleRevision == lifecycleRevision &&
+        focusCanReturn() &&
+        !_busy &&
+        !session.expired &&
+        _revision == session.revision &&
+        _validSelection(session.selection) &&
+        identical(
+          editor.document.nodeAtPath(session.selection.start.path),
+          session.startNode,
+        ) &&
+        identical(
+          editor.document.nodeAtPath(session.selection.end.path),
+          session.endNode,
+        );
+
+    final selectionUnchanged =
+        _selectionRevision == session.selectionRevision &&
+        editor.selection == session.selection;
+    final selectionClearedByFocus =
+        _selectionRevision == session.selectionRevision + 1 &&
+        editor.selection == null &&
+        _focusRevision > initialFocusRevision;
+    if (!contextIsCurrent() ||
+        (!selectionUnchanged && !selectionClearedByFocus)) {
+      final notify = result != null && _formatRoute?.isCurrent == true;
+      _formatChildRoute = null;
+      _closeFormatPanel(restoreKeyboard: false);
+      if (notify && mounted) _selectionExpired();
+      return;
+    }
+
+    if (selectionClearedByFocus) {
+      unawaited(
+        editor.updateSelectionWithReason(
+          session.selection,
+          extraInfo: {
+            af.selectionExtraInfoDoNotAttachTextService: true,
+            af.selectionExtraInfoDisableFloatingToolbar: true,
+          },
+        ),
+      );
+      session.selectionRevision = _selectionRevision;
+    }
+    _formatNeedsInputReconnect |= _focusRevision != initialFocusRevision;
+    try {
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    } catch (error, stack) {
+      logger.e(
+        'Unable to hide the link keyboard',
+        error: error,
+        stackTrace: stack,
+      );
+      if (mounted && identical(_formatSession, session)) {
+        final notify = result != null && _formatRoute?.isCurrent == true;
+        _formatChildRoute = null;
+        _closeFormatPanel(restoreKeyboard: false);
+        if (notify && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.dailynotes.editorLinkApplyFailed),
+            ),
+          );
+        }
+      }
+      return;
+    }
+    if (!contextIsCurrent() || !_sessionValid(session)) {
+      if (mounted && identical(_formatSession, session)) {
+        _formatChildRoute = null;
+        _closeFormatPanel(restoreKeyboard: false);
+      }
+      return;
+    }
+    focus.requestFocus();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!contextIsCurrent() || !_sessionValid(session) || !focus.hasFocus) {
+      if (mounted && identical(_formatSession, session)) {
+        _formatChildRoute = null;
+        _closeFormatPanel(restoreKeyboard: false);
+      }
+      return;
+    }
+    _formatFocusRevision = _focusRevision;
+    _formatChildRoute = null;
+    if (result != null) {
+      final success = await _runSession(
+        session,
+        (selection) => _applyLink(editor, selection, result),
+        allowMovedSelection: !result.remove,
+      );
+      if (!success && mounted) _selectionExpired();
+    }
+    if (mounted && identical(_formatSession, session)) setState(() {});
+  }
+
   Future<void> _openLink() async {
+    if (_formatSession != null) _closeFormatPanel(restoreKeyboard: false);
     final session = _capture();
     if (session == null ||
-        session.selection.isCollapsed ||
         !session.selection.isSingle ||
         !_textOnly(session.selection)) {
       return;
@@ -825,9 +1574,12 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       af.AppFlowyRichTextKeys.href,
       session.selection,
     );
-    final result = await showDialog<({bool remove, String value})>(
+    final result = await showDialog<_LinkResult>(
       context: context,
-      builder: (_) => _LinkDialog(existing: existing),
+      builder: (_) => _LinkDialog(
+        existing: existing,
+        initialText: _selectedLinkText(widget.editor, session.selection),
+      ),
     );
     if (!mounted) return;
     // AppFlowy's keyboard service clears the selection when the dialog's
@@ -852,11 +1604,8 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     if (result == null) return;
     final success = await _runSession(
       session,
-      (selection) => widget.editor.formatDelta(
-        selection,
-        {af.AppFlowyRichTextKeys.href: result.remove ? null : result.value},
-        selectionExtraInfo: {af.selectionExtraInfoDoNotAttachTextService: true},
-      ),
+      (selection) => _applyLink(widget.editor, selection, result),
+      allowMovedSelection: !result.remove,
     );
     if (!success && mounted) {
       _selectionExpired();
@@ -899,24 +1648,173 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
   );
 
   _SelectionSession? _overflowSession;
+  List<_ToolbarAction>? _openOverflowActions;
+
+  void _openFormatOverflow(List<_ToolbarAction> actions) {
+    final session = _formatSession;
+    final route = _formatRoute;
+    if (session == null || !_formatValid(session) || route?.isCurrent != true) {
+      return;
+    }
+    _overflowSession = _capture();
+    _openOverflowActions = List.of(actions);
+    late final LocalHistoryEntry entry;
+    entry = LocalHistoryEntry(
+      impliesAppBarDismissal: false,
+      onRemove: () {
+        if (!identical(_formatMenuHistory, entry)) return;
+        _formatMenuHistory = null;
+        if (_formatMoreController.isOpen) _formatMoreController.close();
+      },
+    );
+    _formatMenuHistory = entry;
+    route!.addLocalHistoryEntry(entry);
+  }
+
+  void _closeFormatOverflow() {
+    final history = _formatMenuHistory;
+    _formatMenuHistory = null;
+    history?.remove();
+    _overflowSession = null;
+    _openOverflowActions = null;
+  }
+
+  void _openFormatInlineMenu() {
+    final session = _formatSession;
+    final route = _formatRoute;
+    if (session == null || !_formatValid(session) || route?.isCurrent != true) {
+      return;
+    }
+    late final LocalHistoryEntry entry;
+    entry = LocalHistoryEntry(
+      impliesAppBarDismissal: false,
+      onRemove: () {
+        if (!identical(_formatInlineHistory, entry)) return;
+        _formatInlineHistory = null;
+        if (_formatInlineController.isOpen) _formatInlineController.close();
+      },
+    );
+    _formatInlineHistory = entry;
+    route!.addLocalHistoryEntry(entry);
+  }
+
+  void _closeFormatInlineMenu() {
+    final history = _formatInlineHistory;
+    _formatInlineHistory = null;
+    history?.remove();
+  }
+
+  void _invokeOverflowAction(
+    String id,
+    _SelectionSession? session,
+    List<_ToolbarAction>? menuActions, {
+    _SelectionSession? fromFormat,
+  }) {
+    if (session == null ||
+        _busy ||
+        !_sessionValid(session) ||
+        (fromFormat != null && !_formatValid(fromFormat)) ||
+        (_formatSession != null && !_formatValid(_formatSession!)) ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      if (mounted) _selectionExpired();
+      return;
+    }
+    final action = menuActions?.where((item) => item.id == id).firstOrNull;
+    action?.onPressed?.call();
+  }
+
+  Widget _editorColumn(Widget? toolbar) {
+    final session = _formatSession;
+    final hasPanel =
+        session != null && _editable && identical(_formatEditor, widget.editor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : _formatHeight + _keyboardToolbarHeight + 48;
+        // TextInput.hide completes before Android has necessarily reported
+        // the final inset. Leave a usable editor viewport during that
+        // transition; the panel expands to its chosen height once it ends.
+        final keyboardVisible = View.of(context).viewInsets.bottom > 0;
+        final editorReserve = keyboardVisible
+            ? (available * .3).clamp(48.0, 160.0)
+            : 48.0;
+        final maxPanel =
+            (available -
+                    (toolbar == null ? 0 : _keyboardToolbarHeight) -
+                    editorReserve)
+                .clamp(0.0, available);
+        final minPanel = maxPanel < 160 ? maxPanel : 160.0;
+        final height = _formatHeight.clamp(0.0, maxPanel);
+        return Column(
+          children: [
+            Expanded(child: widget.child),
+            ?toolbar,
+            if (session != null && hasPanel && height >= 64)
+              SizedBox(
+                height: height,
+                child: _FormatSheet(
+                  editor: widget.editor,
+                  valid: () => _formatValid(session),
+                  execute: (command) => _runSession(session, command),
+                  executeMove: (command) =>
+                      _runSession(session, command, allowMovedSelection: true),
+                  toggle: _toggle,
+                  convert: _convert,
+                  align: _align,
+                  scrollController: widget.scrollController,
+                  canConvert: () => _canConvert(session.selection),
+                  anchorBottom: _formatAnchorBottom,
+                  anchorRevision: _formatAnchorRevision,
+                  onClose: () => _closeFormatPanel(restoreKeyboard: true),
+                  onResize: (delta) {
+                    if (!_formatValid(session)) return;
+                    final current = _formatHeight.clamp(minPanel, maxPanel);
+                    final next = (current - delta).clamp(minPanel, maxPanel);
+                    if ((next - current).abs() <= .1) return;
+                    final rects = widget.editor.selectionRects();
+                    setState(() {
+                      _formatAnchorBottom = rects.isEmpty
+                          ? null
+                          : rects
+                                .map((rect) => rect.bottom)
+                                .reduce((a, b) => a > b ? a : b);
+                      _formatAnchorRevision++;
+                      _formatHeight = next;
+                    });
+                  },
+                  openColor: _openColor,
+                  openFonts: _openFormatFonts,
+                  openLink: _openFormatLink,
+                  inlineMenuController: _formatInlineController,
+                  onInlineMenuOpen: _openFormatInlineMenu,
+                  onInlineMenuClose: _closeFormatInlineMenu,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final selection = widget.editor.selection;
     final keyboard = View.of(context).viewInsets.bottom > 0;
+    final hasPanel =
+        _formatSession != null &&
+        _editable &&
+        identical(_formatEditor, widget.editor);
     final show =
         _editable &&
         widget.focusNode.hasFocus &&
         _validSelection(selection) &&
-        keyboard;
-    final showFloating = _floatingEligible;
+        (keyboard || hasPanel);
+    final showFloating = !hasPanel && _floatingEligible;
     // Keep the editor at the same position in the tree across mode changes.
     if (!show) {
-      return _surface(
-        Column(children: [Expanded(child: widget.child)]),
-        showFloating,
-      );
+      return _surface(_editorColumn(null), showFloating);
     }
     final selected = selection!;
     final isRange = !selected.isCollapsed;
@@ -928,7 +1826,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
           af.BulletedListBlockKeys.type,
           af.NumberedListBlockKeys.type,
         }.contains(node.type);
-    final canText = !_busy && _textOnly(selected);
+    final canText =
+        !_busy &&
+        _textOnly(selected) &&
+        (_formatSession == null || _formatValid(_formatSession!));
     final canBlock = canText && selected.isSingle;
     final actions = <_ToolbarAction>[
       _ToolbarAction(
@@ -1013,12 +1914,25 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
           selected: _styleActive(widget.editor, selected, attribute),
         ),
       _ToolbarAction(
+        'code',
+        l10n.editor.toolbar.inlineCode,
+        LucideIcons.code,
+        canText
+            ? () => _quick((s) => _toggle(s, af.AppFlowyRichTextKeys.code))
+            : null,
+        selected: _styleActive(
+          widget.editor,
+          selected,
+          af.AppFlowyRichTextKeys.code,
+        ),
+      ),
+      _ToolbarAction(
         'color',
         l10n.dailynotes.editorTextColor,
         LucideIcons.baseline,
         canText ? _openColor : null,
       ),
-      if (isRange && selected.isSingle)
+      if (selected.isSingle)
         _ToolbarAction(
           'link',
           l10n.editor.toolbar.link,
@@ -1055,104 +1969,193 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         : isList
         ? <String>['outdent', 'indent', 'todo', 'bullet']
         : <String>['todo', 'bullet', 'numbered', 'bold'];
-    final quickIds = quickCandidates
+    final eligibleQuickIds = quickCandidates
         .where((id) => actions.firstWhere((a) => a.id == id).onPressed != null)
         .toList();
-    final visible = [
-      for (final id in quickIds) actions.firstWhere((a) => a.id == id),
-    ];
-    final overflow = actions.where((a) => !quickIds.contains(a.id)).toList();
+    final insertAction = _ToolbarAction(
+      'insert',
+      l10n.editor.toolbar.insert,
+      LucideIcons.plus,
+      !isRange && canBlock ? _openInsert : null,
+    );
+    final formatAction = _ToolbarAction(
+      'format',
+      l10n.editor.toolbar.format,
+      LucideIcons.caseSensitive,
+      canText ? _openFormat : null,
+      selected: hasPanel,
+    );
+    final closeAction = _ToolbarAction(
+      'close',
+      l10n.editor.toolbar.hideKeyboard,
+      LucideIcons.chevronDown,
+      () {
+        if (_formatSession != null) {
+          _closeFormatPanel(restoreKeyboard: false);
+        }
+        SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      },
+    );
     return _surface(
-      Column(
-        children: [
-          Expanded(child: widget.child),
-          Material(
-            key: const ValueKey('rich-keyboard-toolbar'),
-            color: context.theme.colors.surface,
-            child: SizedBox(
-              height: _keyboardToolbarHeight,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _button(
-                      'insert',
-                      l10n.editor.toolbar.insert,
-                      LucideIcons.plus,
-                      !isRange && canBlock ? _openInsert : null,
-                    ),
+      _editorColumn(
+        Material(
+          key: const ValueKey('rich-keyboard-toolbar'),
+          color: context.theme.colors.surface,
+          child: SizedBox(
+            height: _keyboardToolbarHeight,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final maxSlots = eligibleQuickIds.length + 4;
+                final slots = constraints.maxWidth.isFinite
+                    ? (constraints.maxWidth / _minToolbarSlotWidth)
+                          .floor()
+                          .clamp(1, maxSlots)
+                    : maxSlots;
+                final showInsert = slots >= 2;
+                final showFormat = slots >= 3;
+                final showClose = slots >= 4;
+                final quickCount = (slots - 4).clamp(
+                  0,
+                  eligibleQuickIds.length,
+                );
+                final quickIds = eligibleQuickIds.take(quickCount).toSet();
+                final visible = [
+                  for (final id in eligibleQuickIds.take(quickCount))
+                    actions.firstWhere((a) => a.id == id),
+                ];
+                final overflow = [
+                  if (!showInsert) insertAction,
+                  if (!showFormat) formatAction,
+                  ...actions.where((action) => !quickIds.contains(action.id)),
+                  if (!showClose) closeAction,
+                ];
+                final menuFormatSession = hasPanel ? _formatSession : null;
+                Widget button(_ToolbarAction action) => Expanded(
+                  key: ValueKey('rich-toolbar-slot-${action.id}'),
+                  child: _button(
+                    action.id,
+                    action.label,
+                    action.icon,
+                    action.onPressed,
+                    selected: action.selected,
                   ),
-                  Expanded(
-                    child: _button(
-                      'format',
-                      l10n.editor.toolbar.format,
-                      LucideIcons.caseSensitive,
-                      canText ? _openFormat : null,
-                    ),
-                  ),
-                  for (final action in visible)
+                );
+                return Row(
+                  children: [
+                    if (showInsert) button(insertAction),
+                    if (showFormat) button(formatAction),
+                    for (final action in visible) button(action),
                     Expanded(
-                      child: _button(
-                        action.id,
-                        action.label,
-                        action.icon,
-                        action.onPressed,
-                        selected: action.selected,
-                      ),
-                    ),
-                  Expanded(
-                    child: PopupMenuButton<String>(
-                      key: const ValueKey('rich-toolbar-more'),
-                      tooltip: l10n.common.more,
-                      icon: const Icon(LucideIcons.ellipsis),
-                      iconSize: 20,
-                      padding: EdgeInsets.zero,
-                      requestFocus: false,
-                      onOpened: () => _overflowSession = _capture(),
-                      onCanceled: () => _overflowSession = null,
-                      onSelected: (id) {
-                        final session = _overflowSession;
-                        _overflowSession = null;
-                        if (session == null || !_sessionValid(session)) {
-                          if (mounted) _selectionExpired();
-                          return;
-                        }
-                        final action = overflow
-                            .where((a) => a.id == id)
-                            .firstOrNull;
-                        action?.onPressed?.call();
-                      },
-                      itemBuilder: (_) => [
-                        for (final action in overflow)
-                          PopupMenuItem<String>(
-                            key: ValueKey('rich-overflow-${action.id}'),
-                            value: action.id,
-                            enabled: action.onPressed != null,
-                            child: Row(
-                              children: [
-                                Icon(action.icon, size: 20),
-                                const SizedBox(width: 12),
-                                Expanded(child: Text(action.label)),
+                      key: const ValueKey('rich-toolbar-slot-more'),
+                      child: hasPanel
+                          ? MenuAnchor(
+                              controller: _formatMoreController,
+                              consumeOutsideTap: true,
+                              onOpen: () => _openFormatOverflow(overflow),
+                              onClose: _closeFormatOverflow,
+                              menuChildren: [
+                                for (final action in overflow)
+                                  MenuItemButton(
+                                    key: ValueKey('rich-overflow-${action.id}'),
+                                    requestFocusOnHover: false,
+                                    closeOnActivate: false,
+                                    onPressed: action.onPressed == null
+                                        ? null
+                                        : () {
+                                            final session = _overflowSession;
+                                            final menuActions =
+                                                _openOverflowActions;
+                                            _formatMoreController.close();
+                                            _invokeOverflowAction(
+                                              action.id,
+                                              session,
+                                              menuActions,
+                                              fromFormat: menuFormatSession,
+                                            );
+                                          },
+                                    leadingIcon: Icon(action.icon, size: 20),
+                                    trailingIcon: action.selected
+                                        ? const Icon(
+                                            LucideIcons.check,
+                                            size: 18,
+                                          )
+                                        : null,
+                                    child: Text(action.label),
+                                  ),
+                              ],
+                              builder: (context, controller, _) => IconButton(
+                                key: const ValueKey('rich-toolbar-more'),
+                                tooltip: l10n.common.more,
+                                icon: const Icon(LucideIcons.ellipsis),
+                                iconSize: 20,
+                                padding: EdgeInsets.zero,
+                                onPressed:
+                                    menuFormatSession != null &&
+                                        _formatValid(menuFormatSession)
+                                    ? () {
+                                        if (!_formatValid(menuFormatSession)) {
+                                          return;
+                                        }
+                                        if (controller.isOpen) {
+                                          controller.close();
+                                        } else {
+                                          controller.open();
+                                        }
+                                      }
+                                    : null,
+                              ),
+                            )
+                          : PopupMenuButton<String>(
+                              key: const ValueKey('rich-toolbar-more'),
+                              tooltip: l10n.common.more,
+                              icon: const Icon(LucideIcons.ellipsis),
+                              iconSize: 20,
+                              padding: EdgeInsets.zero,
+                              requestFocus: false,
+                              onOpened: () {
+                                _overflowSession = _capture();
+                                _openOverflowActions = List.of(overflow);
+                              },
+                              onCanceled: () {
+                                _overflowSession = null;
+                                _openOverflowActions = null;
+                              },
+                              onSelected: (id) {
+                                final session = _overflowSession;
+                                final menuActions = _openOverflowActions;
+                                _overflowSession = null;
+                                _openOverflowActions = null;
+                                _invokeOverflowAction(id, session, menuActions);
+                              },
+                              itemBuilder: (_) => [
+                                for (final action in overflow)
+                                  PopupMenuItem<String>(
+                                    key: ValueKey('rich-overflow-${action.id}'),
+                                    value: action.id,
+                                    enabled: action.onPressed != null,
+                                    child: Row(
+                                      children: [
+                                        Icon(action.icon, size: 20),
+                                        const SizedBox(width: 12),
+                                        Expanded(child: Text(action.label)),
+                                        if (action.selected)
+                                          const Icon(
+                                            LucideIcons.check,
+                                            size: 18,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             ),
-                          ),
-                      ],
                     ),
-                  ),
-                  Expanded(
-                    child: _button(
-                      'close',
-                      l10n.editor.toolbar.hideKeyboard,
-                      LucideIcons.chevronDown,
-                      () => SystemChannels.textInput.invokeMethod<void>(
-                        'TextInput.hide',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                    if (showClose) button(closeAction),
+                  ],
+                );
+              },
             ),
           ),
-        ],
+        ),
       ),
       showFloating,
     );
@@ -1188,6 +2191,7 @@ String? _colorValue(String key, String? value) =>
 
 class _QuickColorSheet extends StatefulWidget {
   const _QuickColorSheet({
+    super.key,
     required this.editor,
     required this.valid,
     required this.execute,
@@ -1228,7 +2232,13 @@ class _QuickColorSheetState extends State<_QuickColorSheet> {
   }
 
   Future<void> _select(String key, String? value) async {
-    if (_running || _expired || !widget.valid()) return;
+    if (!mounted ||
+        _running ||
+        _expired ||
+        !widget.valid() ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
     setState(() => _running = true);
     final success = await widget.execute(
       (selection) => widget.color(selection, key, _colorValue(key, value)),
@@ -1240,40 +2250,79 @@ class _QuickColorSheetState extends State<_QuickColorSheet> {
     });
   }
 
+  void _close() {
+    if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.pop(context, true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = context.l10n.dailynotes;
-    final valid = !_expired && widget.valid();
+    final valid =
+        !_expired && ModalRoute.isCurrentOf(context) == true && widget.valid();
     final enabled = !_running && valid;
-    Widget palette(String key, String identifier) => Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final (label, value, color) in _editorColors(context))
-          Tooltip(
-            message: label,
-            child: InkWell(
-              key: ValueKey(
-                'rich-quick-color-$identifier-${value ?? 'default'}',
-              ),
-              onTap: enabled ? () => _select(key, value) : null,
-              borderRadius: BorderRadius.circular(24),
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: context.theme.colors.outline),
+    Widget palette(String key, String identifier) {
+      final selection = widget.editor.selection;
+      final current = valid && selection != null
+          ? _currentInlineString(widget.editor, selection, key)
+          : (known: false, value: null);
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final (label, value, color) in _editorColors(context))
+            Tooltip(
+              message: label,
+              child: Semantics(
+                selected:
+                    current.known && current.value == _colorValue(key, value),
+                child: InkWell(
+                  key: ValueKey(
+                    'rich-quick-color-$identifier-${value ?? 'default'}',
+                  ),
+                  onTap: enabled ? () => _select(key, value) : null,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: context.theme.colors.outline),
+                    ),
+                    child:
+                        current.known &&
+                            current.value == _colorValue(key, value)
+                        ? Icon(
+                            LucideIcons.check,
+                            key: ValueKey(
+                              'rich-quick-color-selected-$identifier',
+                            ),
+                            size: 20,
+                            color: value == null
+                                ? context.theme.colors.onSurface
+                                : color.computeLuminance() > .5
+                                ? (context.theme.colors.brightness ==
+                                          Brightness.dark
+                                      ? context.theme.colors.onInverseSurface
+                                      : context.theme.colors.onSurface)
+                                : (context.theme.colors.brightness ==
+                                          Brightness.dark
+                                      ? context.theme.colors.onSurface
+                                      : context.theme.colors.onInverseSurface),
+                          )
+                        : value == null
+                        ? const Icon(LucideIcons.ban, size: 20)
+                        : null,
+                  ),
                 ),
-                child: value == null
-                    ? const Icon(LucideIcons.ban, size: 20)
-                    : null,
               ),
             ),
-          ),
-      ],
-    );
+        ],
+      );
+    }
+
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -1290,7 +2339,8 @@ class _QuickColorSheetState extends State<_QuickColorSheet> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.pop(context, true),
+                  key: const ValueKey('rich-color-done'),
+                  onPressed: _close,
                   child: Text(t.editorFormatDone),
                 ),
               ],
@@ -1362,8 +2412,15 @@ class _InsertSheet extends StatelessWidget {
 }
 
 class _LinkDialog extends StatefulWidget {
-  const _LinkDialog({required this.existing});
+  const _LinkDialog({
+    super.key,
+    required this.existing,
+    required this.initialText,
+    this.asSheet = false,
+  });
   final String? existing;
+  final String initialText;
+  final bool asSheet;
 
   @override
   State<_LinkDialog> createState() => _LinkDialogState();
@@ -1371,21 +2428,32 @@ class _LinkDialog extends StatefulWidget {
 
 class _LinkDialogState extends State<_LinkDialog> {
   late final TextEditingController _controller;
+  late final TextEditingController _textController;
   String? _error;
+  String? _textError;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.existing ?? '');
+    _textController = TextEditingController(text: widget.initialText);
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _textController.dispose();
     super.dispose();
   }
 
   void _save() {
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+    if (RegExp(r'[\r\n\u2028\u2029]').hasMatch(_textController.text)) {
+      setState(
+        () => _textError = context.l10n.dailynotes.editorLinkTextInvalid,
+      );
+      return;
+    }
     var value = _controller.text.trim();
     final parsed = Uri.tryParse(value);
     if (parsed != null && !parsed.hasScheme) value = 'https://$value';
@@ -1399,13 +2467,26 @@ class _LinkDialogState extends State<_LinkDialog> {
       setState(() => _error = context.l10n.dailynotes.editorLinkInvalid);
       return;
     }
-    Navigator.pop(context, (remove: false, value: value));
+    Navigator.pop(context, (
+      remove: false,
+      value: value,
+      text: _textController.text,
+    ));
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(context.l10n.editor.toolbar.link),
-    content: TextField(
+  Widget build(BuildContext context) {
+    final title = Text(context.l10n.editor.toolbar.link);
+    final textField = TextField(
+      key: const ValueKey('rich-link-text'),
+      controller: _textController,
+      maxLines: 1,
+      decoration: InputDecoration(
+        labelText: context.l10n.editor.toolbar.linkText,
+        errorText: _textError,
+      ),
+    );
+    final field = TextField(
       key: const ValueKey('rich-link-address'),
       controller: _controller,
       autofocus: true,
@@ -1414,8 +2495,8 @@ class _LinkDialogState extends State<_LinkDialog> {
         labelText: context.l10n.dailynotes.editorLinkAddress,
         errorText: _error,
       ),
-    ),
-    actions: [
+    );
+    final actions = <Widget>[
       TextButton(
         onPressed: () => Navigator.pop(context),
         child: Text(context.l10n.common.cancel),
@@ -1423,7 +2504,8 @@ class _LinkDialogState extends State<_LinkDialog> {
       if (widget.existing != null)
         TextButton(
           key: const ValueKey('rich-link-remove'),
-          onPressed: () => Navigator.pop(context, (remove: true, value: '')),
+          onPressed: () =>
+              Navigator.pop(context, (remove: true, value: '', text: '')),
           child: Text(context.l10n.dailynotes.editorLinkRemove),
         ),
       TextButton(
@@ -1431,8 +2513,46 @@ class _LinkDialogState extends State<_LinkDialog> {
         onPressed: _save,
         child: Text(context.l10n.common.save),
       ),
-    ],
-  );
+    ];
+    if (!widget.asSheet) {
+      return AlertDialog(
+        title: title,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [textField, const SizedBox(height: 12), field],
+          ),
+        ),
+        actions: actions,
+      );
+    }
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DefaultTextStyle(
+                style: context.theme.typography.titleLarge.onSurface,
+                child: title,
+              ),
+              const SizedBox(height: 16),
+              textField,
+              const SizedBox(height: 12),
+              field,
+              const SizedBox(height: 12),
+              Wrap(alignment: WrapAlignment.end, children: actions),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 typedef _FormatCommand = Future<void> Function(af.Selection selection);
@@ -1445,53 +2565,74 @@ class _FormatSheet extends StatefulWidget {
     required this.executeMove,
     required this.toggle,
     required this.convert,
-    required this.color,
     required this.align,
-    required this.loadFonts,
     required this.scrollController,
     required this.canConvert,
+    required this.anchorBottom,
+    required this.anchorRevision,
+    required this.onClose,
+    required this.onResize,
+    required this.openColor,
+    required this.openFonts,
+    required this.openLink,
+    required this.inlineMenuController,
+    required this.onInlineMenuOpen,
+    required this.onInlineMenuClose,
   });
   final af.EditorState editor;
   final af.EditorScrollController? scrollController;
   final bool Function() valid;
   final bool Function() canConvert;
+  final double? anchorBottom;
+  final int anchorRevision;
+  final VoidCallback onClose;
+  final ValueChanged<double> onResize;
+  final VoidCallback openColor;
+  final VoidCallback openFonts;
+  final VoidCallback openLink;
+  final MenuController inlineMenuController;
+  final VoidCallback onInlineMenuOpen;
+  final VoidCallback onInlineMenuClose;
   final Future<bool> Function(_FormatCommand) execute;
   final Future<bool> Function(_FormatCommand) executeMove;
   final Future<void> Function(af.Selection, String) toggle;
   final Future<void> Function(af.Selection, String, {int? level}) convert;
-  final Future<void> Function(af.Selection, String, String?) color;
   final Future<void> Function(af.Selection, String) align;
-  final Future<({List<String> families, bool hasUnavailable})> Function()?
-  loadFonts;
 
   @override
   State<_FormatSheet> createState() => _FormatSheetState();
 }
 
 class _FormatSheetState extends State<_FormatSheet> {
-  String? _colorKey;
-  bool _fontView = false;
-  bool _fontLoading = false;
-  bool _fontLoadFailed = false;
-  List<String> _importedFonts = [];
   bool _running = false;
   bool _expired = false;
   late final StreamSubscription<dynamic> _changes;
   final _surfaceKey = GlobalKey();
-  final _sheetController = DraggableScrollableController();
-  Animation<double>? _routeAnimation;
+  final _inlineCodeItemKey = GlobalKey();
+  final _contentController = ScrollController();
+  bool _longPressCodeSelected = false;
   bool _visibilityScheduled = false;
   bool _adjustingScroll = false;
+  bool _anchorPending = true;
+  double? _pendingAnchor;
+  double? _openingAnchor;
+  double? _lastSelectionBottom;
+  double? _lastViewInset;
+  Size? _lastViewSize;
+
+  @override
+  void didUpdateWidget(covariant _FormatSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.anchorRevision != widget.anchorRevision) {
+      _pendingAnchor = widget.anchorBottom;
+      _anchorPending = true;
+      _openingAnchor = null;
+    }
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final animation = ModalRoute.of(context)?.animation;
-    if (_routeAnimation != animation) {
-      _routeAnimation?.removeListener(_scheduleVisibilityCheck);
-      _routeAnimation = animation;
-      _routeAnimation?.addListener(_scheduleVisibilityCheck);
-    }
     _scheduleVisibilityCheck();
   }
 
@@ -1503,28 +2644,42 @@ class _FormatSheetState extends State<_FormatSheet> {
       if (!mounted ||
           _adjustingScroll ||
           !widget.valid() ||
-          ModalRoute.of(context)?.isCurrent != true ||
-          _routeAnimation?.status == AnimationStatus.reverse) {
+          ModalRoute.of(context)?.isCurrent != true) {
         return;
       }
       final box = _surfaceKey.currentContext?.findRenderObject();
       if (box is! RenderBox || !box.attached || !box.hasSize) return;
       final sheet = box.localToGlobal(Offset.zero) & box.size;
-      final covered = widget.editor
+      final rectangles = widget.editor
           .selectionRects()
           .where(
             (rect) =>
-                rect.bottom > sheet.top &&
-                rect.top < sheet.bottom &&
                 rect.right > sheet.left &&
-                rect.left < sheet.right,
+                rect.left < sheet.right &&
+                rect.top < sheet.bottom &&
+                rect.bottom > 0,
           )
           .toList();
-      if (covered.isEmpty) return;
-      final bottom = covered
+      if (rectangles.isEmpty) return;
+      final bottom = rectangles
           .map((rect) => rect.bottom)
           .reduce((a, b) => a > b ? a : b);
-      final delta = bottom - sheet.top + 8;
+      final limit =
+          sheet.top - _RichEditorToolbarState._keyboardToolbarHeight - 8;
+      final anchor = _pendingAnchor;
+      final desired = _anchorPending && anchor != null
+          ? (anchor < limit ? anchor : limit)
+          : limit;
+      final delta = _anchorPending && anchor != null
+          ? bottom - desired
+          : bottom > limit
+          ? bottom - limit
+          : 0.0;
+      _anchorPending = false;
+      if (delta.abs() <= .5) {
+        _lastSelectionBottom = bottom;
+        return;
+      }
       final scroll = widget.scrollController!;
       if (scroll.shrinkWrap) {
         if (!scroll.scrollController.hasClients) return;
@@ -1562,9 +2717,11 @@ class _FormatSheetState extends State<_FormatSheet> {
               final newBottom = now
                   .map((rect) => rect.bottom)
                   .reduce((a, b) => a > b ? a : b);
-              // The moving sheet can cover more text during a scroll. Retry
-              // only after actual progress, so document boundaries cannot loop.
-              if (bottom - newBottom > .5) {
+              _lastSelectionBottom = newBottom;
+              // Retry after progress or when another resize happened while
+              // this scroll adjustment was still in flight.
+              if (_anchorPending ||
+                  (newBottom > limit && bottom - newBottom > .5)) {
                 _scheduleVisibilityCheck();
                 WidgetsBinding.instance.scheduleFrame();
               }
@@ -1576,7 +2733,8 @@ class _FormatSheetState extends State<_FormatSheet> {
   @override
   void initState() {
     super.initState();
-    _sheetController.addListener(_scheduleVisibilityCheck);
+    _pendingAnchor = widget.anchorBottom;
+    _openingAnchor = widget.anchorBottom;
     widget.editor.selectionNotifier.addListener(_contextChanged);
     _changes = widget.editor.transactionStream.listen((event) {
       if (event.$1 == af.TransactionTime.after) _contextChanged();
@@ -1590,18 +2748,12 @@ class _FormatSheetState extends State<_FormatSheet> {
   @override
   void dispose() {
     widget.editor.selectionNotifier.removeListener(_contextChanged);
-    _routeAnimation?.removeListener(_scheduleVisibilityCheck);
-    _sheetController.removeListener(_scheduleVisibilityCheck);
-    _sheetController.dispose();
+    _contentController.dispose();
     _changes.cancel();
     super.dispose();
   }
 
-  Future<void> _perform(
-    _FormatCommand command, {
-    bool move = false,
-    bool closeColor = false,
-  }) async {
+  Future<void> _perform(_FormatCommand command, {bool move = false}) async {
     if (_running || _expired || !widget.valid()) {
       if (mounted) setState(() => _expired = true);
       return;
@@ -1614,38 +2766,7 @@ class _FormatSheetState extends State<_FormatSheet> {
     setState(() {
       _running = false;
       _expired = !success;
-      if (success && closeColor) _colorKey = null;
     });
-  }
-
-  void _backToFormat() => setState(() {
-    _colorKey = null;
-    _fontView = false;
-  });
-
-  Future<void> _openFonts() async {
-    setState(() {
-      _fontView = true;
-      _fontLoading = true;
-      _fontLoadFailed = false;
-    });
-    try {
-      final catalog =
-          await (widget.loadFonts?.call() ??
-              Future.value((families: <String>[], hasUnavailable: false)));
-      if (!mounted || !_fontView) return;
-      setState(() {
-        _importedFonts = catalog.families;
-        _fontLoadFailed = catalog.hasUnavailable;
-        _fontLoading = false;
-      });
-    } catch (_) {
-      if (!mounted || !_fontView) return;
-      setState(() {
-        _fontLoadFailed = true;
-        _fontLoading = false;
-      });
-    }
   }
 
   Widget _icon(
@@ -1674,6 +2795,135 @@ class _FormatSheetState extends State<_FormatSheet> {
     child: Row(children: children),
   );
 
+  void _showInlineMenu() {
+    if (!mounted || _running || _expired || !widget.valid()) return;
+    if (!widget.inlineMenuController.isOpen) widget.inlineMenuController.open();
+  }
+
+  void _applyInlineCode() {
+    if (!mounted || _running || _expired || !widget.valid()) return;
+    if (widget.inlineMenuController.isOpen) widget.inlineMenuController.close();
+    unawaited(_perform((s) => widget.toggle(s, af.AppFlowyRichTextKeys.code)));
+  }
+
+  Widget _linkAndCode(bool enabled, bool canLink, bool codeSelected) {
+    final e = context.l10n.editor.toolbar;
+    final controller = widget.inlineMenuController;
+    return MenuAnchor(
+      controller: controller,
+      onOpen: widget.onInlineMenuOpen,
+      onClose: widget.onInlineMenuClose,
+      menuChildren: [
+        KeyedSubtree(
+          key: _inlineCodeItemKey,
+          child: MenuItemButton(
+            key: ValueKey('rich-format-${e.inlineCode}'),
+            onPressed: enabled ? _applyInlineCode : null,
+            leadingIcon: const Icon(LucideIcons.code, size: 20),
+            trailingIcon: codeSelected ? const Icon(LucideIcons.check) : null,
+            child: Text(e.inlineCode),
+          ),
+        ),
+      ],
+      builder: (context, _, _) => GestureDetector(
+        key: const ValueKey('rich-format-link-code'),
+        behavior: HitTestBehavior.opaque,
+        onLongPressStart: enabled
+            ? (_) {
+                if (!widget.valid()) return;
+                _longPressCodeSelected = true;
+                _showInlineMenu();
+              }
+            : null,
+        onLongPressMoveUpdate: enabled
+            ? (details) {
+                final box = _inlineCodeItemKey.currentContext
+                    ?.findRenderObject();
+                if (box is! RenderBox || !box.attached || !box.hasSize) return;
+                final left = box.localToGlobal(Offset.zero).dx;
+                _longPressCodeSelected =
+                    details.globalPosition.dx >= left &&
+                    details.globalPosition.dx <= left + box.size.width;
+              }
+            : null,
+        onLongPressUp: enabled
+            ? () {
+                if (_longPressCodeSelected) {
+                  _applyInlineCode();
+                } else if (controller.isOpen) {
+                  controller.close();
+                }
+                _longPressCodeSelected = false;
+              }
+            : null,
+        onLongPressCancel: () {
+          _longPressCodeSelected = false;
+          if (controller.isOpen) controller.close();
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 42,
+              child: Tooltip(
+                message: e.link,
+                triggerMode: TooltipTriggerMode.manual,
+                child: Semantics(
+                  label: e.link,
+                  child: IconButton(
+                    key: const ValueKey('rich-format-link'),
+                    icon: const Icon(LucideIcons.link, size: 20),
+                    onPressed: canLink ? widget.openLink : null,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 30,
+              child: Tooltip(
+                message: e.inlineCode,
+                triggerMode: TooltipTriggerMode.manual,
+                child: Semantics(
+                  label: e.inlineCode,
+                  child: IconButton(
+                    key: const ValueKey('rich-format-code-more'),
+                    icon: const Icon(LucideIcons.chevronDown, size: 16),
+                    onPressed: enabled ? _showInlineMenu : null,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _blockButton({
+    required String label,
+    required String keyName,
+    required bool selected,
+    required VoidCallback? onPressed,
+  }) => Semantics(
+    key: ValueKey('rich-format-$keyName'),
+    label: label,
+    button: true,
+    enabled: onPressed != null,
+    selected: selected,
+    onTap: onPressed,
+    child: ExcludeSemantics(
+      child: TextButton(
+        onPressed: onPressed,
+        style: selected
+            ? TextButton.styleFrom(
+                backgroundColor: context.theme.colors.secondaryContainer,
+              )
+            : null,
+        child: Text(label),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -1682,355 +2932,430 @@ class _FormatSheetState extends State<_FormatSheet> {
     final selectionValid = !_expired && widget.valid();
     final enabled = !_running && selectionValid;
     final canBlock = enabled && widget.canConvert();
-    return PopScope(
-      canPop: _colorKey == null && !_fontView,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && (_colorKey != null || _fontView)) _backToFormat();
-      },
-      child: DraggableScrollableSheet(
-        controller: _sheetController,
-        expand: false,
-        initialChildSize: 0.5,
-        minChildSize: 0.25,
-        maxChildSize: 0.9,
-        builder: (context, controller) => Material(
-          key: _surfaceKey,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              GestureDetector(
+    final selection = selectionValid ? widget.editor.selection : null;
+    final canLink = enabled && selection != null && selection.isSingle;
+    bool blockSelected(String type, {int? level}) =>
+        selection != null &&
+        _blockTypeActive(widget.editor, selection, type, level: level);
+    bool aligned(String value) =>
+        selection != null && _blockAlignActive(widget.editor, selection, value);
+    final view = View.of(context);
+    final inset = view.viewInsets.bottom / view.devicePixelRatio;
+    final viewSize = MediaQuery.sizeOf(context);
+    final previousInset = _lastViewInset;
+    if (previousInset == null && inset == 0) _openingAnchor = null;
+    if ((previousInset != null && previousInset != inset) ||
+        (_lastViewSize != null && _lastViewSize != viewSize)) {
+      _pendingAnchor = previousInset != null && inset < previousInset
+          ? _openingAnchor ?? _lastSelectionBottom ?? widget.anchorBottom
+          : _lastSelectionBottom ?? widget.anchorBottom;
+      _anchorPending = true;
+      if (inset == 0) _openingAnchor = null;
+    }
+    _lastViewInset = inset;
+    _lastViewSize = viewSize;
+    _scheduleVisibilityCheck();
+    return KeyedSubtree(
+      key: const ValueKey('rich-format-panel'),
+      child: Material(
+        key: _surfaceKey,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            Semantics(
+              label: e.format,
+              onIncrease: enabled ? () => widget.onResize(-80) : null,
+              onDecrease: enabled ? () => widget.onResize(80) : null,
+              child: GestureDetector(
                 key: const ValueKey('rich-format-drag-handle'),
                 behavior: HitTestBehavior.opaque,
-                onVerticalDragUpdate: (details) {
-                  final box = _surfaceKey.currentContext?.findRenderObject();
-                  if (!_sheetController.isAttached ||
-                      box is! RenderBox ||
-                      !box.hasSize ||
-                      _sheetController.size <= 0) {
-                    return;
-                  }
-                  final parentHeight = box.size.height / _sheetController.size;
-                  if (parentHeight <= 0) return;
-                  _sheetController.jumpTo(
-                    (_sheetController.size - details.delta.dy / parentHeight)
-                        .clamp(.25, .9),
-                  );
-                },
+                onVerticalDragUpdate: enabled
+                    ? (details) => widget.onResize(details.delta.dy)
+                    : null,
                 child: SizedBox(
-                  height: 24,
+                  height: 20,
+                  width: double.infinity,
                   child: Center(
                     child: Container(
-                      width: 40,
+                      width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: context.theme.colors.outlineVariant,
-                        borderRadius: BorderRadius.circular(3),
+                        color: context.theme.colors.outline,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
                 ),
               ),
-              ListTile(
-                leading: _colorKey == null && !_fontView
-                    ? null
-                    : IconButton(
-                        tooltip: t.editorBackToFormat,
-                        icon: const Icon(LucideIcons.arrowLeft),
-                        onPressed: _backToFormat,
-                      ),
-                title: Text(
-                  _fontView
-                      ? t.editorFont
-                      : _colorKey == af.AppFlowyRichTextKeys.textColor
-                      ? t.editorTextColor
-                      : _colorKey == af.AppFlowyRichTextKeys.backgroundColor
-                      ? t.editorHighlightColor
-                      : e.format,
-                ),
-                trailing: TextButton(
-                  onPressed: () {
-                    if (_fontView || _colorKey != null) {
-                      _backToFormat();
-                    } else {
-                      Navigator.pop(context, true);
-                    }
-                  },
-                  child: Text(t.editorFormatDone),
-                ),
+            ),
+            ListTile(
+              title: Text(e.format),
+              trailing: TextButton(
+                key: const ValueKey('rich-format-done'),
+                onPressed: widget.onClose,
+                child: Text(t.editorFormatDone),
               ),
-              if (!selectionValid && !_running)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(t.editorSelectionChanged),
-                ),
-              Expanded(
-                child: _fontView
-                    ? _fonts(context, controller, enabled)
-                    : _colorKey != null
-                    ? _colors(context, controller, enabled)
-                    : ListView(
-                        controller: controller,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        children: [
-                          _row([
-                            TextButton(
-                              onPressed: canBlock
-                                  ? () => _perform(
-                                      (s) => widget.convert(
-                                        s,
-                                        af.ParagraphBlockKeys.type,
-                                      ),
-                                    )
-                                  : null,
-                              child: Text(e.paragraph),
-                            ),
-                            for (final level in [1, 2, 3])
-                              TextButton(
-                                onPressed: canBlock
-                                    ? () => _perform(
-                                        (s) => widget.convert(
-                                          s,
-                                          af.HeadingBlockKeys.type,
-                                          level: level,
-                                        ),
-                                      )
-                                    : null,
-                                child: Text('H$level'),
+            ),
+            if (!selectionValid && !_running)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(t.editorSelectionChanged),
+              ),
+            Expanded(
+              child: ListView(
+                controller: _contentController,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  _row([
+                    for (final level in [1, 2, 3])
+                      _blockButton(
+                        label: 'H$level',
+                        keyName: 'heading-$level',
+                        selected: blockSelected(
+                          af.HeadingBlockKeys.type,
+                          level: level,
+                        ),
+                        onPressed: canBlock
+                            ? () => _perform(
+                                (s) => widget.convert(
+                                  s,
+                                  af.HeadingBlockKeys.type,
+                                  level: level,
+                                ),
+                              )
+                            : null,
+                      ),
+                    _blockButton(
+                      label: e.paragraph,
+                      keyName: 'paragraph',
+                      selected: blockSelected(af.ParagraphBlockKeys.type),
+                      onPressed: canBlock
+                          ? () => _perform(
+                              (s) =>
+                                  widget.convert(s, af.ParagraphBlockKeys.type),
+                            )
+                          : null,
+                    ),
+                  ]),
+                  const Divider(height: 1),
+                  _row([
+                    _icon(
+                      e.bold,
+                      LucideIcons.bold,
+                      enabled
+                          ? () => _perform(
+                              (s) => widget.toggle(
+                                s,
+                                af.AppFlowyRichTextKeys.bold,
                               ),
-                          ]),
-                          const Divider(height: 1),
-                          _row([
-                            _icon(
-                              e.bold,
-                              LucideIcons.bold,
-                              enabled
-                                  ? () => _perform(
-                                      (s) => widget.toggle(
-                                        s,
-                                        af.AppFlowyRichTextKeys.bold,
-                                      ),
-                                    )
-                                  : null,
-                              selected:
-                                  selectionValid &&
-                                  widget.editor.selection != null &&
-                                  _styleActive(
-                                    widget.editor,
-                                    widget.editor.selection!,
-                                    af.AppFlowyRichTextKeys.bold,
-                                  ),
-                            ),
-                            _icon(
-                              e.italic,
-                              LucideIcons.italic,
-                              enabled
-                                  ? () => _perform(
-                                      (s) => widget.toggle(
-                                        s,
-                                        af.AppFlowyRichTextKeys.italic,
-                                      ),
-                                    )
-                                  : null,
-                              selected:
-                                  selectionValid &&
-                                  widget.editor.selection != null &&
-                                  _styleActive(
-                                    widget.editor,
-                                    widget.editor.selection!,
-                                    af.AppFlowyRichTextKeys.italic,
-                                  ),
-                            ),
-                            _icon(
-                              e.underline,
-                              LucideIcons.underline,
-                              enabled
-                                  ? () => _perform(
-                                      (s) => widget.toggle(
-                                        s,
-                                        af.AppFlowyRichTextKeys.underline,
-                                      ),
-                                    )
-                                  : null,
-                              selected:
-                                  selectionValid &&
-                                  widget.editor.selection != null &&
-                                  _styleActive(
-                                    widget.editor,
-                                    widget.editor.selection!,
-                                    af.AppFlowyRichTextKeys.underline,
-                                  ),
-                            ),
-                            _icon(
-                              e.strike,
-                              LucideIcons.strikethrough,
-                              enabled
-                                  ? () => _perform(
-                                      (s) => widget.toggle(
-                                        s,
-                                        af.AppFlowyRichTextKeys.strikethrough,
-                                      ),
-                                    )
-                                  : null,
-                              selected:
-                                  selectionValid &&
-                                  widget.editor.selection != null &&
-                                  _styleActive(
-                                    widget.editor,
-                                    widget.editor.selection!,
-                                    af.AppFlowyRichTextKeys.strikethrough,
-                                  ),
-                            ),
-                            _icon(
-                              t.editorTextColor,
-                              LucideIcons.baseline,
-                              enabled
-                                  ? () => setState(
-                                      () => _colorKey =
-                                          af.AppFlowyRichTextKeys.textColor,
-                                    )
-                                  : null,
-                            ),
-                            _icon(
-                              t.editorHighlightColor,
-                              LucideIcons.highlighter,
-                              enabled
-                                  ? () => setState(
-                                      () => _colorKey = af
-                                          .AppFlowyRichTextKeys
-                                          .backgroundColor,
-                                    )
-                                  : null,
-                            ),
-                          ]),
-                          const Divider(height: 1),
-                          _row([
-                            _icon(
-                              e.taskList,
-                              LucideIcons.listTodo,
-                              canBlock
-                                  ? () => _perform(
-                                      (s) => widget.convert(
-                                        s,
-                                        af.TodoListBlockKeys.type,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            _icon(
-                              e.bulletList,
-                              LucideIcons.list,
-                              canBlock
-                                  ? () => _perform(
-                                      (s) => widget.convert(
-                                        s,
-                                        af.BulletedListBlockKeys.type,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            _icon(
-                              e.orderedList,
-                              LucideIcons.listOrdered,
-                              canBlock
-                                  ? () => _perform(
-                                      (s) => widget.convert(
-                                        s,
-                                        af.NumberedListBlockKeys.type,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            _icon(
-                              e.quote,
-                              LucideIcons.quote,
-                              canBlock
-                                  ? () => _perform(
-                                      (s) => widget.convert(
-                                        s,
-                                        af.QuoteBlockKeys.type,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            _icon(
-                              t.editorAlignLeft,
-                              LucideIcons.alignLeft,
-                              enabled
-                                  ? () =>
-                                        _perform((s) => widget.align(s, 'left'))
-                                  : null,
-                            ),
-                            _icon(
-                              t.editorAlignCenter,
-                              LucideIcons.alignCenter,
-                              enabled
-                                  ? () => _perform(
-                                      (s) => widget.align(s, 'center'),
-                                    )
-                                  : null,
-                            ),
-                            _icon(
-                              t.editorAlignRight,
-                              LucideIcons.alignRight,
-                              enabled
-                                  ? () => _perform(
-                                      (s) => widget.align(s, 'right'),
-                                    )
-                                  : null,
-                            ),
-                          ]),
-                          const Divider(height: 1),
-                          _row([
-                            TextButton.icon(
-                              key: const ValueKey('rich-format-font'),
-                              onPressed: enabled ? _openFonts : null,
-                              icon: const Icon(LucideIcons.type, size: 20),
-                              label: Text(t.editorFont),
-                            ),
-                            _icon(
-                              e.outdent,
-                              LucideIcons.outdent,
-                              enabled && af.isOutdentable(widget.editor)
-                                  ? () => _perform(
-                                      (_) async => af.outdentCommand.execute(
-                                        widget.editor,
-                                      ),
-                                      move: true,
-                                    )
-                                  : null,
-                            ),
-                            _icon(
-                              e.indent,
-                              LucideIcons.indent,
-                              enabled && af.isIndentable(widget.editor)
-                                  ? () => _perform(
-                                      (_) async => af.indentCommand.execute(
-                                        widget.editor,
-                                      ),
-                                      move: true,
-                                    )
-                                  : null,
-                            ),
-                          ]),
-                        ],
-                      ),
+                            )
+                          : null,
+                      selected:
+                          selectionValid &&
+                          widget.editor.selection != null &&
+                          _styleActive(
+                            widget.editor,
+                            widget.editor.selection!,
+                            af.AppFlowyRichTextKeys.bold,
+                          ),
+                    ),
+                    _icon(
+                      e.italic,
+                      LucideIcons.italic,
+                      enabled
+                          ? () => _perform(
+                              (s) => widget.toggle(
+                                s,
+                                af.AppFlowyRichTextKeys.italic,
+                              ),
+                            )
+                          : null,
+                      selected:
+                          selectionValid &&
+                          widget.editor.selection != null &&
+                          _styleActive(
+                            widget.editor,
+                            widget.editor.selection!,
+                            af.AppFlowyRichTextKeys.italic,
+                          ),
+                    ),
+                    _icon(
+                      e.underline,
+                      LucideIcons.underline,
+                      enabled
+                          ? () => _perform(
+                              (s) => widget.toggle(
+                                s,
+                                af.AppFlowyRichTextKeys.underline,
+                              ),
+                            )
+                          : null,
+                      selected:
+                          selectionValid &&
+                          widget.editor.selection != null &&
+                          _styleActive(
+                            widget.editor,
+                            widget.editor.selection!,
+                            af.AppFlowyRichTextKeys.underline,
+                          ),
+                    ),
+                    _icon(
+                      e.strike,
+                      LucideIcons.strikethrough,
+                      enabled
+                          ? () => _perform(
+                              (s) => widget.toggle(
+                                s,
+                                af.AppFlowyRichTextKeys.strikethrough,
+                              ),
+                            )
+                          : null,
+                      selected:
+                          selectionValid &&
+                          widget.editor.selection != null &&
+                          _styleActive(
+                            widget.editor,
+                            widget.editor.selection!,
+                            af.AppFlowyRichTextKeys.strikethrough,
+                          ),
+                    ),
+                    _icon(
+                      t.editorTextColor,
+                      LucideIcons.baseline,
+                      enabled ? widget.openColor : null,
+                    ),
+                  ]),
+                  const Divider(height: 1),
+                  _row([
+                    _icon(
+                      e.taskList,
+                      LucideIcons.listTodo,
+                      canBlock
+                          ? () => _perform(
+                              (s) =>
+                                  widget.convert(s, af.TodoListBlockKeys.type),
+                            )
+                          : null,
+                      selected: blockSelected(af.TodoListBlockKeys.type),
+                    ),
+                    _icon(
+                      e.bulletList,
+                      LucideIcons.list,
+                      canBlock
+                          ? () => _perform(
+                              (s) => widget.convert(
+                                s,
+                                af.BulletedListBlockKeys.type,
+                              ),
+                            )
+                          : null,
+                      selected: blockSelected(af.BulletedListBlockKeys.type),
+                    ),
+                    _icon(
+                      e.orderedList,
+                      LucideIcons.listOrdered,
+                      canBlock
+                          ? () => _perform(
+                              (s) => widget.convert(
+                                s,
+                                af.NumberedListBlockKeys.type,
+                              ),
+                            )
+                          : null,
+                      selected: blockSelected(af.NumberedListBlockKeys.type),
+                    ),
+                    _icon(
+                      e.quote,
+                      LucideIcons.quote,
+                      canBlock
+                          ? () => _perform(
+                              (s) => widget.convert(s, af.QuoteBlockKeys.type),
+                            )
+                          : null,
+                      selected: blockSelected(af.QuoteBlockKeys.type),
+                    ),
+                    _linkAndCode(
+                      enabled,
+                      canLink,
+                      selection != null &&
+                          _styleActive(
+                            widget.editor,
+                            selection,
+                            af.AppFlowyRichTextKeys.code,
+                          ),
+                    ),
+                    _icon(
+                      t.editorAlignLeft,
+                      LucideIcons.alignLeft,
+                      enabled
+                          ? () => _perform((s) => widget.align(s, 'left'))
+                          : null,
+                      selected: aligned('left'),
+                    ),
+                    _icon(
+                      t.editorAlignCenter,
+                      LucideIcons.alignCenter,
+                      enabled
+                          ? () => _perform((s) => widget.align(s, 'center'))
+                          : null,
+                      selected: aligned('center'),
+                    ),
+                    _icon(
+                      t.editorAlignRight,
+                      LucideIcons.alignRight,
+                      enabled
+                          ? () => _perform((s) => widget.align(s, 'right'))
+                          : null,
+                      selected: aligned('right'),
+                    ),
+                  ]),
+                  const Divider(height: 1),
+                  _row([
+                    TextButton.icon(
+                      key: const ValueKey('rich-format-font'),
+                      onPressed: enabled ? widget.openFonts : null,
+                      icon: const Icon(LucideIcons.type, size: 20),
+                      label: Text(t.editorFont),
+                    ),
+                    _icon(
+                      e.outdent,
+                      LucideIcons.outdent,
+                      enabled && af.isOutdentable(widget.editor)
+                          ? () => _perform(
+                              (_) async =>
+                                  af.outdentCommand.execute(widget.editor),
+                              move: true,
+                            )
+                          : null,
+                    ),
+                    _icon(
+                      e.indent,
+                      LucideIcons.indent,
+                      enabled && af.isIndentable(widget.editor)
+                          ? () => _perform(
+                              (_) async =>
+                                  af.indentCommand.execute(widget.editor),
+                              move: true,
+                            )
+                          : null,
+                    ),
+                  ]),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _fonts(
-    BuildContext context,
-    ScrollController controller,
-    bool enabled,
-  ) {
+class _FormatFontPage extends StatefulWidget {
+  const _FormatFontPage({
+    required this.editor,
+    required this.valid,
+    required this.execute,
+    required this.color,
+    required this.loadFonts,
+  });
+
+  final af.EditorState editor;
+  final bool Function() valid;
+  final Future<bool> Function(_FormatCommand) execute;
+  final Future<void> Function(af.Selection, String, String?) color;
+  final Future<({List<String> families, bool hasUnavailable})> Function()?
+  loadFonts;
+
+  @override
+  State<_FormatFontPage> createState() => _FormatFontPageState();
+}
+
+class _FormatFontPageState extends State<_FormatFontPage> {
+  late final StreamSubscription<dynamic> _changes;
+  bool _loading = true;
+  bool _loadFailed = false;
+  bool _running = false;
+  bool _expired = false;
+  List<String> _importedFonts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    widget.editor.selectionNotifier.addListener(_changed);
+    _changes = widget.editor.transactionStream.listen((event) {
+      if (event.$1 == af.TransactionTime.after) _changed();
+    });
+    unawaited(_load());
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _load() async {
+    try {
+      final catalog =
+          await (widget.loadFonts?.call() ??
+              Future.value((families: <String>[], hasUnavailable: false)));
+      if (!mounted) return;
+      setState(() {
+        _importedFonts = catalog.families;
+        _loadFailed = catalog.hasUnavailable;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadFailed = true;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _select(String? family) async {
+    if (!mounted ||
+        _running ||
+        _expired ||
+        !widget.valid() ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    setState(() => _running = true);
+    final success = await widget.execute(
+      (selection) =>
+          widget.color(selection, af.AppFlowyRichTextKeys.fontFamily, family),
+    );
+    if (!mounted) return;
+    setState(() {
+      _running = false;
+      _expired = !success;
+    });
+    if (success &&
+        widget.valid() &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _close() {
+    if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.editor.selectionNotifier.removeListener(_changed);
+    _changes.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final t = context.l10n.dailynotes;
-    // Android fonts are available on the target platform. The iOS equivalents
-    // provide the same categories on iOS instead of pretending Android names exist.
+    final valid =
+        !_expired && ModalRoute.isCurrentOf(context) == true && widget.valid();
+    final enabled = !_running && valid;
     final ios = defaultTargetPlatform == TargetPlatform.iOS;
     final options = <(String, String?)>[
       (t.editorFontDefault, null),
@@ -2041,96 +3366,61 @@ class _FormatSheetState extends State<_FormatSheet> {
     ];
     final selection = widget.editor.selection;
     final current = enabled && selection != null
-        ? _currentFont(widget.editor, selection)
-        : (known: false, family: null);
+        ? _currentInlineString(
+            widget.editor,
+            selection,
+            af.AppFlowyRichTextKeys.fontFamily,
+          )
+        : (known: false, value: null);
     final seen = <String?>{};
     final uniqueOptions = options.where((option) => seen.add(option.$2));
-    return ListView(
-      controller: controller,
-      children: [
-        if (_fontLoading) const LinearProgressIndicator(),
-        if (_fontLoadFailed)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(t.editorFontLoadFailed),
+    return Scaffold(
+      key: const ValueKey('rich-format-font-page'),
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: t.editorBackToFormat,
+          icon: const Icon(LucideIcons.arrowLeft),
+          onPressed: _close,
+        ),
+        title: Text(t.editorFont),
+        actions: [
+          TextButton(
+            key: const ValueKey('rich-font-done'),
+            onPressed: _close,
+            child: Text(t.editorFormatDone),
           ),
-        for (final (label, family) in uniqueOptions)
-          ListTile(
-            key: ValueKey('rich-font-${family ?? 'default'}'),
-            selected: current.known && current.family == family,
-            trailing: current.known && current.family == family
-                ? const Icon(LucideIcons.check)
-                : null,
-            title: Text(
-              label,
-              style: context.theme.typography.bodyLarge.onSurface.copyWith(
-                fontFamily: family,
-              ),
+        ],
+      ),
+      body: ListView(
+        children: [
+          if (_loading) const LinearProgressIndicator(),
+          if (_loadFailed)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(t.editorFontLoadFailed),
             ),
-            onTap: enabled
-                ? () async {
-                    await _perform(
-                      (s) => widget.color(
-                        s,
-                        af.AppFlowyRichTextKeys.fontFamily,
-                        family,
-                      ),
-                    );
-                    if (mounted && !_expired) _backToFormat();
-                  }
-                : null,
-          ),
-      ],
-    );
-  }
-
-  Widget _colors(
-    BuildContext context,
-    ScrollController controller,
-    bool enabled,
-  ) {
-    final values = _editorColors(context);
-    return ListView(
-      controller: controller,
-      padding: const EdgeInsets.all(16),
-      children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            for (final (label, value, color) in values)
-              Tooltip(
-                message: label,
-                child: InkWell(
-                  key: ValueKey('rich-color-${value ?? 'default'}'),
-                  onTap: enabled
-                      ? () => _perform(
-                          (s) => widget.color(
-                            s,
-                            _colorKey!,
-                            _colorValue(_colorKey!, value),
-                          ),
-                          closeColor: true,
-                        )
-                      : null,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: context.theme.colors.outline),
-                    ),
-                    child: value == null
-                        ? const Icon(LucideIcons.ban, size: 20)
-                        : null,
-                  ),
+          if (!valid && !_running)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(t.editorSelectionChanged),
+            ),
+          for (final (label, family) in uniqueOptions)
+            ListTile(
+              key: ValueKey('rich-font-${family ?? 'default'}'),
+              selected: current.known && current.value == family,
+              trailing: current.known && current.value == family
+                  ? const Icon(LucideIcons.check)
+                  : null,
+              title: Text(
+                label,
+                style: context.theme.typography.bodyLarge.onSurface.copyWith(
+                  fontFamily: family,
                 ),
               ),
-          ],
-        ),
-      ],
+              onTap: enabled ? () => _select(family) : null,
+            ),
+        ],
+      ),
     );
   }
 }
