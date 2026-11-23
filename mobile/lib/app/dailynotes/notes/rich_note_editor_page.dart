@@ -65,6 +65,11 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
       widget.testEmergencyExporter ?? EmergencyDocumentExporter();
   bool _deleting = false;
   bool _archiving = false;
+  bool get _readingPositionSaved =>
+      _id != null &&
+      _revision == _savedRevision &&
+      !_failed &&
+      _pending == null;
 
   @override
   void initState() {
@@ -949,6 +954,11 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                         editor: editor,
                         focusNode: _editorFocus,
                         scrollController: _scrollController!,
+                        readingPositionIdentity: _id == null
+                            ? null
+                            : 'note:$_id',
+                        readingPositionIsSaved: _readingPositionSaved,
+                        readingPositionCanStore: () => _readingPositionSaved,
                         editable: _editing,
                         showHistoryActionsInToolbar: false,
                         autoFocus: widget.note == null,

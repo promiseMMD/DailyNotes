@@ -62,6 +62,12 @@ class _RichDiaryPageState extends State<RichDiaryPage>
   late bool _editing;
   late final _exporter =
       widget.testEmergencyExporter ?? EmergencyDocumentExporter();
+  bool get _readingPositionSaved =>
+      _saved != null &&
+      _revision == _savedRevision &&
+      !_failed &&
+      _pending == null &&
+      _unconfirmed == null;
 
   @override
   void initState() {
@@ -547,6 +553,11 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                         editor: editor,
                         focusNode: _focus,
                         scrollController: _scroll!,
+                        readingPositionIdentity: _saved == null
+                            ? null
+                            : 'diary:${_saved!.id}',
+                        readingPositionIsSaved: _readingPositionSaved,
+                        readingPositionCanStore: () => _readingPositionSaved,
                         editable: _editing,
                         showHistoryActionsInToolbar: false,
                         autoFocus: widget.diary == null,

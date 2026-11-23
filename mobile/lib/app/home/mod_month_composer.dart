@@ -313,6 +313,11 @@ class _ModMonthComposerState extends State<ModMonthComposer>
   bool get _editing => widget.action == 'edit';
   bool get _locked => _busy || _leaving || _attempt != null;
   bool get _documentEditable => _editing && _documentUnlocked && !_locked;
+  bool get _readingPositionSaved =>
+      widget.block != null &&
+      _body == widget.block!.tiptapJson &&
+      !_snapshotUncertain &&
+      _attempt == null;
 
   @override
   void initState() {
@@ -1172,6 +1177,12 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                                 editor: _documentEditor!,
                                 focusNode: _documentFocus,
                                 scrollController: _documentScroll!,
+                                readingPositionIdentity: widget.block == null
+                                    ? null
+                                    : 'long:${jsonEncode([widget.topicId, widget.block!.blockId])}',
+                                readingPositionIsSaved: _readingPositionSaved,
+                                readingPositionCanStore: () =>
+                                    _readingPositionSaved,
                                 editable: _documentEditable,
                                 showHistoryActionsInToolbar: false,
                                 autoFocus:

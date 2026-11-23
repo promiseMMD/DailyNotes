@@ -5,11 +5,13 @@ import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
 import 'package:moodiary_files/moodiary_files.dart';
 import 'package:moodiary_logging/moodiary_logging.dart';
+import 'package:moodiary_storage/moodiary_storage.dart';
 import 'package:moodiary_theme/moodiary_theme.dart';
 import 'package:mui/mui.dart';
 
 import '../notes/rich_editor_toolbar.dart';
 import 'document_editor_back_controller.dart';
+import 'document_reading_position.dart';
 
 /// One mobile document surface for notes, diaries and long-record drafts.
 /// The owning page remains responsible for its own persistence lifecycle.
@@ -24,6 +26,9 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
     this.showHistoryActionsInToolbar = true,
     this.backController,
     this.header,
+    this.readingPositionIdentity,
+    this.readingPositionIsSaved = false,
+    this.readingPositionCanStore,
   });
 
   final af.EditorState editor;
@@ -35,6 +40,15 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
   final DocumentEditorBackController? backController;
   final Widget? header;
 
+  /// Stable business identity. The serialized reading position is local only.
+  final String? readingPositionIdentity;
+
+  /// The current document snapshot has been acknowledged by its owning page.
+  final bool readingPositionIsSaved;
+
+  /// Live check also covers the interval before the next widget rebuild.
+  final bool Function()? readingPositionCanStore;
+
   @override
   State<DailyNotesDocumentCanvas> createState() =>
       _DailyNotesDocumentCanvasState();
@@ -42,17 +56,65 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
 
 class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
   Future<({List<String> families, bool hasUnavailable})>? _loadingFonts;
+  DocumentReadingPosition? _readingPosition;
 
   @override
   void initState() {
     super.initState();
     _restoreDocumentFonts();
+    _startReadingPosition();
   }
 
   @override
   void didUpdateWidget(covariant DailyNotesDocumentCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.editor, widget.editor)) _restoreDocumentFonts();
+    if (!identical(oldWidget.editor, widget.editor) ||
+        !identical(oldWidget.scrollController, widget.scrollController) ||
+        oldWidget.readingPositionIdentity != widget.readingPositionIdentity) {
+      _readingPosition?.dispose();
+      _startReadingPosition();
+    } else if (!oldWidget.readingPositionIsSaved &&
+        widget.readingPositionIsSaved) {
+      _readingPosition?.retryPendingWrite();
+    }
+  }
+
+  void _startReadingPosition() {
+    final identity = widget.readingPositionIdentity;
+    final storage = getIt.maybeGet<IKVStorage>();
+    if (identity == null || storage == null || widget.header == null) {
+      _readingPosition = null;
+      return;
+    }
+    final editor = widget.editor;
+    _readingPosition = DocumentReadingPosition(
+      editor: editor,
+      scroll: widget.scrollController,
+      storage: storage,
+      identity: identity,
+      restoreOnOpen: !widget.autoFocus && !widget.editable,
+      canRestore: () =>
+          mounted &&
+          identical(widget.editor, editor) &&
+          widget.readingPositionIdentity == identity &&
+          !widget.editable &&
+          !editor.editable &&
+          !widget.focusNode.hasFocus &&
+          ModalRoute.of(context)?.isCurrent == true,
+      canStore: () =>
+          mounted &&
+          identical(widget.editor, editor) &&
+          widget.readingPositionIdentity == identity &&
+          (widget.readingPositionCanStore?.call() ??
+              widget.readingPositionIsSaved),
+    )..start();
+  }
+
+  @override
+  void dispose() {
+    _readingPosition?.dispose();
+    super.dispose();
   }
 
   Future<({List<String> families, bool hasUnavailable})> _loadFonts() =>
