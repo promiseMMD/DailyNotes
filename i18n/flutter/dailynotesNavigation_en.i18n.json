@@ -52,5 +52,12 @@
   "restore": "Restore",
   "diaryRecycle": "Diary recycle bin",
   "recycleScope": "The notes, tasks and knowledge topics below are retained until you act. This preview supports restore; permanent deletion and emptying are not available yet.",
-  "recycleEmpty": "No deleted notes, tasks or knowledge topics"
+  "recycleEmpty": "No deleted notes, tasks or knowledge topics",
+  "archiveDiary": "Diary",
+  "archiveNotes": "Notes",
+  "archiveLongRecords": "Long records",
+  "archiveUnavailable": "Archive for this record type is not available yet.",
+  "archiveNotesEmpty": "No archived notes here yet.",
+  "archiveLoadFailed": "Could not load archive status. Please try again.",
+  "archiveLocalOnly": "Note archive status is local only and is not yet included in backup or sync."
 }

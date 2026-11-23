@@ -52,5 +52,12 @@
   "restore": "恢复",
   "diaryRecycle": "日记回收站",
   "recycleScope": "下列笔记、待办和知识主题永久保留至主动处理。预览版提供恢复，暂不开放永久删除与清空。",
-  "recycleEmpty": "没有已删除的笔记、待办或知识主题"
+  "recycleEmpty": "没有已删除的笔记、待办或知识主题",
+  "archiveDiary": "日记",
+  "archiveNotes": "笔记",
+  "archiveLongRecords": "长期记录",
+  "archiveUnavailable": "此类记录的归档尚未开放。",
+  "archiveNotesEmpty": "这里还没有已归档的笔记。",
+  "archiveLoadFailed": "归档状态读取失败，请重试。",
+  "archiveLocalOnly": "笔记归档状态目前仅保存在本机，尚未纳入备份或同步。"
 }

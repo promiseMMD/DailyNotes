@@ -2045,6 +2045,24 @@ class Translations$dailynotes$zh {
 
 	/// zh: '文档操作'
 	String get documentActions => '文档操作';
+
+	/// zh: '归档'
+	String get archiveNote => '归档';
+
+	/// zh: '取消归档'
+	String get unarchiveNote => '取消归档';
+
+	/// zh: '已归档'
+	String get archiveSucceeded => '已归档';
+
+	/// zh: '已取消归档'
+	String get unarchiveSucceeded => '已取消归档';
+
+	/// zh: '归档失败，请重试'
+	String get archiveFailed => '归档失败，请重试';
+
+	/// zh: '取消归档失败，请重试'
+	String get unarchiveFailed => '取消归档失败，请重试';
 }
 
 // Path: dailynotesNavigation
@@ -2216,6 +2234,27 @@ class Translations$dailynotesNavigation$zh {
 
 	/// zh: '没有已删除的笔记、待办或知识主题'
 	String get recycleEmpty => '没有已删除的笔记、待办或知识主题';
+
+	/// zh: '日记'
+	String get archiveDiary => '日记';
+
+	/// zh: '笔记'
+	String get archiveNotes => '笔记';
+
+	/// zh: '长期记录'
+	String get archiveLongRecords => '长期记录';
+
+	/// zh: '此类记录的归档尚未开放。'
+	String get archiveUnavailable => '此类记录的归档尚未开放。';
+
+	/// zh: '这里还没有已归档的笔记。'
+	String get archiveNotesEmpty => '这里还没有已归档的笔记。';
+
+	/// zh: '归档状态读取失败，请重试。'
+	String get archiveLoadFailed => '归档状态读取失败，请重试。';
+
+	/// zh: '笔记归档状态目前仅保存在本机，尚未纳入备份或同步。'
+	String get archiveLocalOnly => '笔记归档状态目前仅保存在本机，尚未纳入备份或同步。';
 }
 
 // Path: diary

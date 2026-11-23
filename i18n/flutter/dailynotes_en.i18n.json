@@ -172,5 +172,11 @@
   "editorLinkInvalid": "Enter a valid web, email, or telephone link.",
   "editorLinkApplyFailed": "The link was not applied. Please try again.",
   "editorLinkRemove": "Remove link",
-  "documentActions": "Document actions"
+  "documentActions": "Document actions",
+  "archiveNote": "Archive",
+  "unarchiveNote": "Unarchive",
+  "archiveSucceeded": "Archived",
+  "unarchiveSucceeded": "Unarchived",
+  "archiveFailed": "Could not archive. Please try again.",
+  "unarchiveFailed": "Could not unarchive. Please try again."
 }

@@ -739,6 +739,12 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get editorLinkApplyFailed => 'The link was not applied. Please try again.';
 	@override String get editorLinkRemove => 'Remove link';
 	@override String get documentActions => 'Document actions';
+	@override String get archiveNote => 'Archive';
+	@override String get unarchiveNote => 'Unarchive';
+	@override String get archiveSucceeded => 'Archived';
+	@override String get unarchiveSucceeded => 'Unarchived';
+	@override String get archiveFailed => 'Could not archive. Please try again.';
+	@override String get unarchiveFailed => 'Could not unarchive. Please try again.';
 }
 
 // Path: dailynotesNavigation
@@ -802,6 +808,13 @@ class _Translations$dailynotesNavigation$en extends Translations$dailynotesNavig
 	@override String get diaryRecycle => 'Diary recycle bin';
 	@override String get recycleScope => 'The notes, tasks and knowledge topics below are retained until you act. This preview supports restore; permanent deletion and emptying are not available yet.';
 	@override String get recycleEmpty => 'No deleted notes, tasks or knowledge topics';
+	@override String get archiveDiary => 'Diary';
+	@override String get archiveNotes => 'Notes';
+	@override String get archiveLongRecords => 'Long records';
+	@override String get archiveUnavailable => 'Archive for this record type is not available yet.';
+	@override String get archiveNotesEmpty => 'No archived notes here yet.';
+	@override String get archiveLoadFailed => 'Could not load archive status. Please try again.';
+	@override String get archiveLocalOnly => 'Note archive status is local only and is not yet included in backup or sync.';
 }
 
 // Path: diary

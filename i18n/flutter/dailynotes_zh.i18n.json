@@ -172,5 +172,11 @@
   "editorLinkInvalid": "请输入有效的网址、邮箱或电话号码链接。",
   "editorLinkApplyFailed": "链接未应用，请重试。",
   "editorLinkRemove": "移除链接",
-  "documentActions": "文档操作"
+  "documentActions": "文档操作",
+  "archiveNote": "归档",
+  "unarchiveNote": "取消归档",
+  "archiveSucceeded": "已归档",
+  "unarchiveSucceeded": "已取消归档",
+  "archiveFailed": "归档失败，请重试",
+  "unarchiveFailed": "取消归档失败，请重试"
 }

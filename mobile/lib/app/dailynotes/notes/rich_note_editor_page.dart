@@ -36,7 +36,7 @@ class RichNoteEditorPage extends StatefulWidget {
   State<RichNoteEditorPage> createState() => _RichNoteEditorPageState();
 }
 
-enum _NoteDocumentAction { outline, folder, tags, delete }
+enum _NoteDocumentAction { outline, folder, tags, archive, unarchive, delete }
 
 class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     with WidgetsBindingObserver {
@@ -57,6 +57,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   late bool _editing;
   bool _exporting = false;
   bool _deleting = false;
+  bool _archiving = false;
 
   @override
   void initState() {
@@ -389,37 +390,58 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     final action = await showDialog<_NoteDocumentAction>(
       context: context,
       requestFocus: false,
-      builder: (dialog) => SimpleDialog(
-        title: Text(context.l10n.dailynotes.documentActions),
-        children: [
-          SimpleDialogOption(
-            key: const ValueKey('note-document-outline'),
-            onPressed: () => Navigator.pop(dialog, _NoteDocumentAction.outline),
-            child: Text(context.l10n.dailynotes.documentOutline),
-          ),
-          SimpleDialogOption(
-            key: const ValueKey('note-document-folder'),
-            onPressed: _editing
-                ? () => Navigator.pop(dialog, _NoteDocumentAction.folder)
-                : null,
-            child: Text(context.l10n.dailynotes.chooseFolder),
-          ),
-          SimpleDialogOption(
-            key: const ValueKey('note-document-tags'),
-            onPressed: _editing
-                ? () => Navigator.pop(dialog, _NoteDocumentAction.tags)
-                : null,
-            child: Text(context.l10n.dailynotes.noteTags),
-          ),
-          if (_id != null)
+      builder: (dialog) => ListenableBuilder(
+        listenable: widget.store,
+        builder: (dialog, _) => SimpleDialog(
+          title: Text(context.l10n.dailynotes.documentActions),
+          children: [
             SimpleDialogOption(
-              key: const ValueKey('note-document-delete'),
-              onPressed: _editing && editor.editable
-                  ? () => Navigator.pop(dialog, _NoteDocumentAction.delete)
-                  : null,
-              child: Text(context.l10n.dailynotes.delete),
+              key: const ValueKey('note-document-outline'),
+              onPressed: () =>
+                  Navigator.pop(dialog, _NoteDocumentAction.outline),
+              child: Text(context.l10n.dailynotes.documentOutline),
             ),
-        ],
+            SimpleDialogOption(
+              key: const ValueKey('note-document-folder'),
+              onPressed: _editing
+                  ? () => Navigator.pop(dialog, _NoteDocumentAction.folder)
+                  : null,
+              child: Text(context.l10n.dailynotes.chooseFolder),
+            ),
+            SimpleDialogOption(
+              key: const ValueKey('note-document-tags'),
+              onPressed: _editing
+                  ? () => Navigator.pop(dialog, _NoteDocumentAction.tags)
+                  : null,
+              child: Text(context.l10n.dailynotes.noteTags),
+            ),
+            if (_id != null)
+              SimpleDialogOption(
+                key: const ValueKey('note-document-archive'),
+                onPressed: _editing && editor.editable && !_archiving
+                    ? () => Navigator.pop(
+                        dialog,
+                        widget.store.isNoteArchived(_id!)
+                            ? _NoteDocumentAction.unarchive
+                            : _NoteDocumentAction.archive,
+                      )
+                    : null,
+                child: Text(
+                  widget.store.isNoteArchived(_id!)
+                      ? context.l10n.dailynotes.unarchiveNote
+                      : context.l10n.dailynotes.archiveNote,
+                ),
+              ),
+            if (_id != null)
+              SimpleDialogOption(
+                key: const ValueKey('note-document-delete'),
+                onPressed: _editing && editor.editable
+                    ? () => Navigator.pop(dialog, _NoteDocumentAction.delete)
+                    : null,
+                child: Text(context.l10n.dailynotes.delete),
+              ),
+          ],
+        ),
       ),
     );
     if (!mounted ||
@@ -438,8 +460,59 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         if (_editing && editor.editable) await _chooseFolder();
       case _NoteDocumentAction.tags:
         if (_editing && editor.editable) await _editTags();
+      case _NoteDocumentAction.archive:
+        await _setArchived(editor, archived: true);
+      case _NoteDocumentAction.unarchive:
+        await _setArchived(editor, archived: false);
       case _NoteDocumentAction.delete:
         if (_editing && editor.editable) await _delete();
+    }
+  }
+
+  Future<void> _setArchived(
+    EditorState editor, {
+    required bool archived,
+  }) async {
+    final id = _id;
+    if (_archiving ||
+        id == null ||
+        !_editing ||
+        !editor.editable ||
+        editor.isDisposed ||
+        _leaving ||
+        _allowPop ||
+        !identical(_editor, editor) ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    setState(() => _archiving = true);
+    try {
+      await widget.store.setNoteArchived(id, archived: archived);
+      if (mounted && !_leaving && ModalRoute.of(context)?.isCurrent == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              archived
+                  ? context.l10n.dailynotes.archiveSucceeded
+                  : context.l10n.dailynotes.unarchiveSucceeded,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted && !_leaving && ModalRoute.of(context)?.isCurrent == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              archived
+                  ? context.l10n.dailynotes.archiveFailed
+                  : context.l10n.dailynotes.unarchiveFailed,
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _archiving = false);
     }
   }
 

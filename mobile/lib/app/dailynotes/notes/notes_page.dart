@@ -227,7 +227,7 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
     final folders = widget.store.folders;
     final query = _noteSearchOpen ? _noteSearch.text.trim().toLowerCase() : '';
     final tagQuery = query.startsWith('#') ? query.substring(1).trim() : query;
-    final notes = widget.store.notes.where((n) {
+    final notes = widget.store.unarchivedNotes.where((n) {
       if (query.isEmpty) return _allNotes || n.folderId == _folderId;
       return n.title.toLowerCase().contains(query) ||
           n.body.toLowerCase().contains(query) ||
@@ -348,7 +348,7 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
         .toList();
     final notes = currentTopicId == null
         ? <DailyNote>[]
-        : widget.store.notesForTopic(currentTopicId!);
+        : widget.store.unarchivedNotesForTopic(currentTopicId!);
     return ListView(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -467,12 +467,12 @@ class DailyNotesNotesPageState extends State<DailyNotesNotesPage>
           title: Text(context.l10n.dailynotes.selectNotes),
           content: SizedBox(
             width: double.maxFinite,
-            child: widget.store.notes.isEmpty
+            child: widget.store.unarchivedNotes.isEmpty
                 ? Text(context.l10n.dailynotes.noneAvailable)
                 : ListView(
                     shrinkWrap: true,
                     children: [
-                      for (final n in widget.store.notes)
+                      for (final n in widget.store.unarchivedNotes)
                         CheckboxListTile(
                           title: Text(
                             n.title.trim().isEmpty

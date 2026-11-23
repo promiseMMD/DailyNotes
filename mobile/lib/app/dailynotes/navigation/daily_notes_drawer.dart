@@ -6,6 +6,7 @@ import 'package:moodiary_router/moodiary_router.dart';
 import 'package:mui/mui.dart';
 
 import '../data/daily_notes_store.dart';
+import 'daily_notes_archive_page.dart';
 import 'daily_notes_health_page.dart';
 import 'daily_notes_profile_page.dart';
 
@@ -149,7 +150,7 @@ class DailyNotesDrawer extends StatelessWidget {
                   item(
                     text.archive,
                     LucideIcons.archive,
-                    () => pending(text.archive),
+                    () => open(DailyNotesArchivePage(store: store)),
                   ),
                   item(
                     text.calendar,
