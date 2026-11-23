@@ -610,6 +610,10 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get saving => 'Saving…';
 	@override String get savedLocally => 'Saved locally';
 	@override String get saveFailed => 'Could not save. Please retry.';
+	@override String get noteRevisionConflict => 'This note changed elsewhere. Your current changes are not saved. Copy or export them before closing and reopening the note.';
+	@override String get noteDeleteConflict => 'This note changed elsewhere, so it was not deleted. Reopen it to review the changes.';
+	@override String get noteDeletedWithDraft => 'The note was moved to the trash, but edits made during deletion are not saved. Copy or export the current content first.';
+	@override String get noteMoveSaveConflict => 'The destination path changed and your current changes are not saved. Choose the destination again or copy your content.';
 	@override String get localOnly => 'Stored locally, not synced yet';
 	@override String get unsavedExitTitle => 'Unsaved changes';
 	@override String get unsavedExitHint => 'Local saving has not succeeded. Retry or copy your content and keep this page open to avoid losing it.';

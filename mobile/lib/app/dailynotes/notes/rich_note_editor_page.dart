@@ -50,10 +50,14 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   Timer? _timer;
   Future<void>? _pending;
   String? _id;
+  int? _storageRevision;
+  DailyFolderPathSnapshot? _pendingFolderMove;
   late String? _folderId;
   late List<String> _tags;
   int _revision = 0, _savedRevision = 0;
   bool _failed = false, _allowPop = false, _leaving = false;
+  bool _revisionConflict = false, _folderConflict = false;
+  bool _deletedWithDraft = false;
   late bool _editing;
   bool _exporting = false;
   bool _deleting = false;
@@ -64,7 +68,8 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _id = widget.note?.id;
-    _folderId = widget.note?.folderId ?? widget.folderId;
+    _storageRevision = widget.note?.storageRevision;
+    _folderId = widget.note == null ? widget.folderId : widget.note!.folderId;
     _tags = List.of(widget.note?.tags ?? const []);
     _editing = widget.note == null;
     _title = TextEditingController(text: widget.note?.title ?? '')
@@ -74,8 +79,9 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
           ((widget.note!.documentJson == null &&
                   widget.note!.documentVersion != null) ||
               (widget.note!.documentJson != null &&
-                  widget.note!.documentVersion != 1)))
+                  widget.note!.documentVersion != 1))) {
         throw StateError('unsupported');
+      }
       final json = widget.note?.documentJson;
       _editor = json == null
           ? widget.testEditor ??
@@ -133,6 +139,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     final revision = _revision;
     final title = _title.text;
     final folderId = _folderId;
+    final folderMove = _pendingFolderMove;
     final tags = List<String>.of(_tags);
     final done = Completer<void>();
     _pending = done.future;
@@ -146,6 +153,9 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         _savedRevision = revision;
         return;
       }
+      if (_id != null && _storageRevision == null) {
+        throw const DailyNoteRevisionConflict();
+      }
       final note = await widget.store.saveRichNote(
         id: _id,
         title: title,
@@ -154,13 +164,23 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         documentVersion: 1,
         folderId: folderId,
         tags: tags,
+        expectedRevision: _storageRevision,
+        expectedFolderPath: folderMove,
       );
       _id = note.id;
+      _storageRevision = note.storageRevision;
+      if (identical(_pendingFolderMove, folderMove)) _pendingFolderMove = null;
       _savedRevision = revision;
       succeeded = true;
-      if (_revision == revision) _failed = false;
-    } catch (_) {
+      if (_revision == revision) {
+        _failed = false;
+        _revisionConflict = false;
+        _folderConflict = false;
+      }
+    } catch (error) {
       _failed = true;
+      _revisionConflict = error is DailyNoteRevisionConflict;
+      _folderConflict = error is DailyFolderPathConflict;
     } finally {
       _pending = null;
       done.complete();
@@ -252,12 +272,13 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
           ),
         );
       } catch (_) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(context.l10n.dailynotes.emergencyExportFailed),
             ),
           );
+        }
       }
     } finally {
       _exporting = false;
@@ -296,18 +317,20 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                     }),
                   ),
                 );
-                if (mounted)
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(context.l10n.dailynotes.copied)),
                   );
+                }
               },
               child: Text(context.l10n.dailynotes.copyRichJson),
             ),
             TextButton(
               onPressed: () async {
                 await _save();
-                if (dialog.mounted && _revision == _savedRevision)
+                if (dialog.mounted && _revision == _savedRevision) {
                   Navigator.pop(dialog, false);
+                }
               },
               child: Text(context.l10n.dailynotes.retry),
             ),
@@ -338,8 +361,9 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                     ],
                   ),
                 );
-                if (confirmed == true && dialog.mounted)
+                if (confirmed == true && dialog.mounted) {
                   Navigator.pop(dialog, true);
+                }
               },
               child: Text(context.l10n.dailynotes.discardUnsavedAction),
             ),
@@ -516,32 +540,6 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     }
   }
 
-  ({String path, String fingerprint})? _folderPath(
-    String id, {
-    Map<String, DailyFolder>? foldersById,
-  }) {
-    final byId =
-        foldersById ??
-        {for (final folder in widget.store.folders) folder.id: folder};
-    final ancestors = <DailyFolder>[];
-    final seen = <String>{};
-    String? cursor = id;
-    while (cursor != null && seen.add(cursor)) {
-      final folder = byId[cursor];
-      if (folder == null) return null;
-      ancestors.add(folder);
-      cursor = folder.parentId;
-    }
-    if (cursor != null) return null;
-    final path = ancestors.reversed.toList();
-    return (
-      path: path.map((folder) => folder.name).join(' / '),
-      fingerprint: jsonEncode([
-        for (final folder in path) [folder.id, folder.name, folder.parentId],
-      ]),
-    );
-  }
-
   void _folderDestinationChanged({bool readFailed = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -561,11 +559,29 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     if (editor == null || editor.isDisposed || !_editing || !editor.editable) {
       return;
     }
+    try {
+      // Build the picker from committed state as another window may have
+      // changed the tree since the last selection or failed save.
+      await widget.store.refresh();
+    } catch (_) {
+      _folderDestinationChanged(readFailed: true);
+      return;
+    }
+    if (!mounted ||
+        !_editing ||
+        editor.isDisposed ||
+        !editor.editable ||
+        !identical(_editor, editor) ||
+        _folderId != initialFolder ||
+        _leaving ||
+        _allowPop ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
     final folders = widget.store.folders;
-    final byId = {for (final folder in folders) folder.id: folder};
     final choices = [
       for (final folder in folders)
-        (folder: folder, path: _folderPath(folder.id, foldersById: byId)),
+        (folder: folder, path: widget.store.folderPathSnapshot(folder.id)),
     ];
     final result = await showDialog<String>(
       context: context,
@@ -587,9 +603,14 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         ],
       ),
     );
-    if (result == null || !mounted || result == (_folderId ?? '')) return;
-    final destination = result.isEmpty ? null : _folderPath(result);
-    if (result.isNotEmpty && destination == null) {
+    if (result == null ||
+        !mounted ||
+        (result == (_folderId ?? '') && _pendingFolderMove == null)) {
+      return;
+    }
+    final targetId = result.isEmpty ? null : result;
+    final destination = widget.store.folderPathSnapshot(targetId);
+    if (destination == null) {
       _folderDestinationChanged();
       return;
     }
@@ -599,7 +620,9 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         title: Text(context.l10n.dailynotes.moveNote),
         content: Text(
           context.l10n.dailynotes.moveConfirmTarget(
-            target: destination?.path ?? context.l10n.dailynotes.uncategorized,
+            target: targetId == null
+                ? context.l10n.dailynotes.uncategorized
+                : destination.path,
           ),
         ),
         actions: [
@@ -646,12 +669,12 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
       return;
     }
     if (_folderId != initialFolder ||
-        (result.isNotEmpty &&
-            _folderPath(result)?.fingerprint != destination?.fingerprint)) {
+        !destination.matches(widget.store.folderPathSnapshot(targetId))) {
       _folderDestinationChanged();
       return;
     }
-    _folderId = result.isEmpty ? null : result;
+    _folderId = targetId;
+    _pendingFolderMove = destination;
     _changed();
   }
 
@@ -738,17 +761,33 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         return;
       }
       try {
-        await widget.store.deleteNote(id!);
+        final storageRevision = _storageRevision;
+        if (storageRevision == null) throw const DailyNoteRevisionConflict();
+        await widget.store.deleteNote(id!, expectedRevision: storageRevision);
         if (!mounted) return;
+        if (_revision != _savedRevision) {
+          setState(() {
+            _failed = true;
+            _deletedWithDraft = true;
+          });
+          return;
+        }
         setState(() => _allowPop = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) Navigator.pop(context);
         });
-      } catch (_) {
-        if (mounted)
+      } catch (error) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.dailynotes.saveFailed)),
+            SnackBar(
+              content: Text(
+                error is DailyNoteRevisionConflict
+                    ? context.l10n.dailynotes.noteDeleteConflict
+                    : context.l10n.dailynotes.saveFailed,
+              ),
+            ),
           );
+        }
       }
     } finally {
       _deleting = false;
@@ -807,7 +846,13 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     final t = context.l10n.dailynotes;
     final editor = _editor;
     final status = _failed
-        ? t.saveFailed
+        ? (_deletedWithDraft
+              ? t.noteDeletedWithDraft
+              : _revisionConflict
+              ? t.noteRevisionConflict
+              : _folderConflict
+              ? t.noteMoveSaveConflict
+              : t.saveFailed)
         : _pending != null
         ? t.saving
         : _revision != _savedRevision
@@ -942,7 +987,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                         padding: const EdgeInsets.all(8),
                         child: Row(
                           children: [
-                            Expanded(child: Text(t.saveFailed)),
+                            Expanded(child: Text(status)),
                             TextButton(onPressed: _save, child: Text(t.retry)),
                           ],
                         ),

@@ -18,6 +18,9 @@ class DailyNote {
   final String? folderId;
   final String? documentJson;
   final int? documentVersion;
+
+  /// Database revision of this exact snapshot; never included in the payload.
+  final int? storageRevision;
   final List<String> tags;
   final DateTime createdAt, updatedAt;
   final DateTime? deletedAt;
@@ -29,19 +32,24 @@ class DailyNote {
     this.folderId,
     this.documentJson,
     this.documentVersion,
+    this.storageRevision,
     List<String> tags = const [],
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
   }) : tags = List.unmodifiable(tags);
 
-  factory DailyNote.fromJson(Map<String, dynamic> value) => DailyNote(
+  factory DailyNote.fromJson(
+    Map<String, dynamic> value, {
+    int? storageRevision,
+  }) => DailyNote(
     id: value['id'] as String,
     title: value['title'] as String,
     body: value['body'] as String,
     folderId: value['folderId'] as String?,
     documentJson: value['documentJson'] as String?,
     documentVersion: value['documentVersion'] as int?,
+    storageRevision: storageRevision,
     tags: (value['tags'] as List<dynamic>).cast<String>(),
     createdAt: _date(value, 'createdAt'),
     updatedAt: _date(value, 'updatedAt'),
@@ -60,6 +68,30 @@ class DailyNote {
     'updatedAt': updatedAt.toIso8601String(),
     'deletedAt': deletedAt?.toIso8601String(),
   };
+}
+
+/// The note changed after this editor obtained its snapshot.
+class DailyNoteRevisionConflict implements Exception {
+  const DailyNoteRevisionConflict();
+}
+
+/// A confirmed destination was changed before the note could be committed.
+class DailyFolderPathConflict implements Exception {
+  const DailyFolderPathConflict();
+}
+
+@immutable
+class DailyFolderPathSnapshot {
+  final String? folderId;
+  final String path;
+  final String _fingerprint;
+
+  const DailyFolderPathSnapshot._(this.folderId, this.path, this._fingerprint);
+
+  bool matches(DailyFolderPathSnapshot? other) =>
+      other != null &&
+      folderId == other.folderId &&
+      _fingerprint == other._fingerprint;
 }
 
 @immutable
@@ -297,7 +329,7 @@ class DailyNotesStore extends ChangeNotifier {
               (archived == null ||
                   _state.archivedNoteIds.contains(r.value['id']) == archived),
         )
-        .map((r) => DailyNote.fromJson(r.value))
+        .map((r) => DailyNote.fromJson(r.value, storageRevision: r.revision))
         .toList();
     result.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return List.unmodifiable(result);
@@ -671,8 +703,9 @@ class DailyNotesStore extends ChangeNotifier {
     String? folderId,
     List<String> tags = const [],
   }) => _commit((state, now) {
-    if (title.trim().isEmpty && body.trim().isEmpty)
+    if (title.trim().isEmpty && body.trim().isEmpty) {
       throw StateError('empty_note');
+    }
     if (folderId != null) state.require(folderId, 'folder');
     final old = id == null ? null : state.require(id, 'note');
     if (old != null && old['documentJson'] != null) {
@@ -692,8 +725,48 @@ class DailyNotesStore extends ChangeNotifier {
       updatedAt: now,
     );
     state.put('note', note.toJson());
-    return note;
+    return DailyNote.fromJson(
+      note.toJson(),
+      storageRevision: state.records[note.id]!.revision,
+    );
   });
+
+  /// Captures the destination and every ancestor at their current revisions.
+  /// A null id denotes the stable, uncategorized destination.
+  DailyFolderPathSnapshot? folderPathSnapshot(String? id) =>
+      _folderPathSnapshot(_state, id);
+
+  DailyFolderPathSnapshot? _folderPathSnapshot(_State state, String? id) {
+    if (id == null) return const DailyFolderPathSnapshot._(null, '', '[]');
+    final ancestors = <_Stored>[];
+    final seen = <String>{};
+    String? cursor = id;
+    while (cursor != null && seen.add(cursor)) {
+      final row = state.records[cursor];
+      if (row == null ||
+          row.kind != 'folder' ||
+          row.value['deletedAt'] != null) {
+        return null;
+      }
+      ancestors.add(row);
+      cursor = row.value['parentId'] as String?;
+    }
+    if (cursor != null) return null;
+    final path = ancestors.reversed.toList();
+    return DailyFolderPathSnapshot._(
+      id,
+      path.map((row) => row.value['name'] as String).join(' / '),
+      jsonEncode([
+        for (final row in path)
+          [
+            row.value['id'],
+            row.revision,
+            row.value['name'],
+            row.value['parentId'],
+          ],
+      ]),
+    );
+  }
 
   /// Stores the versioned AppFlowy document and its derived text together
   /// with the local revision and outbox event. Unknown versions fail closed.
@@ -705,13 +778,29 @@ class DailyNotesStore extends ChangeNotifier {
     required int documentVersion,
     String? folderId,
     List<String> tags = const [],
+    int? expectedRevision,
+    DailyFolderPathSnapshot? expectedFolderPath,
   }) => _commit((state, now) {
     if (documentVersion != 1) throw StateError('unsupported_document_version');
     validateRichDocument(documentJson);
     if (title.trim().isEmpty && plainText.trim().isEmpty) {
       throw StateError('empty_note');
     }
+    if (expectedFolderPath != null &&
+        (expectedFolderPath.folderId != folderId ||
+            !expectedFolderPath.matches(
+              _folderPathSnapshot(state, folderId),
+            ))) {
+      throw const DailyFolderPathConflict();
+    }
     if (folderId != null) state.require(folderId, 'folder');
+    if (id != null &&
+        expectedRevision != null &&
+        (state.records[id]?.kind != 'note' ||
+            state.records[id]?.value['deletedAt'] != null ||
+            state.records[id]?.revision != expectedRevision)) {
+      throw const DailyNoteRevisionConflict();
+    }
     final old = id == null ? null : state.require(id, 'note');
     if (old != null && old['documentJson'] != null) {
       if (old['documentVersion'] != 1) {
@@ -735,7 +824,10 @@ class DailyNotesStore extends ChangeNotifier {
       updatedAt: now,
     );
     state.put('note', note.toJson());
-    return note;
+    return DailyNote.fromJson(
+      note.toJson(),
+      storageRevision: state.records[note.id]!.revision,
+    );
   });
 
   Future<DailyFolder> createFolder(String name, {String? parentId}) =>
@@ -974,26 +1066,35 @@ class DailyNotesStore extends ChangeNotifier {
     state.put('task', value);
   });
 
-  Future<void> deleteNote(String id) => _trash(id, 'note');
+  Future<void> deleteNote(String id, {int? expectedRevision}) =>
+      _trash(id, 'note', expectedRevision: expectedRevision);
   Future<void> deleteTask(String id) => _trash(id, 'task');
   Future<void> restoreNote(String id) => _restore(id, 'note');
   Future<void> restoreTask(String id) => _restore(id, 'task');
 
-  Future<void> _trash(String id, String kind) => _commit((state, now) {
-    final value = {...state.require(id, kind, deleted: true)};
-    if (value['deletedAt'] != null) return;
-    value['deletedAt'] = now.toIso8601String();
-    value['updatedAt'] = now.toIso8601String();
-    state.put(kind, value);
-  });
+  Future<void> _trash(String id, String kind, {int? expectedRevision}) =>
+      _commit((state, now) {
+        if (expectedRevision != null &&
+            (state.records[id]?.kind != kind ||
+                state.records[id]?.value['deletedAt'] != null ||
+                state.records[id]?.revision != expectedRevision)) {
+          throw const DailyNoteRevisionConflict();
+        }
+        final value = {...state.require(id, kind, deleted: true)};
+        if (value['deletedAt'] != null) return;
+        value['deletedAt'] = now.toIso8601String();
+        value['updatedAt'] = now.toIso8601String();
+        state.put(kind, value);
+      });
 
   Future<void> _restore(String id, String kind) => _commit((state, now) {
     final value = {...state.require(id, kind, deleted: true)};
     if (value['deletedAt'] == null) return;
     if (kind == 'note' && value['folderId'] != null) {
       final folder = state.records[value['folderId']];
-      if (folder == null || folder.value['deletedAt'] != null)
+      if (folder == null || folder.value['deletedAt'] != null) {
         value['folderId'] = null;
+      }
     }
     value['deletedAt'] = null;
     value['updatedAt'] = now.toIso8601String();
@@ -1012,8 +1113,9 @@ class DailyNotesStore extends ChangeNotifier {
               if (entry.value.kind == 'topic' &&
                   entry.value.value['deletedAt'] == null &&
                   ids.contains(entry.value.value['parentId']) &&
-                  ids.add(entry.key))
+                  ids.add(entry.key)) {
                 changed = true;
+              }
             }
           }
         } else {
@@ -1056,8 +1158,9 @@ class DailyNotesStore extends ChangeNotifier {
             value['deletedAt'] != null &&
             value['deletionGroup'] == group &&
             restoreIds.contains(value['parentId']) &&
-            restoreIds.add(entry.key))
+            restoreIds.add(entry.key)) {
           changed = true;
+        }
       }
     }
     for (final child in restoreIds) {
@@ -1066,8 +1169,9 @@ class DailyNotesStore extends ChangeNotifier {
       if (parent != null &&
           !restoreIds.contains(parent) &&
           (state.records[parent] == null ||
-              state.records[parent]!.value['deletedAt'] != null))
+              state.records[parent]!.value['deletedAt'] != null)) {
         value['parentId'] = null;
+      }
       value['deletedAt'] = null;
       value['deletionGroup'] = null;
       value['updatedAt'] = now.toIso8601String();

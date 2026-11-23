@@ -1659,6 +1659,18 @@ class Translations$dailynotes$zh {
 	/// zh: '保存失败，请重试'
 	String get saveFailed => '保存失败，请重试';
 
+	/// zh: '笔记已在其他位置修改，当前内容未保存。请先复制或导出，再关闭并重新打开。'
+	String get noteRevisionConflict => '笔记已在其他位置修改，当前内容未保存。请先复制或导出，再关闭并重新打开。';
+
+	/// zh: '笔记已在其他位置修改，删除已取消。请重新打开并核对。'
+	String get noteDeleteConflict => '笔记已在其他位置修改，删除已取消。请重新打开并核对。';
+
+	/// zh: '笔记已移至回收站，删除期间的修改尚未保存。请先复制或导出当前内容。'
+	String get noteDeletedWithDraft => '笔记已移至回收站，删除期间的修改尚未保存。请先复制或导出当前内容。';
+
+	/// zh: '目标文件夹路径已变化，当前内容未保存。请重新选择目标或复制内容。'
+	String get noteMoveSaveConflict => '目标文件夹路径已变化，当前内容未保存。请重新选择目标或复制内容。';
+
 	/// zh: '本机保存，尚未同步'
 	String get localOnly => '本机保存，尚未同步';
 
