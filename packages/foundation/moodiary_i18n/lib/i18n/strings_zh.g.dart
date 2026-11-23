@@ -1953,6 +1953,15 @@ class Translations$dailynotes$zh {
 	/// zh: '搜索标题'
 	String get searchOutline => '搜索标题';
 
+	/// zh: '清除标题搜索'
+	String get clearOutlineSearch => '清除标题搜索';
+
+	/// zh: '返回上次阅读位置'
+	String get outlinePreviousPosition => '返回上次阅读位置';
+
+	/// zh: '上次阅读位置已变化或无法定位，请重新选择。'
+	String get outlinePreviousUnavailable => '上次阅读位置已变化或无法定位，请重新选择。';
+
 	/// zh: '文档中还没有标题'
 	String get outlineEmpty => '文档中还没有标题';
 

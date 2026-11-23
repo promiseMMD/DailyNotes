@@ -388,6 +388,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
 
   @override
   void dispose() {
+    _outlineNavigation.dispose();
     _draftTimer?.cancel();
     _documentChanges?.cancel();
     _documentScroll?.dispose();
@@ -642,10 +643,11 @@ class _ModMonthComposerState extends State<ModMonthComposer>
         ModalRoute.of(context)?.isCurrent != true) {
       return;
     }
-    final target = await showDocumentOutline(
+    final result = await showDocumentOutline(
       context: context,
       editor: editor,
       editorFocus: _documentFocus,
+      canReturn: _outlineNavigation.hasPrevious(editor),
       isCurrent: () =>
           mounted &&
           !_busy &&
@@ -654,7 +656,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
           identical(_documentEditor, editor) &&
           ModalRoute.of(context)?.isCurrent == true,
     );
-    if (target != null &&
+    if (result != null &&
         mounted &&
         !_busy &&
         !_leaving &&
@@ -662,30 +664,43 @@ class _ModMonthComposerState extends State<ModMonthComposer>
         !editor.isDisposed &&
         identical(_documentEditor, editor) &&
         ModalRoute.of(context)?.isCurrent == true) {
-      await _jumpToOutline(target);
+      await _navigateOutline(result.previous ? null : result.target);
     }
   }
 
-  Future<void> _jumpToOutline(af.Node target) async {
+  Future<void> _navigateOutline(af.Node? target) async {
     final editor = _documentEditor;
     final scroll = _documentScroll;
     if (editor == null || scroll == null) return;
-    final reached = await _outlineNavigation.jump(
-      target: target,
-      editor: editor,
-      scroll: scroll,
-      isCurrent: () =>
-          mounted &&
-          !_busy &&
-          !_leaving &&
-          !_allowExit &&
-          ModalRoute.of(context)?.isCurrent == true &&
-          identical(_documentEditor, editor) &&
-          identical(_documentScroll, scroll),
-    );
+    bool isCurrent() =>
+        mounted &&
+        !_busy &&
+        !_leaving &&
+        !_allowExit &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        identical(_documentEditor, editor) &&
+        identical(_documentScroll, scroll);
+    final reached = target == null
+        ? await _outlineNavigation.returnToPrevious(
+            editor: editor,
+            scroll: scroll,
+            isCurrent: isCurrent,
+          )
+        : await _outlineNavigation.jump(
+            target: target,
+            editor: editor,
+            scroll: scroll,
+            isCurrent: isCurrent,
+          );
     if (reached == false && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.dailynotes.outlineUnavailable)),
+        SnackBar(
+          content: Text(
+            target == null
+                ? context.l10n.dailynotes.outlinePreviousUnavailable
+                : context.l10n.dailynotes.outlineUnavailable,
+          ),
+        ),
       );
     }
   }

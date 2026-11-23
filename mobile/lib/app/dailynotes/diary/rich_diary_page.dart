@@ -310,10 +310,11 @@ class _RichDiaryPageState extends State<RichDiaryPage>
         ModalRoute.of(context)?.isCurrent != true) {
       return;
     }
-    final target = await showDocumentOutline(
+    final result = await showDocumentOutline(
       context: context,
       editor: editor,
       editorFocus: _focus,
+      canReturn: _outlineNavigation.hasPrevious(editor),
       isCurrent: () =>
           mounted &&
           !_leaving &&
@@ -321,14 +322,14 @@ class _RichDiaryPageState extends State<RichDiaryPage>
           identical(_editor, editor) &&
           ModalRoute.of(context)?.isCurrent == true,
     );
-    if (target != null &&
+    if (result != null &&
         mounted &&
         !_leaving &&
         !_allowPop &&
         !editor.isDisposed &&
         identical(_editor, editor) &&
         ModalRoute.of(context)?.isCurrent == true) {
-      await _jumpToOutline(target);
+      await _navigateOutline(result.previous ? null : result.target);
     }
   }
 
@@ -350,25 +351,38 @@ class _RichDiaryPageState extends State<RichDiaryPage>
     if (openOutline == true) await _openOutline(editor);
   }
 
-  Future<void> _jumpToOutline(af.Node target) async {
+  Future<void> _navigateOutline(af.Node? target) async {
     final editor = _editor;
     final scroll = _scroll;
     if (editor == null || scroll == null) return;
-    final reached = await _outlineNavigation.jump(
-      target: target,
-      editor: editor,
-      scroll: scroll,
-      isCurrent: () =>
-          mounted &&
-          !_leaving &&
-          !_allowPop &&
-          ModalRoute.of(context)?.isCurrent == true &&
-          identical(_editor, editor) &&
-          identical(_scroll, scroll),
-    );
+    bool isCurrent() =>
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        identical(_editor, editor) &&
+        identical(_scroll, scroll);
+    final reached = target == null
+        ? await _outlineNavigation.returnToPrevious(
+            editor: editor,
+            scroll: scroll,
+            isCurrent: isCurrent,
+          )
+        : await _outlineNavigation.jump(
+            target: target,
+            editor: editor,
+            scroll: scroll,
+            isCurrent: isCurrent,
+          );
     if (reached == false && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.dailynotes.outlineUnavailable)),
+        SnackBar(
+          content: Text(
+            target == null
+                ? context.l10n.dailynotes.outlinePreviousUnavailable
+                : context.l10n.dailynotes.outlineUnavailable,
+          ),
+        ),
       );
     }
   }
@@ -386,6 +400,7 @@ class _RichDiaryPageState extends State<RichDiaryPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _outlineNavigation.dispose();
     _timer?.cancel();
     _changes?.cancel();
     _title.dispose();

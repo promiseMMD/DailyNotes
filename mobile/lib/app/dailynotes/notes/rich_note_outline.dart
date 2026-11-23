@@ -4,17 +4,26 @@ import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
 
+class DocumentOutlineResult {
+  const DocumentOutlineResult.target(Node this.target) : previous = false;
+  const DocumentOutlineResult.previous() : target = null, previous = true;
+
+  final Node? target;
+  final bool previous;
+}
+
 /// Presents the outline on the right without taking focus from the document.
 /// Search may request focus when the user explicitly taps the search field.
-Future<Node?> showDocumentOutline({
+Future<DocumentOutlineResult?> showDocumentOutline({
   required BuildContext context,
   required EditorState editor,
   required FocusNode editorFocus,
   required bool Function() isCurrent,
+  bool canReturn = false,
 }) async {
   final searchFocus = FocusNode(debugLabel: 'document-outline-search');
   final guard = _OutlineSelectionGuard(editor, editorFocus, searchFocus);
-  final route = RawDialogRoute<Node>(
+  final route = RawDialogRoute<DocumentOutlineResult>(
     requestFocus: false,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
@@ -25,7 +34,13 @@ Future<Node?> showDocumentOutline({
       child: RichNoteOutline(
         editor: editor,
         searchFocusNode: searchFocus,
-        onSelect: (node) => Navigator.of(dialog).pop(node),
+        onSelect: (node) =>
+            Navigator.of(dialog).pop(DocumentOutlineResult.target(node)),
+        onPrevious: canReturn
+            ? () =>
+                  Navigator.of(dialog)
+                      .pop(const DocumentOutlineResult.previous())
+            : null,
       ),
     ),
     transitionBuilder: (context, animation, secondaryAnimation, child) =>
@@ -161,11 +176,13 @@ class RichNoteOutline extends StatefulWidget {
     required this.editor,
     required this.onSelect,
     this.searchFocusNode,
+    this.onPrevious,
   });
 
   final EditorState editor;
   final ValueChanged<Node> onSelect;
   final FocusNode? searchFocusNode;
+  final VoidCallback? onPrevious;
 
   @override
   State<RichNoteOutline> createState() => _RichNoteOutlineState();
@@ -174,6 +191,7 @@ class RichNoteOutline extends StatefulWidget {
 class _RichNoteOutlineState extends State<RichNoteOutline> {
   late StreamSubscription<dynamic> _changes;
   String _query = '';
+  final _search = TextEditingController();
   final Set<String> _collapsed = {};
 
   @override
@@ -204,6 +222,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
     if (!identical(oldWidget.editor, widget.editor)) {
       unawaited(_changes.cancel());
       _query = '';
+      _search.clear();
       _collapsed.clear();
       _listen(widget.editor);
     }
@@ -212,6 +231,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   @override
   void dispose() {
     _changes.cancel();
+    _search.dispose();
     super.dispose();
   }
 
@@ -263,21 +283,45 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
           children: [
             ListTile(
               title: Text(t.documentOutline),
-              trailing: IconButton(
-                tooltip: context.l10n.common.close,
-                icon: const Icon(LucideIcons.x),
-                onPressed: () => Navigator.of(context).pop(),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.onPrevious != null)
+                    IconButton(
+                      key: const ValueKey('outline-return-previous'),
+                      tooltip: t.outlinePreviousPosition,
+                      icon: const Icon(LucideIcons.undo2),
+                      onPressed: widget.onPrevious,
+                    ),
+                  IconButton(
+                    tooltip: context.l10n.common.close,
+                    icon: const Icon(LucideIcons.x),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
               ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
                 key: ObjectKey(widget.editor),
+                controller: _search,
                 focusNode: widget.searchFocusNode,
                 onChanged: (value) => setState(() => _query = value),
                 decoration: InputDecoration(
                   labelText: t.searchOutline,
                   prefixIcon: const Icon(LucideIcons.search),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          key: const ValueKey('outline-clear-search'),
+                          tooltip: t.clearOutlineSearch,
+                          icon: const Icon(LucideIcons.x),
+                          onPressed: () => setState(() {
+                            _search.clear();
+                            _query = '';
+                          }),
+                        ),
                 ),
               ),
             ),

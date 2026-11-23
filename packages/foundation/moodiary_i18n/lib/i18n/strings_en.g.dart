@@ -708,6 +708,9 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get folderChangedRetry => 'The folder contents changed. Review the impact and confirm again.';
 	@override String get documentOutline => 'Document outline';
 	@override String get searchOutline => 'Search headings';
+	@override String get clearOutlineSearch => 'Clear heading search';
+	@override String get outlinePreviousPosition => 'Return to previous reading position';
+	@override String get outlinePreviousUnavailable => 'The previous reading position changed or cannot be located. Choose a position again.';
 	@override String get outlineEmpty => 'No headings in this document';
 	@override String get outlineNoMatch => 'No matching headings';
 	@override String get outlineExpand => 'Expand heading';

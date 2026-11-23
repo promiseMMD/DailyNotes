@@ -318,10 +318,11 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         ModalRoute.of(context)?.isCurrent != true) {
       return;
     }
-    final target = await showDocumentOutline(
+    final result = await showDocumentOutline(
       context: context,
       editor: editor,
       editorFocus: _editorFocus,
+      canReturn: _outlineNavigation.hasPrevious(editor),
       isCurrent: () =>
           mounted &&
           !_leaving &&
@@ -329,14 +330,14 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
           identical(_editor, editor) &&
           ModalRoute.of(context)?.isCurrent == true,
     );
-    if (target != null &&
+    if (result != null &&
         mounted &&
         !_leaving &&
         !_allowPop &&
         !editor.isDisposed &&
         identical(_editor, editor) &&
         ModalRoute.of(context)?.isCurrent == true) {
-      await _jumpToOutline(target);
+      await _navigateOutline(result.previous ? null : result.target);
     }
   }
 
@@ -736,6 +737,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _outlineNavigation.dispose();
     _timer?.cancel();
     _changes?.cancel();
     _title.dispose();
@@ -745,29 +747,42 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     super.dispose();
   }
 
-  Future<void> _jumpToOutline(Node target) async {
+  Future<void> _navigateOutline(Node? target) async {
     final editor = _editor;
     final scroll = _scrollController;
     if (editor == null || scroll == null) return;
-    final reached = await _outlineNavigation.jump(
-      target: target,
-      editor: editor,
-      scroll: scroll,
-      isCurrent: () =>
-          mounted &&
-          !_leaving &&
-          !_allowPop &&
-          ModalRoute.of(context)?.isCurrent == true &&
-          identical(_editor, editor) &&
-          identical(_scrollController, scroll),
-    );
-    if (reached == false) _outlineUnavailable();
+    bool isCurrent() =>
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        identical(_editor, editor) &&
+        identical(_scrollController, scroll);
+    final reached = target == null
+        ? await _outlineNavigation.returnToPrevious(
+            editor: editor,
+            scroll: scroll,
+            isCurrent: isCurrent,
+          )
+        : await _outlineNavigation.jump(
+            target: target,
+            editor: editor,
+            scroll: scroll,
+            isCurrent: isCurrent,
+          );
+    if (reached == false) _outlineUnavailable(previous: target == null);
   }
 
-  void _outlineUnavailable() {
+  void _outlineUnavailable({bool previous = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.l10n.dailynotes.outlineUnavailable)),
+      SnackBar(
+        content: Text(
+          previous
+              ? context.l10n.dailynotes.outlinePreviousUnavailable
+              : context.l10n.dailynotes.outlineUnavailable,
+        ),
+      ),
     );
   }
 

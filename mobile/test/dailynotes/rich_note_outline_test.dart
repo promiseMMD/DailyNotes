@@ -1,3 +1,6 @@
+// The tested app still uses this bridge for its current Material migration.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -133,8 +136,13 @@ void main() {
     expect(find.byKey(ValueKey('outline-${nested.id}')), findsOneWidget);
     expect(find.byKey(ValueKey('outline-${sibling.id}')), findsNothing);
     expect(find.byKey(ValueKey('outline-${next.id}')), findsNothing);
-    await tester.enterText(find.byType(TextField), '');
+    expect(find.byKey(const ValueKey('outline-clear-search')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('outline-clear-search')));
     await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '',
+    );
     expect(find.byKey(ValueKey('outline-${child.id}')), findsNothing);
 
     await tester.tap(find.byKey(ValueKey('outline-toggle-${parent.id}')));
@@ -195,6 +203,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(RichNoteOutline), findsOneWidget);
     expect(find.text('Title'), findsWidgets);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(RichNoteOutline),
+        matching: find.text('Title'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('note-document-outline-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('outline-return-previous')),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byType(TextField).last, 'Title');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('outline-clear-search')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(RichNoteOutline), findsNothing);

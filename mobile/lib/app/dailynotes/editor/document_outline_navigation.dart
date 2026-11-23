@@ -1,10 +1,71 @@
 import 'package:appflowy_editor/appflowy_editor.dart' as af;
 import 'package:mui/mui.dart';
 
+class _ReadingAnchor {
+  const _ReadingAnchor(this.editor, this.node, this.alignment);
+
+  final af.EditorState editor;
+  // Null represents the shared document header at item zero.
+  final af.Node? node;
+  final double alignment;
+}
+
 /// Navigates live document nodes without replacing the editor or its selection.
 /// A new request invalidates any earlier jump that is still waiting on a frame.
 class DocumentOutlineNavigation {
   int _generation = 0;
+  bool _disposed = false;
+  _ReadingAnchor? _previous;
+
+  /// A temporary point from this editor session, not a persistent bookmark.
+  bool hasPrevious(af.EditorState editor) =>
+      !_disposed && identical(_previous?.editor, editor);
+
+  void dispose() {
+    _disposed = true;
+    _generation++;
+    _previous = null;
+  }
+
+  _ReadingAnchor? _capture(
+    af.EditorState editor,
+    af.EditorScrollController scroll,
+  ) {
+    final positions =
+        scroll.itemPositionsListener.itemPositions.value
+            .where(
+              (item) =>
+                  item.itemLeadingEdge >= 0 &&
+                  item.itemLeadingEdge < 1 &&
+                  item.itemTrailingEdge > 0 &&
+                  item.index >= 0 &&
+                  item.index <= editor.document.root.children.length,
+            )
+            .toList()
+          ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
+    if (positions.isEmpty) return null;
+    final first = positions.first;
+    final node = first.index == 0
+        ? null
+        : editor.document.root.children[first.index - 1];
+    return _ReadingAnchor(editor, node, first.itemLeadingEdge);
+  }
+
+  int? _anchorIndex(_ReadingAnchor anchor, af.EditorState editor) {
+    if (!identical(anchor.editor, editor) || editor.isDisposed) return null;
+    final node = anchor.node;
+    if (node == null) return 0;
+    try {
+      final path = node.path;
+      if (path.length != 1 ||
+          !identical(editor.document.nodeAtPath(path), node)) {
+        return null;
+      }
+      return path.first + 1;
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Returns null if the owning page is no longer current, false if the
   /// requested node cannot be reached, and true when scrolling was requested.
@@ -16,30 +77,88 @@ class DocumentOutlineNavigation {
   }) async {
     final generation = ++_generation;
     bool current() =>
-        generation == _generation && !editor.isDisposed && isCurrent();
+        !_disposed &&
+        generation == _generation &&
+        !editor.isDisposed &&
+        isCurrent();
     bool targetIsCurrent() {
-      final path = target.path;
-      return path.isNotEmpty &&
-          identical(editor.document.nodeAtPath(path), target);
+      try {
+        final path = target.path;
+        return path.isNotEmpty &&
+            identical(editor.document.nodeAtPath(path), target);
+      } catch (_) {
+        return false;
+      }
     }
 
     await WidgetsBinding.instance.endOfFrame;
     if (!current()) return null;
-    if (!targetIsCurrent() || !scroll.itemScrollController.isAttached) {
+    if (!targetIsCurrent() ||
+        scroll.shrinkWrap ||
+        !scroll.itemScrollController.isAttached) {
       return false;
     }
-    // The document header is item zero; root document blocks start at one.
-    scroll.itemScrollController.jumpTo(index: target.path.first + 1);
-    await WidgetsBinding.instance.endOfFrame;
+    final previous = _capture(editor, scroll);
+    var targetContext = target.key.currentContext;
+    if (targetContext == null || !targetContext.mounted) {
+      // The document header is item zero; root document blocks start at one.
+      scroll.itemScrollController.jumpTo(index: target.path.first + 1);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!current()) return null;
+      if (!targetIsCurrent()) return false;
+      targetContext = target.key.currentContext;
+    }
+    if (targetContext == null || !targetContext.mounted) return false;
+    try {
+      await Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.08,
+        duration: const Duration(milliseconds: 180),
+      );
+    } catch (_) {
+      return current() ? false : null;
+    }
     if (!current()) return null;
     if (!targetIsCurrent()) return false;
-    final targetContext = target.key.currentContext;
-    if (targetContext == null || !targetContext.mounted) return false;
-    await Scrollable.ensureVisible(
-      targetContext,
-      alignment: 0.08,
-      duration: const Duration(milliseconds: 180),
+    _previous = previous;
+    return true;
+  }
+
+  /// Restores the last in-session viewport anchor without changing selection.
+  /// Deleted anchors are rejected instead of navigating to a replacement.
+  Future<bool?> returnToPrevious({
+    required af.EditorState editor,
+    required af.EditorScrollController scroll,
+    required bool Function() isCurrent,
+  }) async {
+    final generation = ++_generation;
+    bool current() =>
+        !_disposed &&
+        generation == _generation &&
+        !editor.isDisposed &&
+        isCurrent();
+    if (!current()) return null;
+    final anchor = _previous;
+    if (anchor == null || !identical(anchor.editor, editor)) return false;
+    final index = _anchorIndex(anchor, editor);
+    if (index == null) {
+      _previous = null;
+      return false;
+    }
+    if (scroll.shrinkWrap || !scroll.itemScrollController.isAttached) {
+      return false;
+    }
+    scroll.itemScrollController.jumpTo(
+      index: index,
+      alignment: anchor.alignment,
     );
-    return current() ? true : null;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!current()) return null;
+    if (_anchorIndex(anchor, editor) == null) {
+      _previous = null;
+      return false;
+    }
+    _previous = null;
+    return true;
   }
 }
