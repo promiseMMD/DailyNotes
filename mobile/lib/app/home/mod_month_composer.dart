@@ -15,6 +15,8 @@ import '../dailynotes/editor/document_envelope.dart';
 import '../dailynotes/editor/document_history_actions.dart';
 import '../dailynotes/editor/document_outline_navigation.dart';
 import '../dailynotes/notes/rich_note_outline.dart';
+import '../dailynotes/recovery/emergency_document_exporter.dart';
+import '../dailynotes/recovery/emergency_note_export.dart';
 import 'mod_month_document.dart';
 import 'mod_month_native.dart';
 import 'mod_month_order.dart';
@@ -121,8 +123,9 @@ void _validateComposerDraft(Map<String, Object?> draft, String topicId) {
       'kind',
       'tiptapJson',
     ]) {
-      if (attempt[key] is! String)
+      if (attempt[key] is! String) {
         throw const FormatException('invalid_pending_request');
+      }
     }
     if (attempt['topicId'] != topicId ||
         attempt['blockId'] != draft['blockId'] ||
@@ -138,8 +141,14 @@ void _validateComposerDraft(Map<String, Object?> draft, String topicId) {
 bool _isEmptyDraft(String body) {
   bool emptyNode(Object? node) {
     if (node is! Map) return false;
-    if (!const ['doc', 'paragraph', 'text', 'hardBreak'].contains(node['type']))
+    if (!const [
+      'doc',
+      'paragraph',
+      'text',
+      'hardBreak',
+    ].contains(node['type'])) {
       return false;
+    }
     if (node['text'] case final String text) {
       if (text.trim().isNotEmpty) return false;
     }
@@ -208,9 +217,10 @@ Future<ModStoredBlock?> showModMonthComposer({
       ),
     );
   } catch (_) {
-    if (context.mounted)
+    if (context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(l10n.month.draftLoadFailed)));
+    }
     return null;
   } finally {
     drafts.dispose();
@@ -232,6 +242,8 @@ class ModMonthComposer extends StatefulWidget {
   final DailyNotesStore? draftStore;
   final String? draftKey;
   final Map<String, Object?>? initialDraft;
+  @visibleForTesting
+  final EmergencyDocumentExporter? testEmergencyExporter;
   const ModMonthComposer({
     super.key,
     required this.repository,
@@ -246,12 +258,13 @@ class ModMonthComposer extends StatefulWidget {
     this.draftStore,
     this.draftKey,
     this.initialDraft,
+    this.testEmergencyExporter,
   });
   @override
   State<ModMonthComposer> createState() => _ModMonthComposerState();
 }
 
-enum _ComposerDocumentAction { outline, copyDraft, info }
+enum _ComposerDocumentAction { outline, copyDraft, emergencyExport, info }
 
 class _ModMonthComposerState extends State<ModMonthComposer>
     with WidgetsBindingObserver {
@@ -288,6 +301,8 @@ class _ModMonthComposerState extends State<ModMonthComposer>
   int _draftWritesInFlight = 0;
   bool _draftWriteFailed = false;
   bool _snapshotUncertain = false;
+  late final _exporter =
+      widget.testEmergencyExporter ?? EmergencyDocumentExporter();
   bool get _autoDraft =>
       widget.block == null &&
       !_summary &&
@@ -464,18 +479,20 @@ class _ModMonthComposerState extends State<ModMonthComposer>
       if (_draftRevision == 0) return;
       _queueDraftSave();
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _snapshotUncertain = true;
           _draftWriteFailed = true;
         });
+      }
     }
   }
 
   void _message(String message) {
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   Future<void> _details(String message) => showDialog<void>(
@@ -602,8 +619,9 @@ class _ModMonthComposerState extends State<ModMonthComposer>
   Future<void> _persistDraft() async {
     final drafts = widget.draftStore;
     final key = widget.draftKey;
-    if (drafts == null || key == null)
+    if (drafts == null || key == null) {
       throw StateError('draft_storage_unavailable');
+    }
     await _draftWrites;
     await drafts.saveDraft(key, _draftPayload());
   }
@@ -695,6 +713,17 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                       Navigator.pop(dialog, _ComposerDocumentAction.copyDraft),
             child: Text(context.l10n.month.copyDraft),
           ),
+          if (_editing && (editor != null || widget.editorController != null))
+            SimpleDialogOption(
+              key: const ValueKey('long-document-emergency-export'),
+              onPressed: _busy
+                  ? null
+                  : () => Navigator.pop(
+                      dialog,
+                      _ComposerDocumentAction.emergencyExport,
+                    ),
+              child: Text(context.l10n.dailynotes.emergencyExport),
+            ),
           SimpleDialogOption(
             key: const ValueKey('long-document-info'),
             onPressed: () =>
@@ -717,11 +746,61 @@ class _ModMonthComposerState extends State<ModMonthComposer>
         if (editor != null) await _openOutline(editor);
       case _ComposerDocumentAction.copyDraft:
         if (!_busy) await _copyDraft();
+      case _ComposerDocumentAction.emergencyExport:
+        if (!_busy) await _emergencyExport();
       case _ComposerDocumentAction.info:
         await _details(
           '${context.l10n.month.localOnly}\n\n${context.l10n.month.timezone}',
         );
     }
+  }
+
+  Future<void> _emergencyExport() async {
+    final editor = _documentEditor;
+    if (!_editing || (editor == null && widget.editorController == null)) {
+      return;
+    }
+    await _exporter.export(
+      context: context,
+      isCurrent: () =>
+          mounted &&
+          !_allowExit &&
+          (editor == null ||
+              (!editor.isDisposed && identical(_documentEditor, editor))),
+      capture: () async {
+        final String document;
+        final String plainText;
+        final String documentFormat;
+        if (editor != null) {
+          document = jsonEncode(editor.document.toJson());
+          plainText = DailyNotesDocumentEnvelope.plainText(editor.document);
+          documentFormat = 'appflowy-json-v1';
+        } else {
+          document = await _snapshot();
+          jsonDecode(document);
+          plainText = modBlockText(document);
+          documentFormat = 'tiptap-json-v2';
+        }
+        return EmergencyNoteSnapshot(
+          kind: EmergencyRecordKind.longRecord,
+          title: widget.topicTitle ?? '',
+          body: plainText,
+          documentJson: document,
+          documentFormat: documentFormat,
+          metadata: {
+            'topicId': widget.topicId,
+            'monthKey': _day?.substring(0, 7) ?? widget.monthKey,
+            'blockId': _blockId,
+            'parentRevisionId': _parentRevisionId,
+            'kind': _summary ? 'summary' : 'entry',
+            'dayKey': _day,
+            'occurredAtMs': _event.millisecondsSinceEpoch,
+            'draft': true,
+            if (_attempt != null) 'pendingRequest': _attempt!.toJson(),
+          },
+        );
+      },
+    );
   }
 
   Future<void> _leave() async {
@@ -769,6 +848,12 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                 : l10n.month.retainDraftMessage,
           ),
           actions: [
+            if (_editing &&
+                (_documentEditor != null || widget.editorController != null))
+              TextButton(
+                onPressed: _emergencyExport,
+                child: Text(context.l10n.dailynotes.emergencyExport),
+              ),
             TextButton(
               onPressed: () => Navigator.pop(c, false),
               child: Text(l10n.month.keepEditing),
@@ -807,11 +892,12 @@ class _ModMonthComposerState extends State<ModMonthComposer>
           // flattening, normalization, or temporary Diary can lose that draft.
           validateModMonthDocument(current);
           if (modBlockText(current).isEmpty) {
-            if (mounted)
+            if (mounted) {
               setState(() {
                 _error = l10n.month.emptyBody;
                 _busy = false;
               });
+            }
             return;
           }
           _body = current;
@@ -1003,6 +1089,15 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (_editing &&
+                          (_documentEditor != null ||
+                              widget.editorController != null))
+                        IconButton(
+                          key: const ValueKey('long-error-emergency-export'),
+                          tooltip: l10n.dailynotes.emergencyExport,
+                          onPressed: _busy ? null : _emergencyExport,
+                          icon: const Icon(LucideIcons.download),
+                        ),
                       IconButton(
                         onPressed: () => _details(_error!),
                         tooltip: l10n.common.more,
@@ -1022,6 +1117,12 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                             ? null
                             : () => unawaited(_flushDraftOnBackground()),
                         child: Text(l10n.common.retry),
+                      ),
+                      IconButton(
+                        key: const ValueKey('long-draft-emergency-export'),
+                        tooltip: l10n.dailynotes.emergencyExport,
+                        onPressed: _busy ? null : _emergencyExport,
+                        icon: const Icon(LucideIcons.download),
                       ),
                     ],
                   ),

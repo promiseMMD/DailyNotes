@@ -4,35 +4,67 @@ import 'dart:typed_data';
 
 import 'package:fast_zip/fast_zip.dart';
 
-/// Exports the current in-memory plain-text editor snapshot, not a DB version.
-/// This format is an emergency extract and does not claim to be a full backup.
+enum EmergencyRecordKind { note, diary, longRecord }
+
+/// Exports an in-memory editor snapshot, not a database version or full backup.
 class EmergencyNoteSnapshot {
   const EmergencyNoteSnapshot({
     required this.title,
     required this.body,
     this.documentJson,
+    this.kind = EmergencyRecordKind.note,
+    this.documentFormat,
+    this.metadata = const {},
   });
   final String title;
   final String body;
   final String? documentJson;
+  final EmergencyRecordKind kind;
+  final String? documentFormat;
+  final Map<String, Object?> metadata;
+
+  String get _kindName => switch (kind) {
+    EmergencyRecordKind.note => 'note',
+    EmergencyRecordKind.diary => 'diary',
+    EmergencyRecordKind.longRecord => 'long-record',
+  };
+
+  /// Includes every exported field so stale archives are never reported as
+  /// representing edits made while the password or destination was selected.
+  String get fingerprint => jsonEncode({
+    'kind': _kindName,
+    'title': title,
+    'body': body,
+    'documentJson': documentJson,
+    'documentFormat': documentFormat,
+    'metadata': metadata,
+  });
 
   Map<String, List<int>> entries() => {
     'manifest.json': utf8.encode(
       jsonEncode({
-        'format': 'dailynotes-emergency-note',
+        'format': 'dailynotes-emergency-$_kindName',
         'version': 1,
         'completeness': 'partial',
         'source': 'current-editor-memory',
         'attachmentsIncluded': false,
         'documentFormat': documentJson == null
             ? 'plain-text'
-            : 'appflowy-json-v1',
+            : documentFormat ?? 'appflowy-json-v1',
       }),
     ),
-    'note.json': utf8.encode(jsonEncode({'title': title, 'body': body})),
+    '$_kindName.json': utf8.encode(
+      jsonEncode({
+        'title': title,
+        'body': body,
+        if (metadata.isNotEmpty) 'metadata': metadata,
+      }),
+    ),
     if (documentJson != null) 'document.json': utf8.encode(documentJson!),
-    'note.txt': utf8.encode([if (title.isNotEmpty) title, body].join('\n\n')),
-    'note.md': utf8.encode(
+    '$_kindName.txt': utf8.encode(
+      [if (title.isNotEmpty) title, body].join('\n\n'),
+    ),
+    '$_kindName.md': utf8.encode(
       [if (title.isNotEmpty) '# $title', body].join('\n\n'),
     ),
   };

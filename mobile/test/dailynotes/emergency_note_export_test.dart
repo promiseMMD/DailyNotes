@@ -35,4 +35,79 @@ void main() {
     expect(manifest['documentFormat'], 'appflowy-json-v1');
     expect(manifest['attachmentsIncluded'], false);
   });
+  test(
+    'diary and long-record exports identify their own type and metadata',
+    () {
+      for (final (kind, label) in [
+        (EmergencyRecordKind.diary, 'diary'),
+        (EmergencyRecordKind.longRecord, 'long-record'),
+      ]) {
+        final snapshot = EmergencyNoteSnapshot(
+          kind: kind,
+          title: '当前记录',
+          body: '未保存的正文',
+          documentJson: '{"current":true}',
+          metadata: const {'recordId': 'original-id', 'draft': true},
+        );
+        final entries = snapshot.entries();
+        final manifest =
+            jsonDecode(utf8.decode(entries['manifest.json']!)) as Map;
+        final content = jsonDecode(utf8.decode(entries['$label.json']!)) as Map;
+        expect(manifest['format'], 'dailynotes-emergency-$label');
+        expect(manifest['completeness'], 'partial');
+        expect(manifest['source'], 'current-editor-memory');
+        expect(content['body'], '未保存的正文');
+        expect(content['metadata'], {'recordId': 'original-id', 'draft': true});
+        expect(utf8.decode(entries['document.json']!), '{"current":true}');
+        expect(entries, isNot(contains('note.json')));
+      }
+    },
+  );
+
+  test('snapshot fingerprint changes with content, type or metadata', () {
+    const original = EmergencyNoteSnapshot(
+      title: 'a',
+      body: 'b',
+      metadata: {'day': '17'},
+    );
+    expect(
+      original.fingerprint,
+      const EmergencyNoteSnapshot(
+        title: 'a',
+        body: 'b',
+        metadata: {'day': '17'},
+      ).fingerprint,
+    );
+    expect(
+      original.fingerprint,
+      isNot(
+        const EmergencyNoteSnapshot(
+          title: 'a',
+          body: 'changed',
+          metadata: {'day': '17'},
+        ).fingerprint,
+      ),
+    );
+    expect(
+      original.fingerprint,
+      isNot(
+        const EmergencyNoteSnapshot(
+          kind: EmergencyRecordKind.diary,
+          title: 'a',
+          body: 'b',
+          metadata: {'day': '17'},
+        ).fingerprint,
+      ),
+    );
+    expect(
+      original.fingerprint,
+      isNot(
+        const EmergencyNoteSnapshot(
+          title: 'a',
+          body: 'b',
+          metadata: {'day': '18'},
+        ).fingerprint,
+      ),
+    );
+  });
 }

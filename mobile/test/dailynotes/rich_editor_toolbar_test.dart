@@ -27,6 +27,7 @@ void main() {
     bool editable = true,
     af.EditorScrollController? scrollController,
     DocumentEditorBackController? backController,
+    Brightness brightness = Brightness.light,
     Future<({List<String> families, bool hasUnavailable})> Function()?
     loadFonts,
   }) async {
@@ -41,13 +42,15 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: buildMuiTheme(brightness: Brightness.light),
+          theme: buildMuiTheme(brightness: brightness),
           localizationsDelegates: const [
             af.AppFlowyEditorLocalizations.delegate,
             ...GlobalMaterialLocalizations.delegates,
             GlobalMuiLocalizations.delegate,
           ],
           builder: (context, child) =>
+              // The test reproduces the app's current compatibility wrapper.
+              // ignore: deprecated_member_use
               MaterialUiCompatibilityBridge(child: child!),
           home: Scaffold(
             body: RichEditorToolbar(
@@ -95,6 +98,176 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets(
+    'AppFlowy color panel has six text and eighteen highlight choices',
+    (tester) async {
+      final editor = document('alpha beta');
+      await mount(tester, editor);
+      editor.selection = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      await tester.pumpAndSettle();
+      await tapOverflow(tester, 'color');
+      final textGrid = tester.widget<GridView>(
+        find.byKey(const ValueKey('rich-color-grid-text')),
+      );
+      final highlightGrid = tester.widget<GridView>(
+        find.byKey(const ValueKey('rich-color-grid-background')),
+      );
+      expect(
+        (textGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+            .crossAxisCount,
+        6,
+      );
+      expect(
+        (textGrid.childrenDelegate as SliverChildListDelegate).children,
+        hasLength(6),
+      );
+      expect(
+        (highlightGrid.childrenDelegate as SliverChildListDelegate).children,
+        hasLength(18),
+      );
+      expect(
+        find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('rich-quick-color-background-0xffe8e0ff')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
+
+  testWidgets(
+    'dark AppFlowy highlight choices remain reachable on a narrow screen',
+    (tester) async {
+      final editor = document('alpha beta');
+      await mount(tester, editor, brightness: Brightness.dark);
+      tester.view.physicalSize = const Size(320, 700);
+      editor.selection = af.Selection.single(
+        path: [0],
+        startOffset: 0,
+        endOffset: 5,
+      );
+      await tester.pumpAndSettle();
+      await tapOverflow(tester, 'color');
+      final last = find.byKey(
+        const ValueKey('rich-quick-color-background-0xff405ea6'),
+      );
+      await tester.ensureVisible(last);
+      await tester.tap(last);
+      await tester.pumpAndSettle();
+      expect(jsonEncode(editor.document.toJson()), contains('0xff405ea6'));
+      expect(
+        editor.selection,
+        af.Selection.single(path: [0], startOffset: 0, endOffset: 5),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      editor.dispose();
+    },
+  );
+
+  testWidgets('opening the new palette preserves earlier document colors', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            af.paragraphNode(
+              delta: af.Delta()
+                ..insert(
+                  'legacy',
+                  attributes: {
+                    af.AppFlowyRichTextKeys.textColor: '0xffd32f2f',
+                    af.AppFlowyRichTextKeys.backgroundColor: '0x4d1976d2',
+                  },
+                ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await mount(tester, editor);
+    final original = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 6,
+    );
+    await tester.pumpAndSettle();
+    await tapOverflow(tester, 'color');
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.tap(
+      find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
+    );
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), contains('0x4d1976d2'));
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('the palette recognizes equivalent imported color formats', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            af.paragraphNode(
+              delta: af.Delta()
+                ..insert(
+                  'imported',
+                  attributes: {
+                    af.AppFlowyRichTextKeys.textColor: '#DB3636',
+                    af.AppFlowyRichTextKeys.backgroundColor: 'rgb(232,224,255)',
+                  },
+                ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await mount(tester, editor);
+    final original = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 8,
+    );
+    await tester.pumpAndSettle();
+    await tapOverflow(tester, 'color');
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
+        matching: find.byKey(const ValueKey('rich-quick-color-selected-text')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('rich-quick-color-background-0xffe8e0ff'),
+        ),
+        matching: find.byKey(
+          const ValueKey('rich-quick-color-selected-background'),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
   testWidgets('quick color applies text and highlight to the same selection', (
     tester,
   ) async {
@@ -110,16 +283,16 @@ void main() {
     await tapOverflow(tester, 'color');
     await tester.pumpAndSettle();
     await tester.tap(
-      find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+      find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
     );
     await tester.pumpAndSettle();
     await tester.tap(
-      find.byKey(const ValueKey('rich-quick-color-background-0xff1976d2')),
+      find.byKey(const ValueKey('rich-quick-color-background-0xffe8e0ff')),
     );
     await tester.pumpAndSettle();
     final serialized = jsonEncode(editor.document.toJson());
-    expect(serialized, contains('0xffd32f2f'));
-    expect(serialized, contains('0x4d1976d2'));
+    expect(serialized, contains('0xffdb3636'));
+    expect(serialized, contains('0xffe8e0ff'));
     expect(editor.selection, selection);
     expect(find.text(l10n.dailynotes.editorSelectionChanged), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -401,14 +574,14 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+        find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
       );
       await tester.pumpAndSettle();
       expect(editor.selection, selection);
-      expect(jsonEncode(editor.document.toJson()), contains('0xffd32f2f'));
+      expect(jsonEncode(editor.document.toJson()), contains('0xffdb3636'));
       expect(
         find.descendant(
-          of: find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+          of: find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
           matching: find.byKey(
             const ValueKey('rich-quick-color-selected-text'),
           ),
@@ -416,15 +589,15 @@ void main() {
         findsOneWidget,
       );
       await tester.tap(
-        find.byKey(const ValueKey('rich-quick-color-background-0xffd32f2f')),
+        find.byKey(const ValueKey('rich-quick-color-background-0xffffe6fd')),
       );
       await tester.pumpAndSettle();
-      expect(jsonEncode(editor.document.toJson()), contains('0x4dd32f2f'));
+      expect(jsonEncode(editor.document.toJson()), contains('0xffffe6fd'));
       expect(editor.selection, selection);
       expect(
         find.descendant(
           of: find.byKey(
-            const ValueKey('rich-quick-color-background-0xffd32f2f'),
+            const ValueKey('rich-quick-color-background-0xffffe6fd'),
           ),
           matching: find.byKey(
             const ValueKey('rich-quick-color-selected-background'),
@@ -1467,7 +1640,7 @@ void main() {
     await mount(tester, editor);
     final first = af.Selection.single(path: [0], startOffset: 0, endOffset: 5);
     await editor.formatDelta(first, {
-      af.AppFlowyRichTextKeys.textColor: '0xffd32f2f',
+      af.AppFlowyRichTextKeys.textColor: '0xffdb3636',
     });
     editor.selection = af.Selection.single(
       path: [0],
@@ -1766,13 +1939,13 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+        find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
       );
       await tester.pumpAndSettle();
       expect(jsonEncode(editor.document.toJson()), original);
       expect(
         editor.toggledStyle[af.AppFlowyRichTextKeys.textColor],
-        '0xffd32f2f',
+        '0xffdb3636',
       );
       await tester.pumpWidget(const SizedBox());
       editor.dispose();
@@ -2398,7 +2571,7 @@ void main() {
     await tester.pumpAndSettle();
     final oldColor = tester
         .widget<InkWell>(
-          find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+          find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
         )
         .onTap!;
     tester.testTextInput.log.clear();
@@ -2451,7 +2624,7 @@ void main() {
           : tester
                 .widget<InkWell>(
                   find.byKey(
-                    const ValueKey('rich-quick-color-text-0xffd32f2f'),
+                    const ValueKey('rich-quick-color-text-0xffdb3636'),
                   ),
                 )
                 .onTap!;
@@ -2477,7 +2650,7 @@ void main() {
         expect(
           tester
               .widget<InkWell>(
-                find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+                find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
               )
               .onTap,
           isNull,
@@ -3182,12 +3355,12 @@ void main() {
     tester.testTextInput.log.clear();
     await tapOverflow(tester, 'color');
     await tester.tap(
-      find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+      find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('rich-color-done')));
     await tester.pumpAndSettle();
-    expect(jsonEncode(editor.document.toJson()), contains('0xffd32f2f'));
+    expect(jsonEncode(editor.document.toJson()), contains('0xffdb3636'));
     expect(find.byKey(const ValueKey('rich-format-font')), findsOneWidget);
     expect(editor.selection, selection);
     expect(
@@ -3344,7 +3517,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(jsonEncode(editor.document.toJson()), original);
     expect(
-      find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+      find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
       findsNothing,
     );
     await tester.pumpWidget(const SizedBox());

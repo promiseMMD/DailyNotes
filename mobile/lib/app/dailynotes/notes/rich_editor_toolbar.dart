@@ -2175,32 +2175,90 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
   }
 }
 
-List<(String, String?, Color)> _editorColors(BuildContext context) {
+// Values and order are taken from AppFlowy 0.15.1's mobile color panel:
+// https://github.com/AppFlowy-IO/AppFlowy/blob/0.15.1/frontend/appflowy_flutter/lib/plugins/document/presentation/editor_plugins/mobile_toolbar_v3/aa_menu/_color_list.dart
+// Saved values from earlier DailyNotes builds remain untouched until edited.
+List<(String, String?, Color)> _editorColors(BuildContext context, String key) {
   final t = context.l10n.dailynotes;
-  final choices = <(String, String?)>[
-    (t.editorColorDefault, null),
-    (t.editorColorRed, '0xffd32f2f'),
-    (t.editorColorOrange, '0xffef6c00'),
-    (t.editorColorYellow, '0xffffc107'),
-    (t.editorColorGreen, '0xff388e3c'),
-    (t.editorColorBlue, '0xff1976d2'),
-    (t.editorColorPurple, '0xff7b1fa2'),
+  if (key == af.AppFlowyRichTextKeys.textColor) {
+    final choices = <(String, String?)>[
+      (t.editorColorDefault, null),
+      (t.editorColorRed, '0xffdb3636'),
+      (t.editorColorOrange, '0xffea8f06'),
+      (t.editorColorGreen, '0xff18a166'),
+      (t.editorColorBlue, '0xff205eee'),
+      (t.editorColorPurple, '0xffc619c9'),
+    ];
+    return [
+      for (final (label, value) in choices)
+        (
+          label,
+          value,
+          value == null
+              ? context.theme.colors.onSurface
+              : Color(int.parse(value)),
+        ),
+    ];
+  }
+  const light = <String>[
+    '0xffe8e0ff',
+    '0xffffe6fd',
+    '0xffffdae6',
+    '0xffffefe3',
+    '0xfff5ffdc',
+    '0xffddffd6',
+    '0xffdefff1',
+    '0xffe1fbff',
+    '0xffffadad',
+    '0xffffe088',
+    '0xffa7df4a',
+    '0xffd4c0ff',
+    '0xfffdb2fe',
+    '0xffffd18b',
+    '0xff65e7f0',
+    '0xff71e6b4',
+    '0xff80f1ff',
   ];
-  // Swatches and persisted colors must share exactly the same value.
+  const dark = <String>[
+    '0xff8b80ad',
+    '0xff987195',
+    '0xff906d78',
+    '0xffa68b77',
+    '0xff88936d',
+    '0xff72936b',
+    '0xff6b9483',
+    '0xff658b90',
+    '0xff95405a',
+    '0xffa6784d',
+    '0xff6e9234',
+    '0xff6455a2',
+    '0xff924f83',
+    '0xffa48f34',
+    '0xff29a3ac',
+    '0xff2e9f84',
+    '0xff405ea6',
+  ];
+  final values = context.theme.colors.brightness == Brightness.dark
+      ? dark
+      : light;
   return [
-    for (final (label, value) in choices)
+    (t.editorColorDefault, null, context.theme.colors.surface),
+    for (var i = 0; i < values.length; i++)
       (
-        label,
-        value,
-        value == null ? context.theme.colors.surface : Color(int.parse(value)),
+        '${t.editorHighlightColor} ${i + 1}',
+        values[i],
+        Color(int.parse(values[i])),
       ),
   ];
 }
 
-String? _colorValue(String key, String? value) =>
-    value != null && key == af.AppFlowyRichTextKeys.backgroundColor
-    ? value.replaceFirst('0xff', '0x4d')
-    : value;
+bool _samePaletteColor(String? current, String? value) {
+  if (current == value || (value == null && current == '')) return true;
+  if (current == null || value == null) return false;
+  final currentColor = af.ColorExtension(current).tryToColor();
+  final paletteColor = af.ColorExtension(value).tryToColor();
+  return currentColor != null && currentColor == paletteColor;
+}
 
 class _QuickColorSheet extends StatefulWidget {
   const _QuickColorSheet({
@@ -2254,7 +2312,7 @@ class _QuickColorSheetState extends State<_QuickColorSheet> {
     }
     setState(() => _running = true);
     final success = await widget.execute(
-      (selection) => widget.color(selection, key, _colorValue(key, value)),
+      (selection) => widget.color(selection, key, value),
     );
     if (!mounted) return;
     setState(() {
@@ -2280,57 +2338,86 @@ class _QuickColorSheetState extends State<_QuickColorSheet> {
       final current = valid && selection != null
           ? _currentInlineString(widget.editor, selection, key)
           : (known: false, value: null);
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      final textPalette = key == af.AppFlowyRichTextKeys.textColor;
+      return GridView.count(
+        key: ValueKey('rich-color-grid-$identifier'),
+        crossAxisCount: 6,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 4,
+        crossAxisSpacing: 4,
         children: [
-          for (final (label, value, color) in _editorColors(context))
-            Tooltip(
-              message: label,
-              child: Semantics(
-                selected:
-                    current.known && current.value == _colorValue(key, value),
-                child: InkWell(
-                  key: ValueKey(
-                    'rich-quick-color-$identifier-${value ?? 'default'}',
-                  ),
-                  onTap: enabled ? () => _select(key, value) : null,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: context.theme.colors.outline),
+          for (final (label, value, color) in _editorColors(context, key))
+            Builder(
+              builder: (context) {
+                final selected =
+                    current.known && _samePaletteColor(current.value, value);
+                final checkColor = value == null
+                    ? context.theme.colors.onSurface
+                    : color.computeLuminance() > .5
+                    ? (context.theme.colors.brightness == Brightness.dark
+                          ? context.theme.colors.onInverseSurface
+                          : context.theme.colors.onSurface)
+                    : (context.theme.colors.brightness == Brightness.dark
+                          ? context.theme.colors.onSurface
+                          : context.theme.colors.onInverseSurface);
+                return Tooltip(
+                  message: label,
+                  child: Semantics(
+                    button: true,
+                    selected: selected,
+                    enabled: enabled,
+                    child: InkWell(
+                      key: ValueKey(
+                        'rich-quick-color-$identifier-${value ?? 'default'}',
+                      ),
+                      onTap: enabled ? () => _select(key, value) : null,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        margin: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: textPalette
+                              ? context.theme.colors.surface
+                              : color,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selected
+                                ? context.theme.colors.primary
+                                : context.theme.colors.outline,
+                            width: selected ? 2 : 1,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: textPalette
+                            ? Text(
+                                'A',
+                                key: selected
+                                    ? const ValueKey(
+                                        'rich-quick-color-selected-text',
+                                      )
+                                    : null,
+                                style: context
+                                    .theme
+                                    .typography
+                                    .titleLarge
+                                    .onSurface
+                                    .copyWith(color: color),
+                              )
+                            : selected
+                            ? Icon(
+                                LucideIcons.check,
+                                key: const ValueKey(
+                                  'rich-quick-color-selected-background',
+                                ),
+                                size: 20,
+                                color: checkColor,
+                              )
+                            : null,
+                      ),
                     ),
-                    child:
-                        current.known &&
-                            current.value == _colorValue(key, value)
-                        ? Icon(
-                            LucideIcons.check,
-                            key: ValueKey(
-                              'rich-quick-color-selected-$identifier',
-                            ),
-                            size: 20,
-                            color: value == null
-                                ? context.theme.colors.onSurface
-                                : color.computeLuminance() > .5
-                                ? (context.theme.colors.brightness ==
-                                          Brightness.dark
-                                      ? context.theme.colors.onInverseSurface
-                                      : context.theme.colors.onSurface)
-                                : (context.theme.colors.brightness ==
-                                          Brightness.dark
-                                      ? context.theme.colors.onSurface
-                                      : context.theme.colors.onInverseSurface),
-                          )
-                        : value == null
-                        ? const Icon(LucideIcons.ban, size: 20)
-                        : null,
                   ),
-                ),
-              ),
+                );
+              },
             ),
         ],
       );

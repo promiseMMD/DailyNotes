@@ -66,6 +66,8 @@ void main() {
         ...GlobalMaterialLocalizations.delegates,
         GlobalMuiLocalizations.delegate,
       ],
+      // The test reproduces the app's current compatibility wrapper.
+      // ignore: deprecated_member_use
       builder: (context, child) => MaterialUiCompatibilityBridge(child: child!),
       home: home,
     ),
@@ -150,6 +152,8 @@ void main() {
             GlobalMuiLocalizations.delegate,
           ],
           builder: (context, child) =>
+              // The test reproduces the app's current compatibility wrapper.
+              // ignore: deprecated_member_use
               MaterialUiCompatibilityBridge(child: child!),
           routerConfig: router,
         ),
@@ -302,7 +306,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const ValueKey('rich-quick-color-text-0xffd32f2f')),
+        find.byKey(const ValueKey('rich-quick-color-text-0xffdb3636')),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('rich-color-done')));
@@ -332,7 +336,7 @@ void main() {
       );
       expect(
         jsonEncode(DailyNotesDocumentEnvelope.decode(saved.content).toJson()),
-        contains('0xffd32f2f'),
+        contains('0xffdb3636'),
       );
       expect(
         jsonEncode(DailyNotesDocumentEnvelope.decode(saved.content).toJson()),

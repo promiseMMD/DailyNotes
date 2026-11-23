@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:appflowy_editor/appflowy_editor.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
@@ -14,6 +12,7 @@ import '../editor/document_canvas.dart';
 import '../editor/document_editor_back_controller.dart';
 import '../editor/document_history_actions.dart';
 import '../editor/document_outline_navigation.dart';
+import '../recovery/emergency_document_exporter.dart';
 import '../recovery/emergency_note_export.dart';
 import 'rich_note_outline.dart';
 
@@ -25,12 +24,15 @@ class RichNoteEditorPage extends StatefulWidget {
     this.note,
     this.folderId,
     this.testEditor,
+    this.testEmergencyExporter,
   });
   final DailyNotesStore store;
   final DailyNote? note;
   final String? folderId;
   @visibleForTesting
   final EditorState? testEditor;
+  @visibleForTesting
+  final EmergencyDocumentExporter? testEmergencyExporter;
 
   @override
   State<RichNoteEditorPage> createState() => _RichNoteEditorPageState();
@@ -59,7 +61,8 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   bool _revisionConflict = false, _folderConflict = false;
   bool _deletedWithDraft = false;
   late bool _editing;
-  bool _exporting = false;
+  late final _exporter =
+      widget.testEmergencyExporter ?? EmergencyDocumentExporter();
   bool _deleting = false;
   bool _archiving = false;
 
@@ -190,99 +193,26 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
   }
 
   Future<void> _emergencyExport() async {
-    if (_exporting) return;
-    _exporting = true;
-    try {
-      final snapshot = EmergencyNoteSnapshot(
+    final editor = _editor;
+    if (editor == null || editor.isDisposed) return;
+    await _exporter.export(
+      context: context,
+      isCurrent: () =>
+          mounted &&
+          !_allowPop &&
+          !editor.isDisposed &&
+          identical(_editor, editor),
+      capture: () => EmergencyNoteSnapshot(
         title: _title.text,
         body: _text(),
-        documentJson: jsonEncode(_editor!.document.toJson()),
-      );
-      final password = TextEditingController();
-      final confirmation = TextEditingController();
-      var mismatch = false;
-      final selected = await showDialog<String>(
-        context: context,
-        builder: (dialog) => StatefulBuilder(
-          builder: (dialog, setDialogState) => AlertDialog(
-            title: Text(context.l10n.dailynotes.emergencyExport),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(context.l10n.dailynotes.richEmergencyExportWarning),
-                TextField(
-                  controller: password,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: context.l10n.dailynotes.emergencyPassword,
-                  ),
-                ),
-                TextField(
-                  controller: confirmation,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: context.l10n.dailynotes.emergencyPasswordConfirm,
-                    errorText: mismatch
-                        ? context.l10n.dailynotes.emergencyPasswordMismatch
-                        : null,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialog),
-                child: Text(context.l10n.dailynotes.cancel),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (password.text.isEmpty ||
-                      password.text != confirmation.text) {
-                    setDialogState(() => mismatch = true);
-                  } else {
-                    Navigator.pop(dialog, password.text);
-                  }
-                },
-                child: Text(context.l10n.dailynotes.confirm),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (selected == null || !mounted) return;
-      try {
-        final bytes = await createEmergencyNoteZip(
-          snapshot: snapshot,
-          password: selected,
-          temporaryDirectory: Directory.systemTemp,
-        );
-        final destination = await FilePicker.saveFile(
-          fileName: 'DailyNotes-emergency.zip',
-          bytes: bytes,
-          mimeType: 'application/zip',
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              destination == null
-                  ? context.l10n.dailynotes.emergencyExportCancelled
-                  : context.l10n.dailynotes.richEmergencyExportPartial,
-            ),
-          ),
-        );
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.dailynotes.emergencyExportFailed),
-            ),
-          );
-        }
-      }
-    } finally {
-      _exporting = false;
-    }
+        documentJson: jsonEncode(editor.document.toJson()),
+        metadata: {
+          if (_id != null) 'noteId': _id,
+          if (_folderId != null) 'folderId': _folderId,
+          'tags': List<String>.of(_tags),
+        },
+      ),
+    );
   }
 
   Future<void> _leave() async {
@@ -989,6 +919,12 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                           children: [
                             Expanded(child: Text(status)),
                             TextButton(onPressed: _save, child: Text(t.retry)),
+                            IconButton(
+                              key: const ValueKey('note-emergency-export'),
+                              tooltip: t.emergencyExport,
+                              onPressed: _emergencyExport,
+                              icon: const Icon(LucideIcons.download),
+                            ),
                           ],
                         ),
                       ),

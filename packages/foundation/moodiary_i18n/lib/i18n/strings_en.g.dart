@@ -684,6 +684,10 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get emergencyExportPartial => 'Partial export saved: current note text only, no attachments';
 	@override String get emergencyExportFailed => 'Emergency export failed; retry or copy the content';
 	@override String get emergencyExportCancelled => 'Export cancelled; your edits are still available';
+	@override String get emergencyExportChanged => 'The content changed during export. No emergency ZIP was saved; export the latest content again.';
+	@override String get emergencyExportOlderVersion => 'The emergency ZIP was saved, but the content changed during export. Export the latest content again.';
+	@override String get emergencyExportSavedUnverified => 'The emergency ZIP was saved, but it could not be checked against the latest content. Review the editor and export again.';
+	@override String get emergencyExportUnconfirmed => 'Could not confirm whether the emergency ZIP was saved. Check the destination or retry; your edits remain available.';
 	@override String get lockEditing => 'Lock editing';
 	@override String get unlockEditing => 'Unlock editing';
 	@override String get richDocumentUnsupported => 'This document is unsupported or damaged. Its original content has been preserved.';

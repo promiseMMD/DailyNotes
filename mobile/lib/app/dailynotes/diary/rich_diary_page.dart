@@ -14,6 +14,8 @@ import '../editor/document_envelope.dart';
 import '../editor/document_history_actions.dart';
 import '../editor/document_outline_navigation.dart';
 import '../notes/rich_note_outline.dart';
+import '../recovery/emergency_document_exporter.dart';
+import '../recovery/emergency_note_export.dart';
 
 /// A diary's AppFlowy document autosaves as the actual diary, not as a draft.
 class RichDiaryPage extends StatefulWidget {
@@ -23,11 +25,14 @@ class RichDiaryPage extends StatefulWidget {
     this.diary,
     this.categoryId,
     this.registry,
+    this.testEmergencyExporter,
   });
   final DiaryRepository repository;
   final Diary? diary;
   final String? categoryId;
   final OpenDiaryRegistry? registry;
+  @visibleForTesting
+  final EmergencyDocumentExporter? testEmergencyExporter;
 
   @override
   State<RichDiaryPage> createState() => _RichDiaryPageState();
@@ -55,6 +60,8 @@ class _RichDiaryPageState extends State<RichDiaryPage>
   bool _leaving = false;
   bool _registered = false;
   late bool _editing;
+  late final _exporter =
+      widget.testEmergencyExporter ?? EmergencyDocumentExporter();
 
   @override
   void initState() {
@@ -182,6 +189,30 @@ class _RichDiaryPageState extends State<RichDiaryPage>
     if (_revision != _savedRevision && succeeded) await _save();
   }
 
+  Future<void> _emergencyExport() async {
+    final editor = _editor;
+    if (editor == null || editor.isDisposed) return;
+    await _exporter.export(
+      context: context,
+      isCurrent: () =>
+          mounted &&
+          !_allowPop &&
+          !editor.isDisposed &&
+          identical(_editor, editor),
+      capture: () => EmergencyNoteSnapshot(
+        kind: EmergencyRecordKind.diary,
+        title: _title.text,
+        body: DailyNotesDocumentEnvelope.plainText(editor.document),
+        documentJson: jsonEncode(editor.document.toJson()),
+        metadata: {
+          'diaryId': _base.id,
+          'dateTime': _base.time.toUtc().toIso8601String(),
+          if (_base.categoryId != null) 'categoryId': _base.categoryId,
+        },
+      ),
+    );
+  }
+
   Future<void> _leave() async {
     if (_leaving) return;
     if (_editorBack.handleBack()) return;
@@ -196,6 +227,10 @@ class _RichDiaryPageState extends State<RichDiaryPage>
           title: Text(context.l10n.dailynotes.unsavedExitTitle),
           content: Text(context.l10n.dailynotes.unsavedExitHint),
           actions: [
+            TextButton(
+              onPressed: _emergencyExport,
+              child: Text(context.l10n.dailynotes.emergencyExport),
+            ),
             TextButton(
               onPressed: () async {
                 final editor = _editor;
@@ -215,8 +250,9 @@ class _RichDiaryPageState extends State<RichDiaryPage>
             TextButton(
               onPressed: () async {
                 await _save();
-                if (dialog.mounted && _revision == _savedRevision)
+                if (dialog.mounted && _revision == _savedRevision) {
                   Navigator.pop(dialog, false);
+                }
               },
               child: Text(context.l10n.dailynotes.retry),
             ),
@@ -247,8 +283,9 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                     ],
                   ),
                 );
-                if (confirm == true && dialog.mounted)
+                if (confirm == true && dialog.mounted) {
                   Navigator.pop(dialog, true);
+                }
               },
               child: Text(context.l10n.dailynotes.discardUnsavedAction),
             ),
@@ -480,6 +517,12 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                           children: [
                             Expanded(child: Text(t.saveFailed)),
                             TextButton(onPressed: _save, child: Text(t.retry)),
+                            IconButton(
+                              key: const ValueKey('diary-emergency-export'),
+                              tooltip: t.emergencyExport,
+                              onPressed: _emergencyExport,
+                              icon: const Icon(LucideIcons.download),
+                            ),
                           ],
                         ),
                       ),

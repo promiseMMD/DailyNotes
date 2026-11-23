@@ -1881,6 +1881,18 @@ class Translations$dailynotes$zh {
 	/// zh: '已取消导出，编辑内容仍保留'
 	String get emergencyExportCancelled => '已取消导出，编辑内容仍保留';
 
+	/// zh: '导出期间内容发生变化，尚未保存应急包。请重新导出最新内容。'
+	String get emergencyExportChanged => '导出期间内容发生变化，尚未保存应急包。请重新导出最新内容。';
+
+	/// zh: '应急包已保存，但内容在导出期间发生变化。请重新导出最新内容。'
+	String get emergencyExportOlderVersion => '应急包已保存，但内容在导出期间发生变化。请重新导出最新内容。';
+
+	/// zh: '应急包已保存，但无法确认它是否包含最新内容。请返回编辑页核对并重新导出。'
+	String get emergencyExportSavedUnverified => '应急包已保存，但无法确认它是否包含最新内容。请返回编辑页核对并重新导出。';
+
+	/// zh: '未能确认应急包是否保存，请检查目标位置或重试；编辑内容仍保留。'
+	String get emergencyExportUnconfirmed => '未能确认应急包是否保存，请检查目标位置或重试；编辑内容仍保留。';
+
 	/// zh: '锁定编辑'
 	String get lockEditing => '锁定编辑';
 
