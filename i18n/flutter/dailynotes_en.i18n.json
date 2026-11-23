@@ -178,5 +178,6 @@
   "archiveSucceeded": "Archived",
   "unarchiveSucceeded": "Unarchived",
   "archiveFailed": "Could not archive. Please try again.",
-  "unarchiveFailed": "Could not unarchive. Please try again."
+  "unarchiveFailed": "Could not unarchive. Please try again.",
+  "similarFolders": "Similar folders"
 }

@@ -715,6 +715,148 @@ class _FolderPath {
   final String path;
 }
 
+List<_FolderPath> _folderPaths(DailyNotesStore store) {
+  final children = <String?, List<DailyFolder>>{};
+  for (final folder in store.folders) {
+    children.putIfAbsent(folder.parentId, () => []).add(folder);
+  }
+  final result = <_FolderPath>[];
+  final pending = <(DailyFolder, String)>[];
+  for (final root in (children[null] ?? const <DailyFolder>[]).reversed) {
+    pending.add((root, ''));
+  }
+  final seen = <String>{};
+  while (pending.isNotEmpty) {
+    final (folder, prefix) = pending.removeLast();
+    if (!seen.add(folder.id)) continue;
+    final path = prefix.isEmpty ? folder.name : '$prefix / ${folder.name}';
+    result.add(_FolderPath(folder, path));
+    for (final child
+        in (children[folder.id] ?? const <DailyFolder>[]).reversed) {
+      pending.add((child, path));
+    }
+  }
+  return result;
+}
+
+List<DailyFolder> _folderBranchPath(DailyNotesStore store, String? branchId) {
+  final folders = {for (final folder in store.folders) folder.id: folder};
+  final path = <DailyFolder>[];
+  final seen = <String>{};
+  var id = branchId;
+  while (id != null && seen.add(id)) {
+    final folder = folders[id];
+    if (folder == null) return [];
+    path.add(folder);
+    id = folder.parentId;
+  }
+  if (id != null) return [];
+  return path.reversed.toList();
+}
+
+List<_FolderPath> _searchFolderPaths(DailyNotesStore store, String query) {
+  final matches = _folderPaths(store)
+      .where((entry) => entry.path.toLowerCase().contains(query))
+      .toList();
+  // Preserve the original tree order within the exact and partial groups.
+  return [
+    ...matches.where((entry) => _exactFolderPath(entry, query)),
+    ...matches.where((entry) => !_exactFolderPath(entry, query)),
+  ];
+}
+
+bool _exactFolderPath(_FolderPath entry, String query) =>
+    entry.folder.name.toLowerCase() == query ||
+    entry.path.toLowerCase() == query;
+
+/// Conservative local typo suggestions. Pinyin and alias dictionaries are
+/// deliberately not guessed by this provisional name-only matcher.
+List<_FolderPath> _suggestFolderPaths(
+  DailyNotesStore store,
+  String query,
+  List<_FolderPath> matches,
+) {
+  if (query.isEmpty || matches.any((entry) => _exactFolderPath(entry, query))) {
+    return const [];
+  }
+  final name = query.split('/').last.trim();
+  final input = name.runes.toList();
+  if (input.length < 2 || input.length > 40) return const [];
+  final limit = input.length >= 6 ? 2 : 1;
+  final matchedIds = matches.map((entry) => entry.folder.id).toSet();
+  final suggestions = <(int, int, _FolderPath)>[];
+  final indexed = _folderPaths(store);
+  for (var index = 0; index < indexed.length; index++) {
+    final entry = indexed[index];
+    if (matchedIds.contains(entry.folder.id)) continue;
+    final candidate = entry.folder.name.toLowerCase().runes.toList();
+    if (candidate.length > 40 ||
+        (candidate.length - input.length).abs() > limit) {
+      continue;
+    }
+    final distance = _editDistanceWithin(input, candidate, limit);
+    if (distance != null && distance > 0) {
+      suggestions.add((distance, index, entry));
+    }
+  }
+  suggestions.sort((a, b) {
+    final byDistance = a.$1.compareTo(b.$1);
+    return byDistance == 0 ? a.$2.compareTo(b.$2) : byDistance;
+  });
+  return suggestions.take(3).map((item) => item.$3).toList();
+}
+
+int? _editDistanceWithin(List<int> a, List<int> b, int limit) {
+  var previous = List<int>.generate(b.length + 1, (index) => index);
+  for (var row = 1; row <= a.length; row++) {
+    final current = List<int>.filled(b.length + 1, 0)..[0] = row;
+    var minimum = current[0];
+    for (var column = 1; column <= b.length; column++) {
+      final insertion = current[column - 1] + 1;
+      final deletion = previous[column] + 1;
+      final substitution =
+          previous[column - 1] + (a[row - 1] == b[column - 1] ? 0 : 1);
+      final best = insertion < deletion ? insertion : deletion;
+      current[column] = best < substitution ? best : substitution;
+      if (current[column] < minimum) minimum = current[column];
+    }
+    if (minimum > limit) return null;
+    previous = current;
+  }
+  return previous.last <= limit ? previous.last : null;
+}
+
+class _FolderSuggestions extends StatelessWidget {
+  const _FolderSuggestions({
+    required this.query,
+    required this.suggestions,
+    required this.onSelect,
+  });
+  final String query;
+  final List<_FolderPath> suggestions;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) => suggestions.isEmpty
+      ? const SizedBox.shrink()
+      : ExpansionTile(
+          key: ValueKey('folder-suggestions-$query'),
+          title: Text(context.l10n.dailynotes.similarFolders),
+          children: [
+            for (final entry in suggestions)
+              ListTile(
+                key: ValueKey('folder-suggestion-${entry.folder.id}'),
+                leading: const Icon(LucideIcons.folder),
+                title: Text(entry.folder.name),
+                subtitle: Text(
+                  '${context.l10n.dailynotes.folderTree} / ${entry.path}',
+                ),
+                onTap: () => onSelect(entry.folder.id),
+              ),
+          ],
+        );
+}
+
 class _FolderBrowserState extends State<_FolderBrowser> {
   final _search = TextEditingController();
   bool _searchOpen = false;
@@ -726,47 +868,7 @@ class _FolderBrowserState extends State<_FolderBrowser> {
     super.dispose();
   }
 
-  List<_FolderPath> _folderPaths() {
-    final folders = widget.store.folders;
-    final children = <String?, List<DailyFolder>>{};
-    for (final folder in folders) {
-      children.putIfAbsent(folder.parentId, () => []).add(folder);
-    }
-    final result = <_FolderPath>[];
-    final pending = <(DailyFolder, String)>[];
-    for (final root in (children[null] ?? const <DailyFolder>[]).reversed) {
-      pending.add((root, ''));
-    }
-    final seen = <String>{};
-    while (pending.isNotEmpty) {
-      final (folder, prefix) = pending.removeLast();
-      if (!seen.add(folder.id)) continue;
-      final path = prefix.isEmpty ? folder.name : '$prefix / ${folder.name}';
-      result.add(_FolderPath(folder, path));
-      for (final child
-          in (children[folder.id] ?? const <DailyFolder>[]).reversed) {
-        pending.add((child, path));
-      }
-    }
-    return result;
-  }
-
-  List<DailyFolder> _branchPath() {
-    final folders = {
-      for (final folder in widget.store.folders) folder.id: folder,
-    };
-    final path = <DailyFolder>[];
-    final seen = <String>{};
-    var id = _branchId;
-    while (id != null && seen.add(id)) {
-      final folder = folders[id];
-      if (folder == null) return [];
-      path.add(folder);
-      id = folder.parentId;
-    }
-    if (id != null) return [];
-    return path.reversed.toList();
-  }
+  List<DailyFolder> _branchPath() => _folderBranchPath(widget.store, _branchId);
 
   void _goUp() {
     final path = _branchPath();
@@ -800,27 +902,7 @@ class _FolderBrowserState extends State<_FolderBrowser> {
           ),
           for (var i = 0; i < shown.length; i++) ...[
             if (path.length > 3 && i == 1)
-              TextButton(
-                onPressed: () => showModalBottomSheet<void>(
-                  context: context,
-                  builder: (sheet) => SafeArea(
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final folder in path)
-                          ListTile(
-                            title: Text(folder.name),
-                            onTap: () {
-                              Navigator.pop(sheet);
-                              setState(() => _branchId = folder.id);
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                child: const Text('…'),
-              ),
+              TextButton(onPressed: _openPathList, child: const Text('…')),
             const Icon(LucideIcons.chevronRight, size: 14),
             TextButton(
               onPressed: () => setState(() => _branchId = shown[i].id),
@@ -830,6 +912,23 @@ class _FolderBrowserState extends State<_FolderBrowser> {
         ],
       ),
     );
+  }
+
+  Future<void> _openPathList() async {
+    final branchId = _branchId;
+    if (branchId == null) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _FolderPathSheet(store: widget.store, branchId: branchId),
+    );
+    if (!mounted || selected == null) return;
+    if (!widget.store.folders.any((folder) => folder.id == selected)) {
+      _showError(changed: true);
+      return;
+    }
+    setState(() => _branchId = selected);
   }
 
   Future<void> _act(DailyFolder folder, _FolderAction action) async {
@@ -993,18 +1092,7 @@ class _FolderBrowserState extends State<_FolderBrowser> {
           }
           final branchId = branchPath.isEmpty ? null : _branchId;
           final query = _search.text.trim().toLowerCase();
-          final indexed = _folderPaths();
-          final matches = indexed
-              .where((entry) => entry.path.toLowerCase().contains(query))
-              .toList();
-          // Dart's sort is not stable; retain the tree order within each group.
-          bool exact(_FolderPath entry) =>
-              entry.folder.name.toLowerCase() == query ||
-              entry.path.toLowerCase() == query;
-          final ordered = [
-            ...matches.where(exact),
-            ...matches.where((entry) => !exact(entry)),
-          ];
+          final ordered = _searchFolderPaths(widget.store, query);
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
             children: [
@@ -1040,6 +1128,15 @@ class _FolderBrowserState extends State<_FolderBrowser> {
                     trailing: _menu(entry.folder),
                     onTap: () => _selectFolder(entry.folder.id),
                   ),
+                _FolderSuggestions(
+                  query: query,
+                  suggestions: _suggestFolderPaths(
+                    widget.store,
+                    query,
+                    ordered,
+                  ),
+                  onSelect: _selectFolder,
+                ),
               ] else ...[
                 if (branchId == null)
                   ListTile(
@@ -1091,6 +1188,136 @@ class _FolderBrowserState extends State<_FolderBrowser> {
           menu: _menu(folder),
         ),
   ];
+}
+
+/// A collapsed breadcrumb opens the current ancestor list. Search is opt-in;
+/// when active it searches the entire tree without changing folder identities.
+class _FolderPathSheet extends StatefulWidget {
+  const _FolderPathSheet({required this.store, required this.branchId});
+  final DailyNotesStore store;
+  final String branchId;
+
+  @override
+  State<_FolderPathSheet> createState() => _FolderPathSheetState();
+}
+
+class _FolderPathSheetState extends State<_FolderPathSheet> {
+  final _search = TextEditingController();
+  bool _searchOpen = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final available = (MediaQuery.sizeOf(context).height - keyboard).clamp(
+      0.0,
+      double.infinity,
+    );
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 150),
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: SizedBox(
+        height: available * .75,
+        child: ListenableBuilder(
+          listenable: widget.store,
+          builder: (context, _) {
+            final query = _search.text.trim().toLowerCase();
+            final ancestors = _folderBranchPath(widget.store, widget.branchId);
+            final matches = query.isEmpty
+                ? <_FolderPath>[]
+                : _searchFolderPaths(widget.store, query);
+            return Column(
+              children: [
+                ListTile(
+                  title: Text(context.l10n.dailynotes.folderTree),
+                  trailing: IconButton(
+                    key: const ValueKey('folder-path-search-toggle'),
+                    tooltip: context.l10n.dailynotes.searchFolders,
+                    icon: Icon(
+                      _searchOpen ? LucideIcons.x : LucideIcons.search,
+                    ),
+                    onPressed: () => setState(() {
+                      _searchOpen = !_searchOpen;
+                      if (!_searchOpen) _search.clear();
+                    }),
+                  ),
+                ),
+                if (_searchOpen)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      key: const ValueKey('folder-path-search'),
+                      controller: _search,
+                      autofocus: true,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: context.l10n.dailynotes.searchFolders,
+                        suffixIcon: _search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip:
+                                    context.l10n.dailynotes.clearFolderSearch,
+                                icon: const Icon(LucideIcons.x),
+                                onPressed: () => setState(_search.clear),
+                              ),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      if (query.isEmpty) ...[
+                        for (final folder in ancestors)
+                          ListTile(
+                            key: ValueKey('folder-path-ancestor-${folder.id}'),
+                            title: Text(folder.name),
+                            onTap: () => Navigator.pop(context, folder.id),
+                          ),
+                      ] else ...[
+                        if (matches.isEmpty)
+                          ListTile(
+                            title: Text(
+                              context.l10n.dailynotes.noFolderMatches,
+                            ),
+                          ),
+                        for (final entry in matches)
+                          ListTile(
+                            key: ValueKey(
+                              'folder-path-result-${entry.folder.id}',
+                            ),
+                            leading: const Icon(LucideIcons.folder),
+                            title: Text(entry.folder.name),
+                            subtitle: Text(
+                              '${context.l10n.dailynotes.folderTree} / ${entry.path}',
+                            ),
+                            onTap: () =>
+                                Navigator.pop(context, entry.folder.id),
+                          ),
+                        _FolderSuggestions(
+                          query: query,
+                          suggestions: _suggestFolderPaths(
+                            widget.store,
+                            query,
+                            matches,
+                          ),
+                          onSelect: (id) => Navigator.pop(context, id),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
 }
 
 class _FolderTreeRow extends StatefulWidget {

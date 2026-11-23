@@ -178,5 +178,6 @@
   "archiveSucceeded": "已归档",
   "unarchiveSucceeded": "已取消归档",
   "archiveFailed": "归档失败，请重试",
-  "unarchiveFailed": "取消归档失败，请重试"
+  "unarchiveFailed": "取消归档失败，请重试",
+  "similarFolders": "相似文件夹"
 }

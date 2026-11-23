@@ -2063,6 +2063,9 @@ class Translations$dailynotes$zh {
 
 	/// zh: '取消归档失败，请重试'
 	String get unarchiveFailed => '取消归档失败，请重试';
+
+	/// zh: '相似文件夹'
+	String get similarFolders => '相似文件夹';
 }
 
 // Path: dailynotesNavigation

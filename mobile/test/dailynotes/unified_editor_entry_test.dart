@@ -109,6 +109,27 @@ void main() {
     expect(find.byKey(const ValueKey('rich-format-panel')), findsOneWidget);
   }
 
+  Future<void> insertHeading(
+    WidgetTester tester,
+    af.EditorState editor, {
+    required List<int> path,
+    required int offset,
+    required String text,
+  }) async {
+    tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .focusNode
+        .requestFocus();
+    editor.selection = af.Selection.single(path: path, startOffset: offset);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-insert-h2')));
+    await tester.pumpAndSettle();
+    final insertedPath = [...path]..last += 1;
+    await editor.insertText(0, text, path: insertedPath);
+  }
+
   testWidgets('the actual new-diary route opens the shared editor', (
     tester,
   ) async {
@@ -235,11 +256,14 @@ void main() {
           .widget<af.AppFlowyEditor>(find.byType(af.AppFlowyEditor))
           .editorState;
       await editor.insertText(3, '续', path: [2]);
+      await insertHeading(tester, editor, path: [2], offset: 4, text: '笔记标题');
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
       final saved = store.notes.singleWhere((value) => value.id == note.id);
-      expect(saved.body, '第一行\n\n第三行续');
+      expect(saved.body, '第一行\n\n第三行续\n笔记标题');
       expect(saved.documentJson, isNotNull);
+      expect(saved.documentJson, contains('"type":"heading"'));
+      expect(saved.documentJson, contains('笔记标题'));
       await tester.pumpWidget(const SizedBox());
       store.dispose();
       await db.close();
@@ -260,6 +284,7 @@ void main() {
           .widget<af.AppFlowyEditor>(find.byType(af.AppFlowyEditor))
           .editorState;
       await editor.insertText(0, '日记正文', path: [0]);
+      await insertHeading(tester, editor, path: [0], offset: 4, text: '日记标题');
       editor.selection = af.Selection.single(
         path: [0],
         startOffset: 0,
@@ -292,6 +317,7 @@ void main() {
       await tester.pumpAndSettle();
       final saved = (await repository.getAllDiaries()).single;
       expect(saved.contentText, contains('日记正文参考'));
+      expect(saved.contentText, contains('日记标题'));
       expect(
         DailyNotesDocumentEnvelope.hasNativeDocument(saved.content),
         isTrue,
@@ -419,10 +445,7 @@ void main() {
           .widget<af.AppFlowyEditor>(find.byType(af.AppFlowyEditor))
           .editorState;
       await editor.insertText(0, '追加内容', path: [0]);
-      await editor.apply(
-        editor.transaction
-          ..insertNode([1], af.headingNode(level: 2, text: '追加标题')),
-      );
+      await insertHeading(tester, editor, path: [0], offset: 4, text: '追加标题');
       editor.selection = af.Selection.single(
         path: [0],
         startOffset: 0,
@@ -486,6 +509,12 @@ void main() {
         contains('追加内容参考'),
       );
       expect(
+        DailyNotesDocumentEnvelope.plainText(
+          DailyNotesDocumentEnvelope.decode(draft['body'] as String),
+        ),
+        contains('追加标题'),
+      );
+      expect(
         jsonEncode(
           DailyNotesDocumentEnvelope.decode(draft['body'] as String).toJson(),
         ),
@@ -507,6 +536,12 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, l10n.common.save));
       await tester.pumpAndSettle();
       final block = (await repository.load(topic.id, '2026-11')).blocks.single;
+      expect(
+        DailyNotesDocumentEnvelope.plainText(
+          DailyNotesDocumentEnvelope.decode(block.tiptapJson),
+        ),
+        contains('追加标题'),
+      );
       expect(
         DailyNotesDocumentEnvelope.hasNativeDocument(block.tiptapJson),
         isTrue,

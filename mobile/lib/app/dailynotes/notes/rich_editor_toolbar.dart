@@ -1074,23 +1074,25 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       throw StateError('invalid_selection');
     }
     if (item == _InsertBlock.divider) {
-      // Match AppFlowy's insertion order but await the transaction so the
-      // selection session cannot complete before the document is updated.
-      final insertedPath = current.delta!.isEmpty
-          ? path
-          : ([...path]..last += 1);
-      final next = current.next;
-      final transaction = widget.editor.transaction
-        ..insertNode(insertedPath, af.dividerNode());
-      if (next == null ||
-          next.type != af.ParagraphBlockKeys.type ||
-          next.delta?.isNotEmpty == true) {
-        transaction.insertNode(insertedPath, af.paragraphNode());
-      }
+      // An empty paragraph is already the editable block after the divider.
+      // Reuse it, including any attributes and descendants, instead of
+      // inserting another blank line or leaving the caret on the divider.
+      final reuseCurrent =
+          current.type == af.ParagraphBlockKeys.type && current.delta!.isEmpty;
+      final insertedPath = reuseCurrent ? path : ([...path]..last += 1);
+      final next = reuseCurrent ? current : current.next;
+      final reuseNext =
+          next?.type == af.ParagraphBlockKeys.type &&
+          next?.delta?.isEmpty == true;
+      final transaction = widget.editor.transaction;
+      transaction.insertNodes(insertedPath, [
+        af.dividerNode(),
+        if (!reuseNext) af.paragraphNode(),
+      ]);
       transaction.afterSelection = af.Selection.collapsed(
         af.Position(path: [...insertedPath]..last += 1),
       );
-      await widget.editor.apply(transaction);
+      await _applyInsertedBlock(transaction);
       return;
     }
     final block = switch (item) {
@@ -1106,15 +1108,26 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     };
     final emptyParagraph =
         current.type == af.ParagraphBlockKeys.type &&
-        current.delta!.toPlainText().isEmpty &&
-        current.children.isEmpty;
+        current.delta!.isEmpty &&
+        current.children.isEmpty &&
+        current.attributes.keys.every(
+          (key) => key == af.ParagraphBlockKeys.delta,
+        );
     final nextPath = [...path]..last += 1;
     final transaction = widget.editor.transaction..insertNode(nextPath, block);
     if (emptyParagraph) transaction.deleteNode(current);
     transaction.afterSelection = af.Selection.collapsed(
       af.Position(path: emptyParagraph ? path : nextPath),
     );
-    await widget.editor.apply(transaction);
+    await _applyInsertedBlock(transaction);
+  }
+
+  Future<void> _applyInsertedBlock(af.Transaction transaction) async {
+    // Insertion is one undo step, independent of the user's preceding typing.
+    if (widget.editor.undoManager.undoStack.isNonEmpty) {
+      widget.editor.undoManager.undoStack.last.seal();
+    }
+    await widget.editor.apply(transaction, skipHistoryDebounce: true);
   }
 
   bool _formatValid(_SelectionSession session) =>

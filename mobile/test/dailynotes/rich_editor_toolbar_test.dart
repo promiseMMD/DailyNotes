@@ -208,6 +208,162 @@ void main() {
     editor.dispose();
   });
 
+  testWidgets('plus preserves a blank paragraph with metadata and its undo', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            af.paragraphNode(attributes: {'custom_metadata': 'keep'}),
+          ],
+        ),
+      ),
+    );
+    final original = jsonEncode(editor.document.toJson());
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-insert-h1')));
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.map((node) => node.type), [
+      af.ParagraphBlockKeys.type,
+      af.HeadingBlockKeys.type,
+    ]);
+    expect(
+      editor.document.root.children.first.attributes['custom_metadata'],
+      'keep',
+    );
+    expect(editor.selection?.start.path, [1]);
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('plus preserves a blank paragraph containing nested blocks', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            af.paragraphNode(children: [af.paragraphNode(text: 'nested text')]),
+          ],
+        ),
+      ),
+    );
+    final original = jsonEncode(editor.document.toJson());
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-insert-h1')));
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children, hasLength(2));
+    expect(
+      editor.document.root.children.first.children.single.delta!.toPlainText(),
+      'nested text',
+    );
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('plus insertion is a separate undo step from typing', (
+    tester,
+  ) async {
+    final editor = document('');
+    editor.disableSealTimer = true;
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await editor.insertText(0, 'typed', path: [0]);
+    editor.selection = af.Selection.single(path: [0], startOffset: 5);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-insert-h2')));
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children, hasLength(2));
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children, hasLength(1));
+    expect(editor.document.root.children.single.delta!.toPlainText(), 'typed');
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.single.delta!.toPlainText(), '');
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('plus replaces a plain empty paragraph and can undo it', (
+    tester,
+  ) async {
+    final editor = document('');
+    final original = jsonEncode(editor.document.toJson());
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-insert-h2')));
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children, hasLength(1));
+    expect(editor.document.root.children.single.type, af.HeadingBlockKeys.type);
+    expect(editor.selection?.start.path, [0]);
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
+  testWidgets('divider reuses the current empty paragraph and preserves it', (
+    tester,
+  ) async {
+    final paragraph = af.paragraphNode(attributes: {'custom_metadata': 'keep'});
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [paragraph])),
+    );
+    final original = jsonEncode(editor.document.toJson());
+    await mount(tester, editor);
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+    await tester.pumpAndSettle();
+    final divider = find.byKey(const ValueKey('rich-insert-divider'));
+    await tester.scrollUntilVisible(
+      divider,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(BottomSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.tap(divider);
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.map((node) => node.type), [
+      af.DividerBlockKeys.type,
+      af.ParagraphBlockKeys.type,
+    ]);
+    expect(editor.document.root.children.last, same(paragraph));
+    expect(paragraph.attributes['custom_metadata'], 'keep');
+    expect(editor.selection?.start.path, [1]);
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), original);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
   testWidgets(
     'Aa applies consecutive formatting to the original selected text',
     (tester) async {

@@ -745,6 +745,7 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get unarchiveSucceeded => 'Unarchived';
 	@override String get archiveFailed => 'Could not archive. Please try again.';
 	@override String get unarchiveFailed => 'Could not unarchive. Please try again.';
+	@override String get similarFolders => 'Similar folders';
 }
 
 // Path: dailynotesNavigation
