@@ -6,7 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:mui/mui.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
 import 'package:moodiary_files/moodiary_files.dart';
@@ -332,14 +332,14 @@ class _ModPinnedStripState extends State<ModPinnedStrip> {
         Row(children: [
           const Icon(Icons.push_pin_outlined, size: 16),
           const SizedBox(width: 6),
-          const Text('常用日记', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text('常用日记', style: context.theme.typography.titleSmall.emphasized.onSurface),
           const Spacer(),
           TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ModHubPage())), child: const Text('管理')),
         ]),
         ...visible.map((d) => Padding(
           padding: const EdgeInsets.only(bottom: 5),
           child: Material(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            color: context.theme.colors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
@@ -348,7 +348,7 @@ class _ModPinnedStripState extends State<ModPinnedStrip> {
                 Icon(ModDiary.isTopic(d) ? Icons.menu_book_outlined : Icons.note_outlined, size: 19),
                 const SizedBox(width: 10),
                 Expanded(child: Text(d.title.isEmpty ? '无标题' : d.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                Text(ModDiary.isTopic(d) ? '长期记录' : '置顶', style: Theme.of(context).textTheme.labelSmall),
+                Text(ModDiary.isTopic(d) ? '长期记录' : '置顶', style: context.theme.typography.labelSmall.onSurfaceVariant),
                 const SizedBox(width: 6),
                 IconButton(
                   icon: Icon(ModDiary.isTopic(d) ? Icons.add_circle_outline : Icons.open_in_new, size: 22),
@@ -597,9 +597,9 @@ class _ModTopicPageState extends State<ModLegacyTopicPage> {
           : Builder(builder: (context) {
               final months = ModMonthlyIndex.fromChildDiaries(_entries);
               return ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 100), children: [
-                const Padding(padding: EdgeInsets.all(12), child: Text(
+                Padding(padding: const EdgeInsets.all(12), child: Text(
                   '3.0 月度浏览（只读索引）：目前旧记录仍独立保存，尚未执行真实月度日记合并。',
-                  style: TextStyle(fontSize: 12))),
+                  style: context.theme.typography.bodySmall.onSurfaceVariant)),
                 for (var m = 0; m < months.length; m++)
                   Card(child: ExpansionTile(
                     key: PageStorageKey('mod-month-${months[m].key}'),
@@ -794,7 +794,7 @@ class _ModEntrySheetState extends State<ModEntrySheet> with WidgetsBindingObserv
     child: SingleChildScrollView(child: Column(
       mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-      Text('追加到 · ${widget.topic.title}', style: Theme.of(context).textTheme.titleMedium),
+      Text('追加到 · ${widget.topic.title}', style: context.theme.typography.titleMedium.onSurface),
       const SizedBox(height: 10),
       Wrap(spacing: 8, children: [
         ActionChip(label: Text(_date(_eventTime)),
@@ -810,7 +810,7 @@ class _ModEntrySheetState extends State<ModEntrySheet> with WidgetsBindingObserv
         decoration: const InputDecoration(border: OutlineInputBorder(),
           hintText: '今天记录什么？直接写下即可……')),
       if (_draftError != null) ...[
-        Text(_draftError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        Text(_draftError!, style: context.theme.typography.bodyMedium.error),
         TextButton(onPressed: _saving ? null : () async {
           try {
             await ModDraftStore.preserveUnreadable(widget.topic.id);
@@ -827,8 +827,8 @@ class _ModEntrySheetState extends State<ModEntrySheet> with WidgetsBindingObserv
         icon: const Icon(Icons.check),
         label: Text(_saving ? '正在安全保存到本机…' : '保存独立记录')),
       const SizedBox(height: 4),
-      const Text('未提交草稿仅保存在本机私有目录，不上传 WebDAV。正式保存后由原版同步引擎上传。',
-        style: TextStyle(fontSize: 12)),
+      Text('未提交草稿仅保存在本机私有目录，不上传 WebDAV。正式保存后由原版同步引擎上传。',
+        style: context.theme.typography.bodySmall.onSurfaceVariant),
     ])),
   );
 }

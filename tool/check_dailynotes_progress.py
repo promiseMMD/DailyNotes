@@ -11,11 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROGRESS = ROOT / 'docs' / 'DEVELOPMENT_PROGRESS.md'
 SECTIONS = {
     'spec': '## 整份规范的证据建档进度',
-    'editor': '## 手机文本编辑器：已跟踪的 14 项验收点',
+    'editor': '## 手机文本编辑器：已跟踪的 15 项验收点',
     'clipboard': '## 剪贴板安全内核：已跟踪的 8 项验收点',
     'aa': '## Aa 排版与插入：已跟踪的 7 项验收点',
     'archive': '## 归档管理：已跟踪的 9 项验收点',
     'folders': '## 文件夹路径导航：已跟踪的 10 项验收点',
+    'move': '## 单篇笔记移动：已跟踪的 5 项验收点',
 }
 
 
@@ -87,13 +88,13 @@ def main() -> int:
             }
             if len(all_ids) != spec_total or not set(ids).issubset(all_ids):
                 raise ValueError('规范分母或已建档编号与本地规范不一致')
-        for key in ('editor', 'clipboard', 'aa', 'archive', 'folders'):
+        for key in ('editor', 'clipboard', 'aa', 'archive', 'folders', 'move'):
             done, total, _, _ = numbers_and_bar(parts[key])
             table_rows = rows(parts[key])
             complete = sum('已实现并自动化测试' in row[1] for row in table_rows)
             if len(table_rows) != total or complete != done:
                 raise ValueError(f'{key} 的表格状态与进度数值不一致')
-        print(f'进度统计一致：规范建档 {spec_done}/{spec_total}；编辑器、剪贴板、Aa、归档及文件夹表格一致。')
+        print(f'进度统计一致：规范建档 {spec_done}/{spec_total}；编辑器、剪贴板、Aa、归档、文件夹及笔记移动表格一致。')
         print('统计一致不等于代码、真机或用户验收通过。')
         return 0
     except (OSError, UnicodeError, ValueError) as error:

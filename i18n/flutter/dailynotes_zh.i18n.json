@@ -179,5 +179,8 @@
   "unarchiveSucceeded": "已取消归档",
   "archiveFailed": "归档失败，请重试",
   "unarchiveFailed": "取消归档失败，请重试",
-  "similarFolders": "相似文件夹"
+  "similarFolders": "相似文件夹",
+  "moveConfirmTarget": "移动到“{target}”？正文和知识主题关联会保留。",
+  "moveTargetChanged": "目标文件夹或其路径已变化，请重新选择。",
+  "moveTargetCheckFailed": "无法核对目标文件夹，笔记尚未移动。"
 }

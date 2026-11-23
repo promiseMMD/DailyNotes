@@ -1061,6 +1061,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                                 autoFocus:
                                     widget.block == null && _attempt == null,
                                 header: Column(
+                                  key: const ValueKey('long-document-header'),
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     if (widget.topicTitle case final name?)

@@ -2066,6 +2066,15 @@ class Translations$dailynotes$zh {
 
 	/// zh: '相似文件夹'
 	String get similarFolders => '相似文件夹';
+
+	/// zh: '移动到“{target}”？正文和知识主题关联会保留。'
+	String moveConfirmTarget({required Object target}) => '移动到“${target}”？正文和知识主题关联会保留。';
+
+	/// zh: '目标文件夹或其路径已变化，请重新选择。'
+	String get moveTargetChanged => '目标文件夹或其路径已变化，请重新选择。';
+
+	/// zh: '无法核对目标文件夹，笔记尚未移动。'
+	String get moveTargetCheckFailed => '无法核对目标文件夹，笔记尚未移动。';
 }
 
 // Path: dailynotesNavigation

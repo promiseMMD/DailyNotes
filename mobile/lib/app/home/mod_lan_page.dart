@@ -1,6 +1,6 @@
 // W4 LAN web console. Only simple Tiptap text can be edited.
 // Month aggregates and complex rich text remain read-only for data safety.
-import 'package:flutter/material.dart';
+import 'package:mui/mui.dart';
 
 import 'mod_lan_service.dart';
 
@@ -64,11 +64,11 @@ class _ModLanWebPageState extends State<ModLanWebPage> {
           if (pending != null) Card(child: Padding(
             padding: const EdgeInsets.all(16), child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('电脑请求连接', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('电脑请求连接', style: context.theme.typography.titleMedium.emphasized.onSurface),
                 const SizedBox(height: 8),
                 Text('IP：${pending.address}'),
                 Text('浏览器：${pending.userAgent}', maxLines: 2, overflow: TextOverflow.ellipsis),
-                Text('验证码：${pending.code}', style: Theme.of(context).textTheme.titleLarge),
+                Text('验证码：${pending.code}', style: context.theme.typography.titleLarge.onSurface),
                 const Text('核对电脑浏览器的验证码；确认后此浏览器才可以查看日记。'),
                 Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                   TextButton(onPressed: () => service.reject(pending.id), child: const Text('拒绝')),
@@ -78,12 +78,12 @@ class _ModLanWebPageState extends State<ModLanWebPage> {
             ),
           )),
           if (error != null) Padding(padding: const EdgeInsets.all(10),
-            child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-          const Padding(padding: EdgeInsets.all(12), child: Text(
+            child: Text(error!, style: context.theme.typography.bodyMedium.error)),
+          Padding(padding: const EdgeInsets.all(12), child: Text(
             '隐私提示：HTTP 连接未加密，配对无法阻止局域网流量窃听或篡改。'
             '仅在完全可信的私人 Wi-Fi 使用，不要在公共 Wi-Fi 使用。'
             '手机锁屏服务依赖 Android 前台服务，系统强制停止或省电策略仍可能断开连接。',
-            style: TextStyle(fontSize: 13))),
+            style: context.theme.typography.bodySmall.onSurfaceVariant)),
         ]);
       },
     ),

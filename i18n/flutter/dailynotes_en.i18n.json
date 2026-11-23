@@ -179,5 +179,8 @@
   "unarchiveSucceeded": "Unarchived",
   "archiveFailed": "Could not archive. Please try again.",
   "unarchiveFailed": "Could not unarchive. Please try again.",
-  "similarFolders": "Similar folders"
+  "similarFolders": "Similar folders",
+  "moveConfirmTarget": "Move to “{target}”? The note content and topic links will be preserved.",
+  "moveTargetChanged": "The destination folder or its path changed. Please choose again.",
+  "moveTargetCheckFailed": "Could not verify the destination folder. The note was not moved."
 }

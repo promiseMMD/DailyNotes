@@ -746,6 +746,9 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get archiveFailed => 'Could not archive. Please try again.';
 	@override String get unarchiveFailed => 'Could not unarchive. Please try again.';
 	@override String get similarFolders => 'Similar folders';
+	@override String moveConfirmTarget({required Object target}) => 'Move to “${target}”? The note content and topic links will be preserved.';
+	@override String get moveTargetChanged => 'The destination folder or its path changed. Please choose again.';
+	@override String get moveTargetCheckFailed => 'Could not verify the destination folder. The note was not moved.';
 }
 
 // Path: dailynotesNavigation

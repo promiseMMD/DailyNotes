@@ -493,6 +493,7 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                         showHistoryActionsInToolbar: false,
                         autoFocus: widget.diary == null,
                         header: Column(
+                          key: const ValueKey('diary-document-header'),
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(

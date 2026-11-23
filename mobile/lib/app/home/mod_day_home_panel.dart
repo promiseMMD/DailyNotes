@@ -224,7 +224,7 @@ class _ModDayHomePanelState extends State<ModDayHomePanel>
                         Row(children: [
                           Expanded(child: Text(day.topicTitle,
                             maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall)),
+                            style: context.theme.typography.titleSmall.onSurface)),
                           IconButton(
                             tooltip: day.visibleLocal
                               ? '从首页隐藏' : '在首页显示',
@@ -237,16 +237,16 @@ class _ModDayHomePanelState extends State<ModDayHomePanel>
                           ),
                         ]),
                         Text(day.dayKey + ' · ' + day.count.toString() + ' 条',
-                          style: Theme.of(context).textTheme.labelSmall),
+                          style: context.theme.typography.labelSmall.onSurfaceVariant),
                         const SizedBox(height: 8),
                         Expanded(child: Text(
                           day.preview.isEmpty ? '（无文本预览）' : day.preview,
                           maxLines: 3, overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall)),
-                        const Align(
+                          style: context.theme.typography.bodySmall.onSurfaceVariant)),
+                        Align(
                           alignment: Alignment.centerRight,
                           child: Text('打开当天记录',
-                            style: TextStyle(fontSize: 12)),
+                            style: context.theme.typography.bodySmall.onSurfaceVariant),
                         ),
                       ],
                     ),

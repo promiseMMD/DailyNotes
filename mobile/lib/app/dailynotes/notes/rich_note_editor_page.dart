@@ -516,7 +516,57 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     }
   }
 
+  ({String path, String fingerprint})? _folderPath(
+    String id, {
+    Map<String, DailyFolder>? foldersById,
+  }) {
+    final byId =
+        foldersById ??
+        {for (final folder in widget.store.folders) folder.id: folder};
+    final ancestors = <DailyFolder>[];
+    final seen = <String>{};
+    String? cursor = id;
+    while (cursor != null && seen.add(cursor)) {
+      final folder = byId[cursor];
+      if (folder == null) return null;
+      ancestors.add(folder);
+      cursor = folder.parentId;
+    }
+    if (cursor != null) return null;
+    final path = ancestors.reversed.toList();
+    return (
+      path: path.map((folder) => folder.name).join(' / '),
+      fingerprint: jsonEncode([
+        for (final folder in path) [folder.id, folder.name, folder.parentId],
+      ]),
+    );
+  }
+
+  void _folderDestinationChanged({bool readFailed = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          readFailed
+              ? context.l10n.dailynotes.moveTargetCheckFailed
+              : context.l10n.dailynotes.moveTargetChanged,
+        ),
+      ),
+    );
+  }
+
   Future<void> _chooseFolder() async {
+    final editor = _editor;
+    final initialFolder = _folderId;
+    if (editor == null || editor.isDisposed || !_editing || !editor.editable) {
+      return;
+    }
+    final folders = widget.store.folders;
+    final byId = {for (final folder in folders) folder.id: folder};
+    final choices = [
+      for (final folder in folders)
+        (folder: folder, path: _folderPath(folder.id, foldersById: byId)),
+    ];
     final result = await showDialog<String>(
       context: context,
       builder: (c) => SimpleDialog(
@@ -526,20 +576,32 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
             onPressed: () => Navigator.pop(c, ''),
             child: Text(context.l10n.dailynotes.uncategorized),
           ),
-          for (final folder in widget.store.folders)
+          for (final choice in choices)
             SimpleDialogOption(
-              onPressed: () => Navigator.pop(c, folder.id),
-              child: Text(folder.name),
+              key: ValueKey('note-folder-${choice.folder.id}'),
+              onPressed: choice.path == null
+                  ? null
+                  : () => Navigator.pop(c, choice.folder.id),
+              child: Text(choice.path?.path ?? choice.folder.name),
             ),
         ],
       ),
     );
     if (result == null || !mounted || result == (_folderId ?? '')) return;
+    final destination = result.isEmpty ? null : _folderPath(result);
+    if (result.isNotEmpty && destination == null) {
+      _folderDestinationChanged();
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(context.l10n.dailynotes.moveNote),
-        content: Text(context.l10n.dailynotes.moveConfirm),
+        content: Text(
+          context.l10n.dailynotes.moveConfirmTarget(
+            target: destination?.path ?? context.l10n.dailynotes.uncategorized,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
@@ -552,10 +614,45 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
         ],
       ),
     );
-    if (confirmed == true && mounted && _editing) {
-      _folderId = result.isEmpty ? null : result;
-      _changed();
+    if (confirmed != true ||
+        !mounted ||
+        !_editing ||
+        editor.isDisposed ||
+        !editor.editable ||
+        !identical(_editor, editor) ||
+        _leaving ||
+        _allowPop ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
     }
+    try {
+      // Another store instance may have changed the tree while the dialog was
+      // open. Check the committed state before accepting the selected path.
+      await widget.store.refresh();
+    } catch (_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        _folderDestinationChanged(readFailed: true);
+      }
+      return;
+    }
+    if (!mounted ||
+        !_editing ||
+        editor.isDisposed ||
+        !editor.editable ||
+        !identical(_editor, editor) ||
+        _leaving ||
+        _allowPop ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    if (_folderId != initialFolder ||
+        (result.isNotEmpty &&
+            _folderPath(result)?.fingerprint != destination?.fingerprint)) {
+      _folderDestinationChanged();
+      return;
+    }
+    _folderId = result.isEmpty ? null : result;
+    _changed();
   }
 
   Future<void> _editTags() async {
@@ -850,9 +947,6 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                           ],
                         ),
                       ),
-                    Text(folder?.name ?? t.uncategorized),
-                    if (_tags.isNotEmpty)
-                      Text(_tags.map((tag) => '#$tag').join('  ')),
                     Expanded(
                       child: DailyNotesDocumentCanvas(
                         backController: _editorBack,
@@ -862,19 +956,31 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                         editable: _editing,
                         showHistoryActionsInToolbar: false,
                         autoFocus: widget.note == null,
-                        header: TextField(
-                          controller: _title,
-                          readOnly: !_editing,
-                          style:
-                              context.theme.typography.headlineSmall.onSurface,
-                          decoration: InputDecoration(
-                            hintText: t.noteTitle,
-                            border: InputBorder.none,
-                            filled: false,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 12,
+                        header: Column(
+                          key: const ValueKey('note-document-header'),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(folder?.name ?? t.uncategorized),
+                            if (_tags.isNotEmpty)
+                              Text(_tags.map((tag) => '#$tag').join('  ')),
+                            TextField(
+                              controller: _title,
+                              readOnly: !_editing,
+                              style: context
+                                  .theme
+                                  .typography
+                                  .headlineSmall
+                                  .onSurface,
+                              decoration: InputDecoration(
+                                hintText: t.noteTitle,
+                                border: InputBorder.none,
+                                filled: false,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),

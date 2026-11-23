@@ -219,7 +219,7 @@ class RecoveryInventoryPanel extends ConsumerWidget {
               children: [
                 Text(
                   _entryTitle(entry, index),
-                  style: Theme.of(sheetContext).textTheme.titleLarge,
+                  style: sheetContext.theme.typography.titleLarge.onSurface,
                 ),
                 const SizedBox(height: 16),
                 _detail(
@@ -258,7 +258,7 @@ class RecoveryInventoryPanel extends ConsumerWidget {
                     '本页面只读，不提供删除、修复或正式恢复操作。',
                     'This page is read-only. It provides no delete, repair, or live-restore operation.',
                   ),
-                  style: Theme.of(sheetContext).textTheme.bodySmall,
+                  style: sheetContext.theme.typography.bodySmall.onSurfaceVariant,
                 ),
                 Align(
                   alignment: Alignment.centerRight,
