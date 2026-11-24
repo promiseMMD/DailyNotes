@@ -14,6 +14,7 @@ import '../editor/document_history_actions.dart';
 import '../editor/document_outline_navigation.dart';
 import '../recovery/emergency_document_exporter.dart';
 import '../recovery/emergency_note_export.dart';
+import 'document_bookmarks.dart';
 import 'rich_note_outline.dart';
 
 /// AppFlowy document is the source of truth; text is only a list preview.
@@ -38,7 +39,15 @@ class RichNoteEditorPage extends StatefulWidget {
   State<RichNoteEditorPage> createState() => _RichNoteEditorPageState();
 }
 
-enum _NoteDocumentAction { outline, folder, tags, archive, unarchive, delete }
+enum _NoteDocumentAction {
+  outline,
+  bookmarks,
+  folder,
+  tags,
+  archive,
+  unarchive,
+  delete,
+}
 
 class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     with WidgetsBindingObserver {
@@ -362,6 +371,12 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
               child: Text(context.l10n.dailynotes.documentOutline),
             ),
             SimpleDialogOption(
+              key: const ValueKey('note-document-bookmarks'),
+              onPressed: () =>
+                  Navigator.pop(dialog, _NoteDocumentAction.bookmarks),
+              child: Text(context.l10n.dailynotes.documentBookmarks),
+            ),
+            SimpleDialogOption(
               key: const ValueKey('note-document-folder'),
               onPressed: _editing
                   ? () => Navigator.pop(dialog, _NoteDocumentAction.folder)
@@ -416,6 +431,8 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
     switch (action) {
       case _NoteDocumentAction.outline:
         await _openOutline(editor);
+      case _NoteDocumentAction.bookmarks:
+        await _openBookmarks(editor);
       case _NoteDocumentAction.folder:
         if (_editing && editor.editable) await _chooseFolder();
       case _NoteDocumentAction.tags:
@@ -427,6 +444,31 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
       case _NoteDocumentAction.delete:
         if (_editing && editor.editable) await _delete();
     }
+  }
+
+  Future<void> _openBookmarks(EditorState editor) async {
+    final scroll = _scrollController;
+    if (scroll == null) return;
+    bool alive() =>
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        !editor.isDisposed &&
+        identical(_editor, editor) &&
+        identical(_scrollController, scroll);
+    bool current() => alive() && ModalRoute.of(context)?.isCurrent == true;
+    if (!current()) return;
+    await openDocumentBookmarks(
+      context: context,
+      editor: editor,
+      scroll: scroll,
+      editorFocus: _editorFocus,
+      identity: _id == null ? null : 'note:$_id',
+      canStore: () => _readingPositionSaved,
+      isAlive: alive,
+      isCurrent: current,
+      navigation: _outlineNavigation,
+    );
   }
 
   Future<void> _setArchived(

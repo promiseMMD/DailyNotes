@@ -22,7 +22,7 @@ Future<DocumentOutlineResult?> showDocumentOutline({
   bool canReturn = false,
 }) async {
   final searchFocus = FocusNode(debugLabel: 'document-outline-search');
-  final guard = _OutlineSelectionGuard(editor, editorFocus, searchFocus);
+  final guard = DocumentOverlaySelectionGuard(editor, editorFocus, searchFocus);
   final route = RawDialogRoute<DocumentOutlineResult>(
     requestFocus: false,
     barrierDismissible: true,
@@ -63,11 +63,11 @@ Future<DocumentOutlineResult?> showDocumentOutline({
   }
 }
 
-/// Restores only the single selection-clear caused by focusing outline search.
+/// Restores only the single selection-clear caused by focusing an overlay.
 /// Any document, lock, lifecycle, selection or unrelated focus change makes
 /// the captured selection stale. It never requests the keyboard or focus.
-class _OutlineSelectionGuard with WidgetsBindingObserver {
-  _OutlineSelectionGuard(this.editor, this.editorFocus, this.searchFocus)
+class DocumentOverlaySelectionGuard with WidgetsBindingObserver {
+  DocumentOverlaySelectionGuard(this.editor, this.editorFocus, this.searchFocus)
     : selection = editor.selection,
       wasEditable = editor.editable {
     final selected = selection;

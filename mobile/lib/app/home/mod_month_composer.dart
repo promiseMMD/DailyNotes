@@ -14,6 +14,7 @@ import '../dailynotes/editor/document_editor_back_controller.dart';
 import '../dailynotes/editor/document_envelope.dart';
 import '../dailynotes/editor/document_history_actions.dart';
 import '../dailynotes/editor/document_outline_navigation.dart';
+import '../dailynotes/notes/document_bookmarks.dart';
 import '../dailynotes/notes/rich_note_outline.dart';
 import '../dailynotes/recovery/emergency_document_exporter.dart';
 import '../dailynotes/recovery/emergency_note_export.dart';
@@ -264,7 +265,13 @@ class ModMonthComposer extends StatefulWidget {
   State<ModMonthComposer> createState() => _ModMonthComposerState();
 }
 
-enum _ComposerDocumentAction { outline, copyDraft, emergencyExport, info }
+enum _ComposerDocumentAction {
+  outline,
+  bookmarks,
+  copyDraft,
+  emergencyExport,
+  info,
+}
 
 class _ModMonthComposerState extends State<ModMonthComposer>
     with WidgetsBindingObserver {
@@ -725,6 +732,13 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                   Navigator.pop(dialog, _ComposerDocumentAction.outline),
               child: Text(context.l10n.dailynotes.documentOutline),
             ),
+          if (editor != null)
+            SimpleDialogOption(
+              key: const ValueKey('long-document-bookmarks'),
+              onPressed: () =>
+                  Navigator.pop(dialog, _ComposerDocumentAction.bookmarks),
+              child: Text(context.l10n.dailynotes.documentBookmarks),
+            ),
           SimpleDialogOption(
             key: const ValueKey('long-document-copy'),
             onPressed: _busy
@@ -764,6 +778,8 @@ class _ModMonthComposerState extends State<ModMonthComposer>
     switch (action) {
       case _ComposerDocumentAction.outline:
         if (editor != null) await _openOutline(editor);
+      case _ComposerDocumentAction.bookmarks:
+        if (editor != null) await _openBookmarks(editor);
       case _ComposerDocumentAction.copyDraft:
         if (!_busy) await _copyDraft();
       case _ComposerDocumentAction.emergencyExport:
@@ -773,6 +789,34 @@ class _ModMonthComposerState extends State<ModMonthComposer>
           '${context.l10n.month.localOnly}\n\n${context.l10n.month.timezone}',
         );
     }
+  }
+
+  Future<void> _openBookmarks(af.EditorState editor) async {
+    final scroll = _documentScroll;
+    if (scroll == null) return;
+    bool alive() =>
+        mounted &&
+        !_busy &&
+        !_leaving &&
+        !_allowExit &&
+        !editor.isDisposed &&
+        identical(_documentEditor, editor) &&
+        identical(_documentScroll, scroll);
+    bool current() => alive() && ModalRoute.of(context)?.isCurrent == true;
+    if (!current()) return;
+    await openDocumentBookmarks(
+      context: context,
+      editor: editor,
+      scroll: scroll,
+      editorFocus: _documentFocus,
+      identity: widget.block == null
+          ? null
+          : 'long:${jsonEncode([widget.topicId, widget.block!.blockId])}',
+      canStore: () => _readingPositionSaved,
+      isAlive: alive,
+      isCurrent: current,
+      navigation: _outlineNavigation,
+    );
   }
 
   Future<void> _emergencyExport() async {

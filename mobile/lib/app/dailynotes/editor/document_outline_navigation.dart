@@ -124,6 +124,57 @@ class DocumentOutlineNavigation {
     return true;
   }
 
+  /// Jump to a previously verified viewport location and retain the current
+  /// position as the same-session return point. The caller must revalidate
+  /// the saved document snapshot, including after the frame boundary.
+  Future<bool?> jumpToPosition({
+    required int index,
+    required double alignment,
+    required bool Function() targetValid,
+    required af.EditorState editor,
+    required af.EditorScrollController scroll,
+    required bool Function() isCurrent,
+  }) async {
+    final generation = ++_generation;
+    bool current() =>
+        !_disposed &&
+        generation == _generation &&
+        !editor.isDisposed &&
+        isCurrent();
+    bool valid() {
+      try {
+        return index >= 0 &&
+            index <= editor.document.root.children.length &&
+            alignment.isFinite &&
+            alignment >= 0 &&
+            alignment < 1 &&
+            targetValid();
+      } catch (_) {
+        return false;
+      }
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!current()) return null;
+    if (!valid() ||
+        scroll.shrinkWrap ||
+        !scroll.itemScrollController.isAttached) {
+      return false;
+    }
+    final previous = _capture(editor, scroll);
+    final target = index == 0 ? null : editor.document.root.children[index - 1];
+    scroll.itemScrollController.jumpTo(index: index, alignment: alignment);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!current()) return null;
+    if (!valid() ||
+        (target != null &&
+            !identical(editor.document.nodeAtPath([index - 1]), target))) {
+      return false;
+    }
+    _previous = previous;
+    return true;
+  }
+
   /// Restores the last in-session viewport anchor without changing selection.
   /// Deleted anchors are rejected instead of navigating to a replacement.
   Future<bool?> returnToPrevious({

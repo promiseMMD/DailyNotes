@@ -1950,6 +1950,42 @@ class Translations$dailynotes$zh {
 	/// zh: '文档目录'
 	String get documentOutline => '文档目录';
 
+	/// zh: '书签'
+	String get documentBookmarks => '书签';
+
+	/// zh: '添加书签'
+	String get bookmarkAdd => '添加书签';
+
+	/// zh: '书签名称'
+	String get bookmarkName => '书签名称';
+
+	/// zh: '新书签'
+	String get bookmarkDefaultName => '新书签';
+
+	/// zh: '请输入书签名称'
+	String get bookmarkNameRequired => '请输入书签名称';
+
+	/// zh: '还没有书签'
+	String get bookmarkEmpty => '还没有书签';
+
+	/// zh: '正文已变化，暂时无法定位此书签。'
+	String get bookmarkUnavailable => '正文已变化，暂时无法定位此书签。';
+
+	/// zh: '无法识别当前位置，请滚动到可见的正文段落后重试。'
+	String get bookmarkPositionUnavailable => '无法识别当前位置，请滚动到可见的正文段落后重试。';
+
+	/// zh: '请先保存当前记录；长期记录的新追加需先提交。'
+	String get bookmarkSaveFirst => '请先保存当前记录；长期记录的新追加需先提交。';
+
+	/// zh: '正文或保存状态已变化，未添加书签，请重新选择位置。'
+	String get bookmarkChanged => '正文或保存状态已变化，未添加书签，请重新选择位置。';
+
+	/// zh: '书签读取或保存结果未确认，请关闭后重新打开重试。'
+	String get bookmarkStorageError => '书签读取或保存结果未确认，请关闭后重新打开重试。';
+
+	/// zh: '撤销删除'
+	String get bookmarkUndoDelete => '撤销删除';
+
 	/// zh: '搜索标题'
 	String get searchOutline => '搜索标题';
 

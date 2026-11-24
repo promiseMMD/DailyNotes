@@ -13,6 +13,7 @@ import '../editor/document_editor_back_controller.dart';
 import '../editor/document_envelope.dart';
 import '../editor/document_history_actions.dart';
 import '../editor/document_outline_navigation.dart';
+import '../notes/document_bookmarks.dart';
 import '../notes/rich_note_outline.dart';
 import '../recovery/emergency_document_exporter.dart';
 import '../recovery/emergency_note_export.dart';
@@ -37,6 +38,8 @@ class RichDiaryPage extends StatefulWidget {
   @override
   State<RichDiaryPage> createState() => _RichDiaryPageState();
 }
+
+enum _DiaryDocumentAction { outline, bookmarks }
 
 class _RichDiaryPageState extends State<RichDiaryPage>
     with WidgetsBindingObserver {
@@ -340,7 +343,7 @@ class _RichDiaryPageState extends State<RichDiaryPage>
   }
 
   Future<void> _showDocumentActions(af.EditorState editor) async {
-    final openOutline = await showDialog<bool>(
+    final action = await showDialog<_DiaryDocumentAction>(
       context: context,
       requestFocus: false,
       builder: (dialog) => SimpleDialog(
@@ -348,13 +351,52 @@ class _RichDiaryPageState extends State<RichDiaryPage>
         children: [
           SimpleDialogOption(
             key: const ValueKey('diary-document-outline'),
-            onPressed: () => Navigator.pop(dialog, true),
+            onPressed: () =>
+                Navigator.pop(dialog, _DiaryDocumentAction.outline),
             child: Text(context.l10n.dailynotes.documentOutline),
+          ),
+          SimpleDialogOption(
+            key: const ValueKey('diary-document-bookmarks'),
+            onPressed: () =>
+                Navigator.pop(dialog, _DiaryDocumentAction.bookmarks),
+            child: Text(context.l10n.dailynotes.documentBookmarks),
           ),
         ],
       ),
     );
-    if (openOutline == true) await _openOutline(editor);
+    switch (action) {
+      case _DiaryDocumentAction.outline:
+        await _openOutline(editor);
+      case _DiaryDocumentAction.bookmarks:
+        await _openBookmarks(editor);
+      case null:
+        return;
+    }
+  }
+
+  Future<void> _openBookmarks(af.EditorState editor) async {
+    final scroll = _scroll;
+    if (scroll == null) return;
+    bool alive() =>
+        mounted &&
+        !_leaving &&
+        !_allowPop &&
+        !editor.isDisposed &&
+        identical(_editor, editor) &&
+        identical(_scroll, scroll);
+    bool current() => alive() && ModalRoute.of(context)?.isCurrent == true;
+    if (!current()) return;
+    await openDocumentBookmarks(
+      context: context,
+      editor: editor,
+      scroll: scroll,
+      editorFocus: _focus,
+      identity: _saved == null ? null : 'diary:${_saved!.id}',
+      canStore: () => _readingPositionSaved,
+      isAlive: alive,
+      isCurrent: current,
+      navigation: _outlineNavigation,
+    );
   }
 
   Future<void> _navigateOutline(af.Node? target) async {
