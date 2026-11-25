@@ -1968,8 +1968,8 @@ class Translations$dailynotes$zh {
 	/// zh: '还没有书签'
 	String get bookmarkEmpty => '还没有书签';
 
-	/// zh: '正文已变化，暂时无法定位此书签。'
-	String get bookmarkUnavailable => '正文已变化，暂时无法定位此书签。';
+	/// zh: '正文、目标或保存状态已变化，暂时无法定位此书签。'
+	String get bookmarkUnavailable => '正文、目标或保存状态已变化，暂时无法定位此书签。';
 
 	/// zh: '无法识别当前位置，请滚动到可见的正文段落后重试。'
 	String get bookmarkPositionUnavailable => '无法识别当前位置，请滚动到可见的正文段落后重试。';
@@ -1985,6 +1985,15 @@ class Translations$dailynotes$zh {
 
 	/// zh: '撤销删除'
 	String get bookmarkUndoDelete => '撤销删除';
+
+	/// zh: '重新绑定到当前位置'
+	String get bookmarkRebind => '重新绑定到当前位置';
+
+	/// zh: '重新绑定书签'
+	String get bookmarkRebindTitle => '重新绑定书签';
+
+	/// zh: '将书签“{name}”重新绑定到当前阅读位置？原位置无法自动确认。'
+	String bookmarkRebindConfirm({required Object name}) => '将书签“${name}”重新绑定到当前阅读位置？原位置无法自动确认。';
 
 	/// zh: '搜索标题'
 	String get searchOutline => '搜索标题';

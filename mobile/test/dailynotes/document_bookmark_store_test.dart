@@ -85,7 +85,7 @@ void main() {
     final encoded = _bookmark('one').toJson();
     final cases = [
       '{broken',
-      jsonEncode({'v': 2, 'items': []}),
+      jsonEncode({'v': 3, 'items': []}),
       jsonEncode({
         'v': 1,
         'items': [encoded, encoded],
@@ -120,5 +120,28 @@ void main() {
       throwsFormatException,
     );
     expect(store.load().items.single.name, emojiName);
+  });
+
+  test('version 1 remains readable and version 2 persists invalidation', () {
+    final storage = MemoryKVStorage();
+    const identity = 'note:legacy';
+    final key =
+        'dailynotes.bookmarks.v1.${base64Url.encode(utf8.encode(identity))}';
+    final item = _bookmark('old');
+    storage.data[key] = jsonEncode({
+      'v': 1,
+      'items': [item.toJson()],
+    });
+    final store = DocumentBookmarkStore(storage, identity);
+    final previous = store.load();
+    expect(previous.items.single.invalidated, isFalse);
+    store.save(previous, [previous.items.single.invalidate()]);
+    expect((jsonDecode(storage.data[key] as String) as Map)['v'], 2);
+    expect(store.load().items.single.invalidated, isTrue);
+    storage.data[key] = jsonEncode({
+      'v': 1,
+      'items': [item.invalidate().toJson()],
+    });
+    expect(store.load, throwsFormatException);
   });
 }

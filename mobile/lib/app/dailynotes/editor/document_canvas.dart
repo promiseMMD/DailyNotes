@@ -10,6 +10,8 @@ import 'package:moodiary_theme/moodiary_theme.dart';
 import 'package:mui/mui.dart';
 
 import '../notes/rich_editor_toolbar.dart';
+import 'document_bookmark_rebaser.dart';
+import 'document_bookmark_store.dart';
 import 'document_editor_back_controller.dart';
 import 'document_reading_position.dart';
 
@@ -29,6 +31,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
     this.readingPositionIdentity,
     this.readingPositionIsSaved = false,
     this.readingPositionCanStore,
+    this.bookmarkRebaseController,
   });
 
   final af.EditorState editor;
@@ -49,6 +52,9 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
   /// Live check also covers the interval before the next widget rebuild.
   final bool Function()? readingPositionCanStore;
 
+  /// Optional explicit save acknowledgement for pages that pop immediately.
+  final DocumentBookmarkRebaseController? bookmarkRebaseController;
+
   @override
   State<DailyNotesDocumentCanvas> createState() =>
       _DailyNotesDocumentCanvasState();
@@ -57,6 +63,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
 class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
   Future<({List<String> families, bool hasUnavailable})>? _loadingFonts;
   DocumentReadingPosition? _readingPosition;
+  DocumentBookmarkRebaser? _bookmarkRebaser;
 
   @override
   void initState() {
@@ -73,10 +80,25 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
         !identical(oldWidget.scrollController, widget.scrollController) ||
         oldWidget.readingPositionIdentity != widget.readingPositionIdentity) {
       _readingPosition?.dispose();
+      if (_bookmarkRebaser case final rebaser?) {
+        oldWidget.bookmarkRebaseController?.detach(rebaser);
+      }
+      _bookmarkRebaser?.dispose();
       _startReadingPosition();
-    } else if (!oldWidget.readingPositionIsSaved &&
-        widget.readingPositionIsSaved) {
-      _readingPosition?.retryPendingWrite();
+    } else {
+      if (!identical(
+        oldWidget.bookmarkRebaseController,
+        widget.bookmarkRebaseController,
+      )) {
+        if (_bookmarkRebaser case final rebaser?) {
+          oldWidget.bookmarkRebaseController?.detach(rebaser);
+          widget.bookmarkRebaseController?.attach(rebaser);
+        }
+      }
+      if (!oldWidget.readingPositionIsSaved && widget.readingPositionIsSaved) {
+        _readingPosition?.retryPendingWrite();
+      }
+      if (widget.readingPositionIsSaved) _bookmarkRebaser?.documentSaved();
     }
   }
 
@@ -85,9 +107,16 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
     final storage = getIt.maybeGet<IKVStorage>();
     if (identity == null || storage == null || widget.header == null) {
       _readingPosition = null;
+      _bookmarkRebaser = null;
       return;
     }
     final editor = widget.editor;
+    bool canStore() =>
+        mounted &&
+        identical(widget.editor, editor) &&
+        widget.readingPositionIdentity == identity &&
+        (widget.readingPositionCanStore?.call() ??
+            widget.readingPositionIsSaved);
     _readingPosition = DocumentReadingPosition(
       editor: editor,
       scroll: widget.scrollController,
@@ -102,18 +131,23 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
           !editor.editable &&
           !widget.focusNode.hasFocus &&
           ModalRoute.of(context)?.isCurrent == true,
-      canStore: () =>
-          mounted &&
-          identical(widget.editor, editor) &&
-          widget.readingPositionIdentity == identity &&
-          (widget.readingPositionCanStore?.call() ??
-              widget.readingPositionIsSaved),
+      canStore: canStore,
     )..start();
+    _bookmarkRebaser = DocumentBookmarkRebaser(
+      editor: editor,
+      store: DocumentBookmarkStore(storage, identity),
+      canStore: canStore,
+    )..start();
+    widget.bookmarkRebaseController?.attach(_bookmarkRebaser!);
   }
 
   @override
   void dispose() {
     _readingPosition?.dispose();
+    if (_bookmarkRebaser case final rebaser?) {
+      widget.bookmarkRebaseController?.detach(rebaser);
+    }
+    _bookmarkRebaser?.dispose();
     super.dispose();
   }
 

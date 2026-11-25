@@ -63,7 +63,8 @@ Future<void> openDocumentBookmarks({
     final reached = await navigation.jumpToPosition(
       index: selected.index,
       alignment: selected.alignment,
-      targetValid: () => documentBookmarkMatches(editor, selected),
+      targetValid: () =>
+          canStore() && documentBookmarkMatches(editor, selected),
       editor: editor,
       scroll: scroll,
       isCurrent: isCurrent,
@@ -76,7 +77,7 @@ Future<void> openDocumentBookmarks({
   }
 }
 
-enum _BookmarkAction { rename, delete }
+enum _BookmarkAction { rename, rebind, delete }
 
 class _DocumentBookmarksDialog extends StatefulWidget {
   const _DocumentBookmarksDialog({
@@ -144,6 +145,8 @@ class _DocumentBookmarksDialogState extends State<_DocumentBookmarksDialog> {
 
   bool _valid(DocumentBookmark item, String? digest) =>
       digest != null &&
+      widget.canStore() &&
+      !item.invalidated &&
       item.digest == digest &&
       item.index <= widget.editor.document.root.children.length;
 
@@ -199,17 +202,10 @@ class _DocumentBookmarksDialogState extends State<_DocumentBookmarksDialog> {
     }
   }
 
-  Future<void> _add() async {
-    if (_busy || _blocked || !widget.isAlive()) return;
-    final t = context.l10n.dailynotes;
-    if (!widget.canStore()) {
-      _showMessage(t.bookmarkSaveFirst);
-      return;
-    }
+  ({int index, double alignment, String digest})? _currentPosition() {
     final scroll = widget.scroll;
     if (scroll.shrinkWrap || !scroll.itemScrollController.isAttached) {
-      _showMessage(t.bookmarkPositionUnavailable);
-      return;
+      return null;
     }
     final positions =
         scroll.itemPositionsListener.itemPositions.value
@@ -224,28 +220,104 @@ class _DocumentBookmarksDialogState extends State<_DocumentBookmarksDialog> {
             .toList()
           ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
     final digest = _currentDigest;
-    if (positions.isEmpty || digest == null) {
+    if (positions.isEmpty || digest == null) return null;
+    final position = positions.first;
+    return (
+      index: position.index,
+      alignment: position.itemLeadingEdge,
+      digest: digest,
+    );
+  }
+
+  Future<void> _add() async {
+    if (_busy || _blocked || !widget.isAlive()) return;
+    final t = context.l10n.dailynotes;
+    if (!widget.canStore()) {
+      _showMessage(t.bookmarkSaveFirst);
+      return;
+    }
+    final position = _currentPosition();
+    if (position == null) {
       _showMessage(t.bookmarkPositionUnavailable);
       return;
     }
-    final position = positions.first;
     setState(() => _busy = true);
     final name = await _name(t.bookmarkDefaultName);
     if (!mounted) return;
     setState(() => _busy = false);
     if (name == null) return;
-    if (!widget.isAlive() || !widget.canStore() || _currentDigest != digest) {
+    if (!widget.isAlive() ||
+        !widget.canStore() ||
+        _currentDigest != position.digest) {
       _showMessage(context.l10n.dailynotes.bookmarkChanged);
       return;
     }
     final item = DocumentBookmark(
       id: uuidV7(),
       name: name,
-      digest: digest,
+      digest: position.digest,
       index: position.index,
-      alignment: position.itemLeadingEdge,
+      alignment: position.alignment,
     );
     if (_replace([...?_snapshot?.items, item])) {
+      _deleted = null;
+      _deletedAt = null;
+    }
+  }
+
+  Future<void> _rebind(DocumentBookmark item) async {
+    if (_busy || _blocked || !widget.isAlive()) return;
+    final t = context.l10n.dailynotes;
+    if (!widget.canStore()) {
+      _showMessage(t.bookmarkSaveFirst);
+      return;
+    }
+    final position = _currentPosition();
+    if (position == null) {
+      _showMessage(t.bookmarkPositionUnavailable);
+      return;
+    }
+    setState(() => _busy = true);
+    final confirm = await showDialog<bool>(
+      context: context,
+      requestFocus: false,
+      builder: (dialog) => AlertDialog(
+        title: Text(t.bookmarkRebindTitle),
+        content: Text(t.bookmarkRebindConfirm(name: item.name)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(false),
+            child: Text(t.cancel),
+          ),
+          TextButton(
+            key: const ValueKey('bookmark-rebind-confirm'),
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: Text(t.bookmarkRebind),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (confirm != true) return;
+    if (!widget.isAlive() ||
+        !widget.canStore() ||
+        _currentDigest != position.digest) {
+      _showMessage(context.l10n.dailynotes.bookmarkChanged);
+      return;
+    }
+    final items = _snapshot?.items;
+    if (items == null || !items.any((entry) => entry.id == item.id)) return;
+    if (_replace([
+      for (final entry in items)
+        entry.id == item.id
+            ? entry.relocate(
+                digest: position.digest,
+                index: position.index,
+                alignment: position.alignment,
+              )
+            : entry,
+    ])) {
       _deleted = null;
       _deletedAt = null;
     }
@@ -360,6 +432,8 @@ class _DocumentBookmarksDialogState extends State<_DocumentBookmarksDialog> {
                               switch (action) {
                                 case _BookmarkAction.rename:
                                   unawaited(_rename(item));
+                                case _BookmarkAction.rebind:
+                                  unawaited(_rebind(item));
                                 case _BookmarkAction.delete:
                                   _delete(item);
                               }
@@ -369,6 +443,11 @@ class _DocumentBookmarksDialogState extends State<_DocumentBookmarksDialog> {
                                 value: _BookmarkAction.rename,
                                 child: Text(t.rename),
                               ),
+                              if (!valid)
+                                PopupMenuItem(
+                                  value: _BookmarkAction.rebind,
+                                  child: Text(t.bookmarkRebind),
+                                ),
                               PopupMenuItem(
                                 value: _BookmarkAction.delete,
                                 child: Text(t.delete),

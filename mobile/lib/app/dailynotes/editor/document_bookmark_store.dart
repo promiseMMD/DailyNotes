@@ -13,6 +13,7 @@ class DocumentBookmark {
     required this.digest,
     required this.index,
     required this.alignment,
+    this.invalidated = false,
   });
 
   final String id;
@@ -22,12 +23,37 @@ class DocumentBookmark {
   final int index;
   final double alignment;
 
+  /// Explicitly invalidated when its original in-session block cannot be tracked.
+  final bool invalidated;
+
   DocumentBookmark rename(String value) => DocumentBookmark(
     id: id,
     name: value,
     digest: digest,
     index: index,
     alignment: alignment,
+    invalidated: invalidated,
+  );
+
+  DocumentBookmark relocate({
+    required String digest,
+    required int index,
+    double? alignment,
+  }) => DocumentBookmark(
+    id: id,
+    name: name,
+    digest: digest,
+    index: index,
+    alignment: alignment ?? this.alignment,
+  );
+
+  DocumentBookmark invalidate() => DocumentBookmark(
+    id: id,
+    name: name,
+    digest: digest,
+    index: index,
+    alignment: alignment,
+    invalidated: true,
   );
 
   Map<String, Object> toJson() => {
@@ -36,24 +62,30 @@ class DocumentBookmark {
     'digest': digest,
     'index': index,
     'alignment': alignment,
+    if (invalidated) 'invalidated': true,
   };
 
-  static DocumentBookmark fromJson(Object? value) {
+  static DocumentBookmark fromJson(
+    Object? value, {
+    bool allowInvalidated = true,
+  }) {
     if (value is! Map ||
         value.keys.any(
-          (key) => !const {
+          (key) => !{
             'id',
             'name',
             'digest',
             'index',
             'alignment',
+            if (allowInvalidated) 'invalidated',
           }.contains(key),
         ) ||
         value['id'] is! String ||
         value['name'] is! String ||
         value['digest'] is! String ||
         value['index'] is! int ||
-        value['alignment'] is! num) {
+        value['alignment'] is! num ||
+        (value.containsKey('invalidated') && value['invalidated'] is! bool)) {
       throw const FormatException('invalid_bookmark');
     }
     final id = value['id'] as String;
@@ -77,6 +109,7 @@ class DocumentBookmark {
       digest: digest,
       index: index,
       alignment: alignment,
+      invalidated: value['invalidated'] == true,
     );
   }
 }
@@ -90,6 +123,7 @@ bool documentBookmarkMatches(
   DocumentBookmark bookmark,
 ) =>
     !editor.isDisposed &&
+    !bookmark.invalidated &&
     bookmark.index <= editor.document.root.children.length &&
     bookmark.digest == documentBookmarkDigest(editor);
 
@@ -115,12 +149,17 @@ class DocumentBookmarkStore {
     final decoded = jsonDecode(raw);
     if (decoded is! Map ||
         decoded.length != 2 ||
-        decoded['v'] != 1 ||
+        (decoded['v'] != 1 && decoded['v'] != 2) ||
         decoded['items'] is! List) {
       throw const FormatException('invalid_bookmark_collection');
     }
     final items = (decoded['items'] as List)
-        .map(DocumentBookmark.fromJson)
+        .map(
+          (item) => DocumentBookmark.fromJson(
+            item,
+            allowInvalidated: decoded['v'] == 2,
+          ),
+        )
         .toList(growable: false);
     if (items.map((item) => item.id).toSet().length != items.length) {
       throw const FormatException('duplicate_bookmark_id');
@@ -143,7 +182,7 @@ class DocumentBookmarkStore {
     if (storage.get<String>(_key) != expected.raw) {
       throw StateError('bookmark_collection_changed');
     }
-    final encoded = jsonEncode({'v': 1, 'items': checked});
+    final encoded = jsonEncode({'v': 2, 'items': checked});
     storage.set<String>(_key, encoded);
     if (storage.get<String>(_key) != encoded) {
       throw StateError('bookmark_write_unconfirmed');

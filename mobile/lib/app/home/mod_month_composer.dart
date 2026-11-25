@@ -9,6 +9,7 @@ import 'package:moodiary_utils/moodiary_utils.dart';
 import 'package:mui/mui.dart';
 
 import '../dailynotes/data/daily_notes_store.dart';
+import '../dailynotes/editor/document_bookmark_rebaser.dart';
 import '../dailynotes/editor/document_canvas.dart';
 import '../dailynotes/editor/document_editor_back_controller.dart';
 import '../dailynotes/editor/document_envelope.dart';
@@ -277,6 +278,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
     with WidgetsBindingObserver {
   final _editorBack = DocumentEditorBackController();
   final _outlineNavigation = DocumentOutlineNavigation();
+  final _bookmarkRebaseController = DocumentBookmarkRebaseController();
   late final _editor = widget.editorController ?? MoodiaryEditorController();
   final FocusNode _documentFocus = FocusNode(
     debugLabel: 'long-record-document',
@@ -285,6 +287,8 @@ class _ModMonthComposerState extends State<ModMonthComposer>
   af.EditorScrollController? _documentScroll;
   StreamSubscription<dynamic>? _documentChanges;
   String? _initialNativeDocument;
+  String? _confirmedBookmarkBody;
+  String? _confirmedBookmarkNativeDocument;
   late bool _documentUnlocked;
   late final String _blockId;
   late final String? _parentRevisionId;
@@ -320,11 +324,24 @@ class _ModMonthComposerState extends State<ModMonthComposer>
   bool get _editing => widget.action == 'edit';
   bool get _locked => _busy || _leaving || _attempt != null;
   bool get _documentEditable => _editing && _documentUnlocked && !_locked;
-  bool get _readingPositionSaved =>
-      widget.block != null &&
-      _body == widget.block!.tiptapJson &&
-      !_snapshotUncertain &&
-      _attempt == null;
+  bool get _readingPositionSaved {
+    if (widget.block == null || _snapshotUncertain) return false;
+    if (_attempt == null) return _body == widget.block!.tiptapJson;
+    final editor = _documentEditor;
+    if (_confirmedBookmarkBody == null ||
+        _body != _confirmedBookmarkBody ||
+        _confirmedBookmarkNativeDocument == null ||
+        editor == null ||
+        editor.isDisposed) {
+      return false;
+    }
+    try {
+      return jsonEncode(editor.document.toJson()) ==
+          _confirmedBookmarkNativeDocument;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
@@ -994,6 +1011,30 @@ class _ModMonthComposerState extends State<ModMonthComposer>
         await widget.draftStore!.removeDraft(widget.draftKey!);
       }
       if (!mounted) return;
+      // The formal revision is acknowledged. Carry same-session bookmarks
+      // forward only if the still-live editor exactly matches that revision.
+      final editor = _documentEditor;
+      if (_editing &&
+          widget.block != null &&
+          editor != null &&
+          !editor.isDisposed &&
+          !saved.deleted &&
+          saved.blockId == widget.block!.blockId &&
+          saved.topicId == widget.topicId &&
+          saved.tiptapJson == _body) {
+        try {
+          if (DailyNotesDocumentEnvelope.encode(editor.document) ==
+              saved.tiptapJson) {
+            _confirmedBookmarkBody = saved.tiptapJson;
+            _confirmedBookmarkNativeDocument = jsonEncode(
+              editor.document.toJson(),
+            );
+            _bookmarkRebaseController.documentSaved();
+          }
+        } catch (_) {
+          // Metadata must never turn an acknowledged formal save into failure.
+        }
+      }
       setState(() {
         _allowExit = true;
         _busy = false;
@@ -1227,6 +1268,8 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                                 readingPositionIsSaved: _readingPositionSaved,
                                 readingPositionCanStore: () =>
                                     _readingPositionSaved,
+                                bookmarkRebaseController:
+                                    _bookmarkRebaseController,
                                 editable: _documentEditable,
                                 showHistoryActionsInToolbar: false,
                                 autoFocus:

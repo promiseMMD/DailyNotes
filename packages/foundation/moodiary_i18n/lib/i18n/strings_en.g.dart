@@ -713,12 +713,15 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get bookmarkDefaultName => 'New bookmark';
 	@override String get bookmarkNameRequired => 'Enter a bookmark name';
 	@override String get bookmarkEmpty => 'No bookmarks yet';
-	@override String get bookmarkUnavailable => 'The document changed, so this bookmark cannot be located yet.';
+	@override String get bookmarkUnavailable => 'The document, target, or save state changed, so this bookmark cannot be located yet.';
 	@override String get bookmarkPositionUnavailable => 'The current position cannot be identified. Scroll to a visible paragraph and try again.';
 	@override String get bookmarkSaveFirst => 'Save this record first. New long-record entries must be submitted.';
 	@override String get bookmarkChanged => 'The document or its save state changed. Select the position again.';
 	@override String get bookmarkStorageError => 'Bookmarks could not be read or their save was not confirmed. Close and reopen to retry.';
 	@override String get bookmarkUndoDelete => 'Undo deletion';
+	@override String get bookmarkRebind => 'Relink to current position';
+	@override String get bookmarkRebindTitle => 'Relink bookmark';
+	@override String bookmarkRebindConfirm({required Object name}) => 'Relink “${name}” to the current reading position? Its original position cannot be verified automatically.';
 	@override String get searchOutline => 'Search headings';
 	@override String get clearOutlineSearch => 'Clear heading search';
 	@override String get outlinePreviousPosition => 'Return to previous reading position';
