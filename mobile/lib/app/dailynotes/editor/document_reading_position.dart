@@ -14,9 +14,17 @@ class _ViewportAnchor {
   final double alignment;
 }
 
+class _EditingAnchor {
+  const _EditingAnchor(this.anchor, this.expectedRaw);
+
+  final _ViewportAnchor anchor;
+  final String? expectedRaw;
+}
+
 /// Stores a reading position independently of the document and its selection.
 /// A serialized position is usable only with exactly the same document bytes;
-/// AppFlowy's runtime node IDs do not survive serialization.
+/// AppFlowy's runtime node IDs do not survive serialization. A live anchor can
+/// follow edits in the same session after the owning page confirms the save.
 class DocumentReadingPosition with WidgetsBindingObserver {
   DocumentReadingPosition({
     required this.editor,
@@ -44,6 +52,11 @@ class DocumentReadingPosition with WidgetsBindingObserver {
   bool _active = false;
   bool _dirty = false;
   bool _disposed = false;
+  bool _editPending = false;
+  bool _waitForUserScroll = false;
+  bool _waitForScroll = false;
+  bool _acceptPendingViewport = false;
+  _EditingAnchor? _editingAnchor;
 
   String _documentDigest() => _digest ??= sha256
       .convert(utf8.encode(jsonEncode(editor.document.toJson())))
@@ -54,9 +67,27 @@ class DocumentReadingPosition with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     scroll.itemPositionsListener.itemPositions.addListener(_positionChanged);
     _transactions = editor.transactionStream.listen((event) {
-      if (event.$1 != af.TransactionTime.after || _disposed) return;
-      _digest = null;
-      if (_anchor != null) _scheduleWrite();
+      if (_disposed || editor.isDisposed) return;
+      if (event.$1 == af.TransactionTime.before) {
+        if (!_editPending) {
+          _editPending = true;
+          _acceptPendingViewport = false;
+          final anchor = _anchor;
+          if (anchor != null) {
+            try {
+              _editingAnchor = _EditingAnchor(
+                anchor,
+                storage.get<String>(_key),
+              );
+            } catch (_) {
+              _editingAnchor = null;
+            }
+          }
+        }
+      } else if (event.$1 == af.TransactionTime.after) {
+        _digest = null;
+        if (_anchor != null || _editingAnchor != null) _scheduleWrite();
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed || editor.isDisposed) return;
@@ -75,6 +106,12 @@ class DocumentReadingPosition with WidgetsBindingObserver {
       final raw = storage.get<String>(_key);
       if (raw == null || !scroll.itemScrollController.isAttached) return;
       final value = jsonDecode(raw);
+      if (value is Map && value['v'] == 2 && value['invalidated'] == true) {
+        // Reopening must not let a later layout overwrite the invalidation.
+        _waitForUserScroll = true;
+        _waitForScroll = true;
+        return;
+      }
       if (value is! Map ||
           value['v'] != 1 ||
           value['digest'] is! String ||
@@ -94,6 +131,10 @@ class DocumentReadingPosition with WidgetsBindingObserver {
         return;
       }
       scroll.itemScrollController.jumpTo(index: index, alignment: alignment);
+      _anchor = _ViewportAnchor(
+        index == 0 ? null : editor.document.root.children[index - 1],
+        alignment,
+      );
     } catch (_) {
       // Corrupt metadata, inaccessible storage or a changed document must not
       // prevent opening the original document.
@@ -101,7 +142,14 @@ class DocumentReadingPosition with WidgetsBindingObserver {
   }
 
   void _positionChanged() {
-    if (!_active || _disposed || editor.isDisposed) return;
+    if (!_active ||
+        _disposed ||
+        editor.isDisposed ||
+        _waitForUserScroll ||
+        _waitForScroll ||
+        (_editPending && !_acceptPendingViewport)) {
+      return;
+    }
     final positions =
         scroll.itemPositionsListener.itemPositions.value
             .where(
@@ -130,37 +178,98 @@ class DocumentReadingPosition with WidgetsBindingObserver {
   }
 
   void _flush() {
-    if (!_dirty || _disposed || editor.isDisposed || !canStore()) return;
+    if (_disposed || editor.isDisposed || !canStore()) return;
+    final editing = _editingAnchor;
+    if (!_dirty && editing == null) {
+      _editPending = false;
+      _acceptPendingViewport = false;
+      return;
+    }
     final anchor = _anchor;
-    if (anchor == null) return;
     try {
-      final node = anchor.node;
-      var index = 0;
-      if (node != null) {
-        final path = node.path;
-        if (path.length != 1 ||
-            !identical(editor.document.nodeAtPath(path), node)) {
+      if (editing != null) {
+        // Do not overwrite a position written by another active view.
+        if (storage.get<String>(_key) != editing.expectedRaw) {
+          _anchor = null;
+          _waitForUserScroll = true;
+          _waitForScroll = true;
+          _dirty = false;
+          _editPending = false;
+          _acceptPendingViewport = false;
+          _editingAnchor = null;
           return;
         }
-        index = path.first + 1;
+        if (_indexOf(editing.anchor) == null) {
+          // An identical replacement must not inherit the old anchor, even
+          // if the document's serialized bytes happen to be the same.
+          if (editing.expectedRaw != null) {
+            final invalidated = jsonEncode({'v': 2, 'invalidated': true});
+            storage.set<String>(_key, invalidated);
+            if (storage.get<String>(_key) != invalidated) {
+              throw StateError('reading_position_write_unconfirmed');
+            }
+          }
+          _anchor = null;
+          // Layout after deletion can report the replacement as visible even
+          // without a user scroll. Do not turn that into a new reading anchor.
+          _waitForUserScroll = true;
+          _waitForScroll = true;
+          _dirty = false;
+          _editPending = false;
+          _acceptPendingViewport = false;
+          _editingAnchor = null;
+          return;
+        }
       }
-      storage.set<String>(
-        _key,
-        jsonEncode({
-          'v': 1,
-          'digest': _documentDigest(),
-          'index': index,
-          'alignment': anchor.alignment,
-        }),
-      );
+      if (anchor == null) return;
+      final index = _indexOf(anchor);
+      if (index == null) return;
+      final encoded = jsonEncode({
+        'v': 1,
+        'digest': _documentDigest(),
+        'index': index,
+        'alignment': anchor.alignment,
+      });
+      storage.set<String>(_key, encoded);
+      if (storage.get<String>(_key) != encoded) {
+        throw StateError('reading_position_write_unconfirmed');
+      }
+      if (editing != null) _waitForScroll = true;
       _dirty = false;
+      _editPending = false;
+      _acceptPendingViewport = false;
+      _editingAnchor = null;
     } catch (_) {
       // Keep the last stored position on a write failure and allow a retry.
     }
   }
 
+  int? _indexOf(_ViewportAnchor anchor) {
+    final node = anchor.node;
+    if (node == null) return 0;
+    try {
+      final path = node.path;
+      if (path.length != 1 ||
+          !identical(editor.document.nodeAtPath(path), node)) {
+        return null;
+      }
+      return path.first + 1;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Retry after the owning page confirms that the current document was saved.
   void retryPendingWrite() => _flush();
+
+  /// Ignore layout-only position changes during edits. A scroll can select a
+  /// new viewport; after invalidation, require an explicit drag first.
+  void scrollStarted({required bool userDrag}) {
+    if (_waitForUserScroll && !userDrag) return;
+    if (userDrag) _waitForUserScroll = false;
+    _waitForScroll = false;
+    if (_editPending) _acceptPendingViewport = true;
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

@@ -4,19 +4,6 @@ import 'package:appflowy_editor/appflowy_editor.dart' as af;
 
 import 'document_bookmark_store.dart';
 
-/// Allows an owning page to report a confirmed save before it is popped.
-class DocumentBookmarkRebaseController {
-  DocumentBookmarkRebaser? _target;
-
-  void attach(DocumentBookmarkRebaser target) => _target = target;
-
-  void detach(DocumentBookmarkRebaser target) {
-    if (identical(_target, target)) _target = null;
-  }
-
-  void documentSaved() => _target?.documentSaved();
-}
-
 class _TrackedBookmark {
   const _TrackedBookmark(this.digest, this.index, this.node);
 

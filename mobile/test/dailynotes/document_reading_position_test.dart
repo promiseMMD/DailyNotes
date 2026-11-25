@@ -49,6 +49,19 @@ class _ReadingStorage extends IKVStorage {
   void clear() => data.clear();
 }
 
+class _UncertainReadingRepository extends ModNativeMonthRepository {
+  _UncertainReadingRepository({required super.store, required super.diaries});
+
+  bool loseAcknowledgement = false;
+
+  @override
+  Future<ModStoredBlock> commit(ModMonthMutation operation) async {
+    final saved = await super.commit(operation);
+    if (loseAcknowledgement) throw StateError('acknowledgement lost');
+    return saved;
+  }
+}
+
 Widget _app(Widget page) => TranslationProvider(
   child: MaterialApp(
     theme: buildMuiTheme(brightness: Brightness.light),
@@ -78,6 +91,17 @@ double _position(WidgetTester tester, int index) =>
     _scroll(tester).itemPositionsListener.itemPositions.value
         .singleWhere((item) => item.index == index)
         .itemLeadingEdge;
+
+int _firstVisibleIndex(WidgetTester tester) {
+  final positions =
+      _scroll(tester).itemPositionsListener.itemPositions.value
+          .where(
+            (item) => item.itemLeadingEdge >= 0 && item.itemLeadingEdge < 1,
+          )
+          .toList()
+        ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
+  return positions.first.index;
+}
 
 Future<double> _moveAndSave(WidgetTester tester) async {
   _scroll(tester).itemScrollController.jumpTo(index: 25, alignment: 0.2);
@@ -145,6 +169,211 @@ void main() {
     expect(store.notes.single.documentJson, json);
   });
 
+  testWidgets('a reopened note follows its reading block after a saved edit', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    final store = DailyNotesStore(db);
+    await store.open();
+    final document = _document();
+    final note = await store.saveRichNote(
+      title: '笔记',
+      plainText: '正文',
+      documentJson: jsonEncode(document.toJson()),
+      documentVersion: 1,
+    );
+    document.dispose();
+    await tester.binding.setSurfaceSize(const Size(430, 700));
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    });
+    await tester.pumpWidget(_app(RichNoteEditorPage(store: store, note: note)));
+    await tester.pumpAndSettle();
+    await _moveAndSave(tester);
+    final key =
+        'dailynotes.reading.v1.${base64Url.encode(utf8.encode('note:${note.id}'))}';
+    final before = jsonDecode(storage.data[key] as String) as Map;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(_app(RichNoteEditorPage(store: store, note: note)));
+    await tester.pumpAndSettle();
+    expect(_position(tester, 25), closeTo(0.2, 0.03));
+    final editor = tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .editor;
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    final visibleIndex = _firstVisibleIndex(tester);
+    expect(visibleIndex, greaterThan(0));
+    final target = editor.document.root.children[visibleIndex - 1];
+    await editor.apply(
+      editor.transaction..insertNode([0], af.paragraphNode(text: '新增')),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    final after = jsonDecode(storage.data[key] as String) as Map;
+    expect(after['digest'], isNot(before['digest']));
+    expect(after['index'], target.path.first + 1);
+    final saved = store.notes.single;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      _app(RichNoteEditorPage(store: store, note: saved)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      _position(tester, after['index'] as int),
+      closeTo((after['alignment'] as num).toDouble(), 0.06),
+    );
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    final reopenedEditor = tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .editor;
+    await reopenedEditor.insertText(0, '再次编辑', path: [0]);
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    final beforeNavigation = jsonDecode(storage.data[key] as String) as Map;
+    _scroll(tester).itemScrollController.jumpTo(index: 40, alignment: 0.2);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 750));
+    final afterNavigation = jsonDecode(storage.data[key] as String) as Map;
+    expect(afterNavigation['index'], _firstVisibleIndex(tester));
+    expect(
+      afterNavigation['index'],
+      greaterThan(beforeNavigation['index'] as int),
+    );
+    final latest = store.notes.single;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      _app(RichNoteEditorPage(store: store, note: latest)),
+    );
+    await tester.pumpAndSettle();
+    expect(_position(tester, 40), closeTo(0.2, 0.06));
+  });
+
+  testWidgets('a replaced identical reading block is not silently restored', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    final store = DailyNotesStore(db);
+    await store.open();
+    final document = _document();
+    final note = await store.saveRichNote(
+      title: '笔记',
+      plainText: '正文',
+      documentJson: jsonEncode(document.toJson()),
+      documentVersion: 1,
+    );
+    document.dispose();
+    await tester.binding.setSurfaceSize(const Size(430, 700));
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    });
+    await tester.pumpWidget(_app(RichNoteEditorPage(store: store, note: note)));
+    await tester.pumpAndSettle();
+    await _moveAndSave(tester);
+    final key =
+        'dailynotes.reading.v1.${base64Url.encode(utf8.encode('note:${note.id}'))}';
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(_app(RichNoteEditorPage(store: store, note: note)));
+    await tester.pumpAndSettle();
+    final editor = tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .editor;
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    final visibleIndex = _firstVisibleIndex(tester);
+    expect(visibleIndex, greaterThan(0));
+    final target = editor.document.root.children[visibleIndex - 1];
+    final targetText = target.delta!.toPlainText();
+    final targetPath = target.path;
+    final before = jsonEncode(editor.document.toJson());
+    await editor.apply(editor.transaction..deleteNode(target));
+    await editor.apply(
+      editor.transaction
+        ..insertNode(targetPath, af.paragraphNode(text: targetText)),
+    );
+    expect(jsonEncode(editor.document.toJson()), before);
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    final after = jsonDecode(storage.data[key] as String) as Map;
+    expect(after['invalidated'], isTrue);
+    final saved = store.notes.single;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      _app(RichNoteEditorPage(store: store, note: saved)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      _scroll(tester).itemPositionsListener.itemPositions.value
+          .any((item) => item.index == 0 && item.itemTrailingEdge > 0),
+      isTrue,
+    );
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    expect(
+      (jsonDecode(storage.data[key] as String) as Map)['invalidated'],
+      isTrue,
+    );
+    await tester.drag(find.byType(af.AppFlowyEditor), const Offset(0, -350));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 750));
+    final refreshed = jsonDecode(storage.data[key] as String) as Map;
+    expect(refreshed['v'], 1);
+    expect(refreshed['index'], greaterThan(0));
+  });
+
+  testWidgets('another view can update reading metadata while an edit saves', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    final store = DailyNotesStore(db);
+    await store.open();
+    final document = _document();
+    final note = await store.saveRichNote(
+      title: '笔记',
+      plainText: '正文',
+      documentJson: jsonEncode(document.toJson()),
+      documentVersion: 1,
+    );
+    document.dispose();
+    await tester.binding.setSurfaceSize(const Size(430, 700));
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    });
+    await tester.pumpWidget(_app(RichNoteEditorPage(store: store, note: note)));
+    await tester.pumpAndSettle();
+    await _moveAndSave(tester);
+    final key =
+        'dailynotes.reading.v1.${base64Url.encode(utf8.encode('note:${note.id}'))}';
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    final editor = tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .editor;
+    await editor.insertText(0, '修改', path: [0]);
+    final otherView = jsonEncode({'v': 2, 'invalidated': true});
+    storage.data[key] = otherView;
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    expect(storage.data[key], otherView);
+    await tester.drag(find.byType(af.AppFlowyEditor), const Offset(0, -350));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 750));
+    final afterDrag = jsonDecode(storage.data[key] as String) as Map;
+    expect(afterDrag['v'], 1);
+    await tester.pumpWidget(const SizedBox());
+    expect((jsonDecode(storage.data[key] as String) as Map)['v'], 1);
+  });
+
   testWidgets('diary reopens without editing or rewriting its content', (
     tester,
   ) async {
@@ -175,6 +404,64 @@ void main() {
       () => RichDiaryPage(repository: repository, diary: diary),
     );
     expect((await repository.getDiaryByBusinessId(diary.id))!.content, body);
+  });
+
+  testWidgets('a saved diary edit carries its live reading position', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    final repository = DiaryRepository(db);
+    final document = _document();
+    final body = DailyNotesDocumentEnvelope.encode(document);
+    document.dispose();
+    final diary = Diary.create(
+      title: '日记',
+      content: body,
+      contentText: '正文',
+      imageName: [],
+      audioName: [],
+      videoName: [],
+      tags: [],
+      type: DiaryType.tiptap,
+    );
+    await repository.insertADiary(diary);
+    final initial = (await repository.getDiaryByBusinessId(diary.id))!;
+    await tester.binding.setSurfaceSize(const Size(430, 700));
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    });
+    await _checkReopen(
+      tester,
+      () => RichDiaryPage(repository: repository, diary: initial),
+    );
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    final editor = tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .editor;
+    final target =
+        editor.document.root.children[_firstVisibleIndex(tester) - 1];
+    final key =
+        'dailynotes.reading.v1.${base64Url.encode(utf8.encode('diary:${diary.id}'))}';
+    final original = jsonDecode(storage.data[key] as String) as Map;
+    await editor.apply(
+      editor.transaction..insertNode([0], af.paragraphNode(text: '新增')),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    final updated = jsonDecode(storage.data[key] as String) as Map;
+    expect(updated['digest'], isNot(original['digest']));
+    expect(updated['index'], target.path.first + 1);
+    final saved = (await repository.getDiaryByBusinessId(diary.id))!;
+    expect(saved.content, isNot(body));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      _app(RichDiaryPage(repository: repository, diary: saved)),
+    );
+    await tester.pumpAndSettle();
+    expect(_position(tester, updated['index'] as int), greaterThanOrEqualTo(0));
   });
 
   testWidgets('an existing long record reopens without another submission', (
@@ -234,6 +521,116 @@ void main() {
     expect(blocks, hasLength(1));
     expect(blocks.single.revisionId, block.revisionId);
     expect(blocks.single.tiptapJson, body);
+  });
+
+  testWidgets('long-record reading position waits for an acknowledged commit', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    final diaries = DiaryRepository(db);
+    final topic = Diary.create(
+      title: '长期记录',
+      content: '',
+      contentText: '',
+      imageName: [],
+      audioName: [],
+      videoName: [],
+      tags: [ModDiary.topicTag],
+      type: DiaryType.tiptap,
+    );
+    await diaries.insertADiary(topic);
+    final repository = _UncertainReadingRepository(
+      store: ModMonthStore(db),
+      diaries: diaries,
+    );
+    final document = _document();
+    final body = DailyNotesDocumentEnvelope.encode(document);
+    document.dispose();
+    var block = await repository.commit(
+      ModMonthMutation(
+        operationId: 'reading-edit-operation-1',
+        revisionId: 'reading-edit-revision-1',
+        blockId: 'reading-edit-block-1',
+        topicId: topic.id,
+        monthKey: '2026-11',
+        kind: 'entry',
+        parentRevisionId: null,
+        dayKey: '2026-11-17',
+        occurredAtMs: DateTime(2026, 11, 17).millisecondsSinceEpoch,
+        tiptapJson: body,
+      ),
+    );
+    final identity = 'long:${jsonEncode([topic.id, block.blockId])}';
+    final key =
+        'dailynotes.reading.v1.${base64Url.encode(utf8.encode(identity))}';
+    await tester.binding.setSurfaceSize(const Size(430, 700));
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ModMonthComposer(
+                    repository: repository,
+                    topicId: topic.id,
+                    topicTitle: topic.title,
+                    monthKey: '2026-11',
+                    block: block,
+                  ),
+                ),
+              ),
+              child: const Text('打开'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    await _moveAndSave(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    final editor = tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .editor;
+    final target =
+        editor.document.root.children[_firstVisibleIndex(tester) - 1];
+    final original = storage.data[key];
+    await editor.apply(
+      editor.transaction..insertNode([0], af.paragraphNode(text: '新增')),
+    );
+    final expectedIndex = target.path.first + 1;
+    await tester.pumpAndSettle();
+    expect(storage.data[key], original);
+    repository.loseAcknowledgement = true;
+    await tester.tap(find.widgetWithText(FilledButton, l10n.common.save));
+    await tester.pumpAndSettle();
+    expect(storage.data[key], original);
+    expect(find.byType(ModMonthComposer), findsOneWidget);
+    repository.loseAcknowledgement = false;
+    await tester.tap(find.widgetWithText(FilledButton, l10n.month.retrySame));
+    await tester.pumpAndSettle();
+    expect(find.byType(ModMonthComposer), findsNothing);
+    final updated = jsonDecode(storage.data[key] as String) as Map;
+    expect(updated['index'], expectedIndex);
+    expect(
+      updated['digest'],
+      isNot((jsonDecode(original! as String) as Map)['digest']),
+    );
+    block = (await repository.load(topic.id, '2026-11')).blocks.single;
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    expect(_position(tester, updated['index'] as int), greaterThanOrEqualTo(0));
   });
 
   testWidgets('changed content never reuses a stale document position', (
@@ -301,6 +698,7 @@ void main() {
     document.dispose();
     await tester.binding.setSurfaceSize(const Size(430, 700));
     addTearDown(() async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpWidget(const SizedBox());
       store.dispose();
       await db.close();
@@ -321,6 +719,24 @@ void main() {
     await tester.pumpWidget(_app(RichNoteEditorPage(store: store, note: note)));
     await tester.pumpAndSettle();
     expect(_position(tester, 25), closeTo(0.2, 0.03));
+    await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
+    await tester.pumpAndSettle();
+    final editor = tester
+        .widget<DailyNotesDocumentCanvas>(find.byType(DailyNotesDocumentCanvas))
+        .editor;
+    final key =
+        'dailynotes.reading.v1.${base64Url.encode(utf8.encode('note:${note.id}'))}';
+    final beforeEdit = storage.data[key];
+    storage.failWrites = true;
+    await editor.insertText(0, '已保存的修改', path: [0]);
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    expect(store.notes.single.body, contains('已保存的修改'));
+    expect(storage.data[key], beforeEdit);
+    storage.failWrites = false;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    expect(storage.data[key], isNot(beforeEdit));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   });
 
   testWidgets('unsaved edits cannot replace a confirmed reading position', (

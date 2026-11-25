@@ -9,11 +9,11 @@ import 'package:moodiary_utils/moodiary_utils.dart';
 import 'package:mui/mui.dart';
 
 import '../dailynotes/data/daily_notes_store.dart';
-import '../dailynotes/editor/document_bookmark_rebaser.dart';
 import '../dailynotes/editor/document_canvas.dart';
 import '../dailynotes/editor/document_editor_back_controller.dart';
 import '../dailynotes/editor/document_envelope.dart';
 import '../dailynotes/editor/document_history_actions.dart';
+import '../dailynotes/editor/document_metadata_save_controller.dart';
 import '../dailynotes/editor/document_outline_navigation.dart';
 import '../dailynotes/notes/document_bookmarks.dart';
 import '../dailynotes/notes/rich_note_outline.dart';
@@ -278,7 +278,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
     with WidgetsBindingObserver {
   final _editorBack = DocumentEditorBackController();
   final _outlineNavigation = DocumentOutlineNavigation();
-  final _bookmarkRebaseController = DocumentBookmarkRebaseController();
+  final _metadataSaveController = DocumentMetadataSaveController();
   late final _editor = widget.editorController ?? MoodiaryEditorController();
   final FocusNode _documentFocus = FocusNode(
     debugLabel: 'long-record-document',
@@ -287,8 +287,8 @@ class _ModMonthComposerState extends State<ModMonthComposer>
   af.EditorScrollController? _documentScroll;
   StreamSubscription<dynamic>? _documentChanges;
   String? _initialNativeDocument;
-  String? _confirmedBookmarkBody;
-  String? _confirmedBookmarkNativeDocument;
+  String? _confirmedMetadataBody;
+  String? _confirmedMetadataNativeDocument;
   late bool _documentUnlocked;
   late final String _blockId;
   late final String? _parentRevisionId;
@@ -328,16 +328,16 @@ class _ModMonthComposerState extends State<ModMonthComposer>
     if (widget.block == null || _snapshotUncertain) return false;
     if (_attempt == null) return _body == widget.block!.tiptapJson;
     final editor = _documentEditor;
-    if (_confirmedBookmarkBody == null ||
-        _body != _confirmedBookmarkBody ||
-        _confirmedBookmarkNativeDocument == null ||
+    if (_confirmedMetadataBody == null ||
+        _body != _confirmedMetadataBody ||
+        _confirmedMetadataNativeDocument == null ||
         editor == null ||
         editor.isDisposed) {
       return false;
     }
     try {
       return jsonEncode(editor.document.toJson()) ==
-          _confirmedBookmarkNativeDocument;
+          _confirmedMetadataNativeDocument;
     } catch (_) {
       return false;
     }
@@ -1011,8 +1011,8 @@ class _ModMonthComposerState extends State<ModMonthComposer>
         await widget.draftStore!.removeDraft(widget.draftKey!);
       }
       if (!mounted) return;
-      // The formal revision is acknowledged. Carry same-session bookmarks
-      // forward only if the still-live editor exactly matches that revision.
+      // Carry same-session reading and bookmark metadata forward only after
+      // the formal revision is acknowledged and still matches this editor.
       final editor = _documentEditor;
       if (_editing &&
           widget.block != null &&
@@ -1025,11 +1025,11 @@ class _ModMonthComposerState extends State<ModMonthComposer>
         try {
           if (DailyNotesDocumentEnvelope.encode(editor.document) ==
               saved.tiptapJson) {
-            _confirmedBookmarkBody = saved.tiptapJson;
-            _confirmedBookmarkNativeDocument = jsonEncode(
+            _confirmedMetadataBody = saved.tiptapJson;
+            _confirmedMetadataNativeDocument = jsonEncode(
               editor.document.toJson(),
             );
-            _bookmarkRebaseController.documentSaved();
+            _metadataSaveController.documentSaved();
           }
         } catch (_) {
           // Metadata must never turn an acknowledged formal save into failure.
@@ -1268,8 +1268,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                                 readingPositionIsSaved: _readingPositionSaved,
                                 readingPositionCanStore: () =>
                                     _readingPositionSaved,
-                                bookmarkRebaseController:
-                                    _bookmarkRebaseController,
+                                metadataSaveController: _metadataSaveController,
                                 editable: _documentEditable,
                                 showHistoryActionsInToolbar: false,
                                 autoFocus:

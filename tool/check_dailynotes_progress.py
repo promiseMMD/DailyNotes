@@ -12,7 +12,7 @@ DEFAULT_PROGRESS = ROOT / 'docs' / 'DEVELOPMENT_PROGRESS.md'
 SECTIONS = {
     'spec': '## 整份规范的证据建档进度',
     'editor': '## 手机文本编辑器：已跟踪的 15 项验收点',
-    'outline': '## 文档目录与阅读位置：已跟踪的 10 项验收点',
+    'outline': '## 文档目录与阅读位置：已跟踪的 12 项验收点',
     'bookmarks': '## 同篇手动书签：已跟踪的 10 项验收点',
     'clipboard': '## 剪贴板安全内核：已跟踪的 8 项验收点',
     'aa': '## Aa 排版与插入：已跟踪的 8 项验收点',

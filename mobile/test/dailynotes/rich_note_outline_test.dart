@@ -158,6 +158,83 @@ void main() {
     editor.dispose();
   });
 
+  testWidgets('outline stays current through long-document edits and undo', (
+    tester,
+  ) async {
+    final parent = headingNode(level: 1, text: '第一章');
+    final nested = headingNode(level: 2, text: '原小节');
+    final container = paragraphNode(text: '容器', children: [nested]);
+    final editor = EditorState(
+      document: Document(
+        root: pageNode(
+          children: [
+            parent,
+            for (var i = 0; i < 1000; i++) paragraphNode(text: '正文 $i'),
+            container,
+          ],
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+            GlobalMuiLocalizations.delegate,
+          ],
+          builder: (context, child) =>
+              MaterialUiCompatibilityBridge(child: child!),
+          home: Scaffold(
+            body: RichNoteOutline(editor: editor, onSelect: (_) {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('outline-toggle-${parent.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsNothing);
+
+    await editor.insertText(0, '修改', path: [500]);
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsNothing);
+    await editor.insertText(0, '新', path: nested.path);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '新原小节');
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsOneWidget);
+    expect(find.text('第一章'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('outline-clear-search')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsNothing);
+
+    await editor.apply(
+      editor.transaction..updateNode(nested, {HeadingBlockKeys.level: 1}),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsOneWidget);
+
+    final inserted = headingNode(level: 1, text: '新增标题');
+    await editor.apply(
+      editor.transaction..insertNode([0], inserted, deepCopy: false),
+      skipHistoryDebounce: true,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${inserted.id}')), findsOneWidget);
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${inserted.id}')), findsNothing);
+    await editor.apply(editor.transaction..deleteNode(container));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${nested.id}')), findsNothing);
+    expect(find.text('第一章'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    editor.dispose();
+  });
+
   testWidgets('outline and note actions fit a narrow phone', (tester) async {
     final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
     final store = DailyNotesStore(db);

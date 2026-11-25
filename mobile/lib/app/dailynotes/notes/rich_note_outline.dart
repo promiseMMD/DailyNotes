@@ -193,6 +193,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   String _query = '';
   final _search = TextEditingController();
   final Set<String> _collapsed = {};
+  List<Node> _headings = [];
 
   @override
   void initState() {
@@ -201,19 +202,45 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   }
 
   void _listen(EditorState editor) {
+    _refreshHeadings(editor);
     _changes = editor.transactionStream.listen((event) {
       if (event.$1 == TransactionTime.after &&
           mounted &&
           identical(editor, widget.editor)) {
-        setState(() {
-          final current = NodeIterator(
-            document: editor.document,
-            startNode: editor.document.root,
-          ).toList().map((node) => node.id).toSet();
-          _collapsed.removeWhere((id) => !current.contains(id));
-        });
+        final operations = event.$2.operations;
+        var needsRebuild = false;
+        var needsRescan = false;
+        for (final operation in operations) {
+          if (operation is! UpdateOperation &&
+              operation is! UpdateTextOperation) {
+            needsRescan = true;
+            break;
+          }
+          final node = editor.document.nodeAtPath(operation.path);
+          if (node == null) {
+            needsRescan = true;
+            break;
+          }
+          if (node.type == HeadingBlockKeys.type) needsRebuild = true;
+        }
+        if (needsRescan) {
+          setState(() => _refreshHeadings(editor));
+        } else if (needsRebuild) {
+          // The list contains live nodes, so a text or level change needs a
+          // rebuild but not another traversal of the full document tree.
+          setState(() {});
+        }
       }
     });
+  }
+
+  void _refreshHeadings(EditorState editor) {
+    _headings = NodeIterator(
+      document: editor.document,
+      startNode: editor.document.root,
+    ).toList().where((node) => node.type == HeadingBlockKeys.type).toList();
+    final current = _headings.map((node) => node.id).toSet();
+    _collapsed.removeWhere((id) => !current.contains(id));
   }
 
   @override
@@ -238,10 +265,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   @override
   Widget build(BuildContext context) {
     final t = context.l10n.dailynotes;
-    final headings = NodeIterator(
-      document: widget.editor.document,
-      startNode: widget.editor.document.root,
-    ).toList().where((node) => node.type == HeadingBlockKeys.type).toList();
+    final headings = _headings;
     String label(Node node) {
       final text = node.delta?.toPlainText().trim() ?? '';
       return text.isEmpty ? t.untitledHeading : text;

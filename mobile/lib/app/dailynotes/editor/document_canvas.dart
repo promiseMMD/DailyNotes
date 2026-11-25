@@ -13,6 +13,7 @@ import '../notes/rich_editor_toolbar.dart';
 import 'document_bookmark_rebaser.dart';
 import 'document_bookmark_store.dart';
 import 'document_editor_back_controller.dart';
+import 'document_metadata_save_controller.dart';
 import 'document_reading_position.dart';
 
 /// One mobile document surface for notes, diaries and long-record drafts.
@@ -31,7 +32,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
     this.readingPositionIdentity,
     this.readingPositionIsSaved = false,
     this.readingPositionCanStore,
-    this.bookmarkRebaseController,
+    this.metadataSaveController,
   });
 
   final af.EditorState editor;
@@ -53,7 +54,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
   final bool Function()? readingPositionCanStore;
 
   /// Optional explicit save acknowledgement for pages that pop immediately.
-  final DocumentBookmarkRebaseController? bookmarkRebaseController;
+  final DocumentMetadataSaveController? metadataSaveController;
 
   @override
   State<DailyNotesDocumentCanvas> createState() =>
@@ -80,22 +81,18 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
         !identical(oldWidget.scrollController, widget.scrollController) ||
         oldWidget.readingPositionIdentity != widget.readingPositionIdentity) {
       _readingPosition?.dispose();
-      if (_bookmarkRebaser case final rebaser?) {
-        oldWidget.bookmarkRebaseController?.detach(rebaser);
-      }
+      _detachController(oldWidget.metadataSaveController);
       _bookmarkRebaser?.dispose();
       _startReadingPosition();
     } else {
       if (!identical(
-        oldWidget.bookmarkRebaseController,
-        widget.bookmarkRebaseController,
+        oldWidget.metadataSaveController,
+        widget.metadataSaveController,
       )) {
-        if (_bookmarkRebaser case final rebaser?) {
-          oldWidget.bookmarkRebaseController?.detach(rebaser);
-          widget.bookmarkRebaseController?.attach(rebaser);
-        }
+        _detachController(oldWidget.metadataSaveController);
+        _attachController(widget.metadataSaveController);
       }
-      if (!oldWidget.readingPositionIsSaved && widget.readingPositionIsSaved) {
+      if (widget.readingPositionIsSaved) {
         _readingPosition?.retryPendingWrite();
       }
       if (widget.readingPositionIsSaved) _bookmarkRebaser?.documentSaved();
@@ -138,15 +135,35 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
       store: DocumentBookmarkStore(storage, identity),
       canStore: canStore,
     )..start();
-    widget.bookmarkRebaseController?.attach(_bookmarkRebaser!);
+    _attachController(widget.metadataSaveController);
+  }
+
+  void _attachController(DocumentMetadataSaveController? controller) {
+    final bookmarks = _bookmarkRebaser;
+    final readingPosition = _readingPosition;
+    if (bookmarks != null && readingPosition != null) {
+      controller?.attach(
+        bookmarks: bookmarks,
+        readingPosition: readingPosition,
+      );
+    }
+  }
+
+  void _detachController(DocumentMetadataSaveController? controller) {
+    final bookmarks = _bookmarkRebaser;
+    final readingPosition = _readingPosition;
+    if (bookmarks != null && readingPosition != null) {
+      controller?.detach(
+        bookmarks: bookmarks,
+        readingPosition: readingPosition,
+      );
+    }
   }
 
   @override
   void dispose() {
     _readingPosition?.dispose();
-    if (_bookmarkRebaser case final rebaser?) {
-      widget.bookmarkRebaseController?.detach(rebaser);
-    }
+    _detachController(widget.metadataSaveController);
     _bookmarkRebaser?.dispose();
     super.dispose();
   }
@@ -210,31 +227,41 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
       backController: widget.backController,
       loadFonts: _loadFonts,
       scrollController: widget.scrollController,
-      child: af.AppFlowyEditor(
-        editorState: widget.editor,
-        focusNode: widget.focusNode,
-        editorScrollController: widget.scrollController,
-        editable: widget.editable,
-        autoFocus: widget.autoFocus,
-        // The SDK defaults to desktop styling, including 100 px margins and
-        // no mobile selection handles. Use its mobile configuration explicitly.
-        editorStyle: af.EditorStyle.mobile(
-          padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
-          cursorColor: colors.primary,
-          dragHandleColor: colors.primary,
-          selectionColor: colors.primary.withValues(alpha: 0.25),
-          textStyleConfiguration: af.TextStyleConfiguration(
-            text: context.theme.typography.bodyLarge.onSurface,
+      child: NotificationListener<ScrollStartNotification>(
+        onNotification: (notification) {
+          if (notification.depth == 0) {
+            _readingPosition?.scrollStarted(
+              userDrag: notification.dragDetails != null,
+            );
+          }
+          return false;
+        },
+        child: af.AppFlowyEditor(
+          editorState: widget.editor,
+          focusNode: widget.focusNode,
+          editorScrollController: widget.scrollController,
+          editable: widget.editable,
+          autoFocus: widget.autoFocus,
+          // The SDK defaults to desktop styling, including 100 px margins and
+          // no mobile selection handles. Use its mobile configuration explicitly.
+          editorStyle: af.EditorStyle.mobile(
+            padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
+            cursorColor: colors.primary,
+            dragHandleColor: colors.primary,
+            selectionColor: colors.primary.withValues(alpha: 0.25),
+            textStyleConfiguration: af.TextStyleConfiguration(
+              text: context.theme.typography.bodyLarge.onSurface,
+            ),
           ),
-        ),
-        header: widget.header == null
-            ? null
-            : Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: horizontalPadding,
+          header: widget.header == null
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: horizontalPadding,
+                  ),
+                  child: widget.header!,
                 ),
-                child: widget.header!,
-              ),
+        ),
       ),
     );
   }
