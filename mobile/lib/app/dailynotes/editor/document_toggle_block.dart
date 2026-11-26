@@ -64,6 +64,60 @@ final documentToggleHeadingBackspace = af.CommandShortcutEvent(
   },
 );
 
+/// AppFlowy's `> ` shortcut, restricted to leaf paragraphs and headings.
+/// Replacing a parent would otherwise detach live descendant identities.
+final documentToggleFromMarker = af.CharacterShortcutEvent(
+  key: 'dailynotes greater to toggle',
+  character: ' ',
+  handler: (editor) async {
+    final selection = editor.selection;
+    if (!editor.editable ||
+        editor.isDisposed ||
+        editor.selectionType == af.SelectionType.block ||
+        selection == null ||
+        !selection.isCollapsed ||
+        selection.start.offset != 1) {
+      return false;
+    }
+    final node = editor.document.nodeAtPath(selection.start.path);
+    final delta = node?.delta;
+    if (node == null ||
+        delta == null ||
+        node.children.isNotEmpty ||
+        (node.type != af.ParagraphBlockKeys.type &&
+            node.type != af.HeadingBlockKeys.type) ||
+        delta.isEmpty ||
+        delta.slice(0, 1).toPlainText() != '>') {
+      return false;
+    }
+    final attrs = {...node.attributes};
+    if (attrs.containsKey(DocumentToggleKeys.collapsed)) return false;
+    if (node.type == af.ParagraphBlockKeys.type) {
+      if (attrs.containsKey(DocumentToggleKeys.level)) return false;
+    } else {
+      final level = attrs[DocumentToggleKeys.level];
+      if (level is! int || level < 1 || level > 6) return false;
+    }
+    attrs[af.blockComponentDelta] = delta.slice(1).toJson();
+    attrs[DocumentToggleKeys.collapsed] = false;
+    final converted = node.copyWith(
+      type: DocumentToggleKeys.type,
+      attributes: attrs,
+    );
+    final transaction = editor.transaction
+      ..insertNode(node.path, converted)
+      ..deleteNode(node)
+      ..afterSelection = af.Selection.collapsed(
+        af.Position(path: selection.start.path),
+      );
+    if (editor.undoManager.undoStack.isNonEmpty) {
+      editor.undoManager.undoStack.last.seal();
+    }
+    await editor.apply(transaction, skipHistoryDebounce: true);
+    return true;
+  },
+);
+
 af.CharacterShortcutEvent documentToggleEnter(
   DocumentToggleController folds,
 ) => af.CharacterShortcutEvent(
@@ -126,7 +180,7 @@ af.CharacterShortcutEvent documentToggleEnter(
         // Keep an existing subtree even for an empty toggle title.
         transaction.insertNode(path, af.paragraphNode());
         transaction.afterSelection = af.Selection.collapsed(
-          af.Position(path: path),
+          af.Position(path: [...path]..last += 1),
         );
       } else {
         final suffix = af.Delta.fromJson(delta.slice(end).toJson());

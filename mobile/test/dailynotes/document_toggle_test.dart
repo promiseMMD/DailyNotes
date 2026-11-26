@@ -8,6 +8,8 @@ import 'package:appflowy_editor/appflowy_editor.dart' as af;
 // ignore: implementation_imports
 import 'package:appflowy_editor/src/editor/editor_component/service/ime/delta_input_on_delete_impl.dart';
 // ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/editor_component/service/ime/delta_input_on_insert_impl.dart';
+// ignore: implementation_imports
 import 'package:appflowy_editor/src/editor/editor_component/service/ime/delta_input_on_replace_impl.dart';
 // ignore: implementation_imports
 import 'package:appflowy_editor/src/editor/editor_component/service/ime/non_delta_input_service.dart';
@@ -93,6 +95,219 @@ void main() {
         throwsFormatException,
       );
     }
+  });
+
+  testWidgets('greater-space converts a paragraph and preserves rich suffix', (
+    tester,
+  ) async {
+    final paragraph = af.paragraphNode(
+      delta: af.Delta()
+        ..insert('>')
+        ..insert('正文', attributes: {'bold': true}),
+      attributes: {af.blockComponentTextDirection: 'rtl'},
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [paragraph])),
+    );
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(path: [0], startOffset: 1);
+    expect(await documentToggleFromMarker.execute(editor), isTrue);
+    final result = editor.document.root.children.single;
+    expect(result.type, DocumentToggleKeys.type);
+    expect(result.attributes[DocumentToggleKeys.level], isNull);
+    expect(result.attributes[af.blockComponentTextDirection], 'rtl');
+    expect(result.delta!.toPlainText(), '正文');
+    expect(jsonEncode(result.delta!.toJson()), contains('"bold":true'));
+    expect(editor.selection!.start.offset, 0);
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), before);
+    editor.undoManager.redo();
+    await tester.pump();
+    expect(editor.document.root.children.single.type, DocumentToggleKeys.type);
+    editor.dispose();
+  });
+
+  testWidgets('greater-space keeps heading level inside a nested toggle', (
+    tester,
+  ) async {
+    final heading = af.headingNode(level: 2, text: '>小节');
+    final parent = documentToggleNode(
+      delta: af.Delta()..insert('父级'),
+      children: [
+        heading,
+        af.paragraphNode(text: '兄弟内容'),
+      ],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [parent])),
+    );
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(path: [0, 0], startOffset: 1);
+    expect(await documentToggleFromMarker.execute(editor), isTrue);
+    expect(parent.children.first.type, DocumentToggleKeys.type);
+    expect(parent.children.first.attributes[DocumentToggleKeys.level], 2);
+    expect(parent.children.first.delta!.toPlainText(), '小节');
+    expect(parent.children.last.delta!.toPlainText(), '兄弟内容');
+    expect(editor.selection!.start.path, [0, 0]);
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), before);
+    editor.dispose();
+  });
+
+  testWidgets('greater-space keeps complex parents and inserts a space', (
+    tester,
+  ) async {
+    final paragraph = af.paragraphNode(
+      text: '>正文',
+      children: [af.paragraphNode(text: '原子内容')],
+    );
+    final child = paragraph.children.single;
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [paragraph])),
+    );
+    editor.selection = af.Selection.single(path: [0], startOffset: 1);
+    await onInsert(
+      const TextEditingDeltaInsertion(
+        oldText: '>正文',
+        textInserted: ' ',
+        insertionOffset: 1,
+        selection: TextSelection.collapsed(offset: 2),
+        composing: TextRange.empty,
+      ),
+      editor,
+      [documentToggleFromMarker, ...af.standardCharacterShortcutEvents],
+    );
+    expect(editor.document.root.children.single, same(paragraph));
+    expect(paragraph.delta!.toPlainText(), '> 正文');
+    expect(paragraph.children.single, same(child));
+    editor.dispose();
+  });
+
+  testWidgets('greater-space does not convert while the IME is composing', (
+    tester,
+  ) async {
+    final paragraph = af.paragraphNode(text: '>');
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [paragraph])),
+    );
+    editor.selection = af.Selection.single(path: [0], startOffset: 1);
+    await onInsert(
+      const TextEditingDeltaInsertion(
+        oldText: '>',
+        textInserted: ' ',
+        insertionOffset: 1,
+        selection: TextSelection.collapsed(offset: 2),
+        composing: TextRange(start: 0, end: 2),
+      ),
+      editor,
+      [documentToggleFromMarker],
+    );
+    expect(editor.document.root.children.single, same(paragraph));
+    expect(paragraph.delta!.toPlainText(), '> ');
+    editor.dispose();
+  });
+
+  test(
+    'greater-space rejects ambiguous metadata and locked documents',
+    () async {
+      final candidates = [
+        af.paragraphNode(
+          text: '>原文',
+          attributes: {DocumentToggleKeys.level: 2},
+        ),
+        af.paragraphNode(
+          text: '>原文',
+          attributes: {DocumentToggleKeys.collapsed: true},
+        ),
+        af.quoteNode(delta: af.Delta()..insert('>原文')),
+        af.paragraphNode(text: 'x原文'),
+      ];
+      for (final node in candidates) {
+        final editor = af.EditorState(
+          document: af.Document(root: af.pageNode(children: [node])),
+        );
+        final before = jsonEncode(editor.document.toJson());
+        editor.selection = af.Selection.single(path: [0], startOffset: 1);
+        expect(await documentToggleFromMarker.execute(editor), isFalse);
+        expect(jsonEncode(editor.document.toJson()), before);
+        editor.dispose();
+      }
+      final editor = af.EditorState(
+        document: af.Document(
+          root: af.pageNode(children: [af.paragraphNode(text: '>原文')]),
+        ),
+      );
+      final before = jsonEncode(editor.document.toJson());
+      editor.selection = af.Selection.single(path: [0], startOffset: 1);
+      editor.editable = false;
+      expect(await documentToggleFromMarker.execute(editor), isFalse);
+      expect(jsonEncode(editor.document.toJson()), before);
+      editor.dispose();
+    },
+  );
+
+  testWidgets('greater-space shortcut accepts actual canvas keyboard input', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [af.paragraphNode()])),
+    );
+    final focus = FocusNode();
+    final scroll = af.EditorScrollController(editorState: editor);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+      focus.dispose();
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: DailyNotesDocumentCanvas(
+            editor: editor,
+            focusNode: focus,
+            scrollController: scroll,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    focus.requestFocus();
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await tester.pumpAndSettle();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: ' >',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.single.delta!.toPlainText(), '>');
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: ' > ',
+        selection: TextSelection.collapsed(offset: 3),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    final toggle = editor.document.root.children.single;
+    expect(toggle.type, DocumentToggleKeys.type);
+    expect(editor.selection!.start.offset, 0);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: ' 新',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(toggle.delta!.toPlainText(), '新');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('heading Backspace keeps the toggle subtree and can undo', (
@@ -408,6 +623,35 @@ void main() {
     expect(await documentToggleEnter(folds).execute(editor), isTrue);
     expect(editor.document.root.children, hasLength(2));
     expect(root.children.single.delta!.toPlainText(), '保留内容');
+    expect(editor.selection!.start.path, [1]);
+    expect(editor.selection!.start.offset, 0);
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), before);
+    folds.dispose();
+    editor.dispose();
+  });
+
+  testWidgets('Enter at folded title start keeps focus on the moved toggle', (
+    tester,
+  ) async {
+    final inner = documentToggleNode(
+      collapsed: true,
+      delta: af.Delta()..insert('折叠标题'),
+      children: [af.paragraphNode(text: '保留子内容')],
+    );
+    final parent = documentToggleNode(children: [inner]);
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [parent])),
+    );
+    final folds = DocumentToggleController();
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(path: [0, 0], startOffset: 0);
+    expect(await documentToggleEnter(folds).execute(editor), isTrue);
+    expect(parent.children.first.type, af.ParagraphBlockKeys.type);
+    expect(parent.children.last, same(inner));
+    expect(inner.children.single.delta!.toPlainText(), '保留子内容');
+    expect(editor.selection!.start.path, [0, 1]);
     editor.undoManager.undo();
     await tester.pump();
     expect(jsonEncode(editor.document.toJson()), before);

@@ -2,7 +2,8 @@
 
 基于 Moodiary 与 promiseMMD 魔改分支建立的开发基线。当前已实现第一批本地核心功能，预览 APK 正在构建；尚未完成完整规范与真机验收。
 
-- 需求原件：[开发规范 V2.51](docs/DailyNotes开发规范_V2.52.md)
+- 当前规范跟踪：[开发进度](docs/DEVELOPMENT_PROGRESS.md)；此前采用的 V3.92 原文件尚未随仓库保存。
+- 历史规范：[V2.52](docs/DailyNotes开发规范_V2.52.md)、[V2.51](docs/DailyNotes开发规范_V2.51.md)
 - 开发入口：[规范与交接索引](docs/INDEX.md)
 - 上游介绍：[README.upstream.md](README.upstream.md)
 - 许可证：[AGPL-3.0](LICENSE)。保留上游版权与署名；分发及网络交互须遵守适用的源码提供要求。

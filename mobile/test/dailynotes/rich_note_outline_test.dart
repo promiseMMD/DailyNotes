@@ -236,6 +236,70 @@ void main() {
     editor.dispose();
   });
 
+  testWidgets('long outline search retains shared paths and fold state', (
+    tester,
+  ) async {
+    final chapter = headingNode(level: 1, text: '长文目录');
+    final matches = [
+      headingNode(level: 2, text: '目标一'),
+      headingNode(level: 2, text: '目标二'),
+      headingNode(level: 2, text: '目标三'),
+    ];
+    final editor = EditorState(
+      document: Document(
+        root: pageNode(
+          children: [
+            chapter,
+            for (var index = 0; index < 900; index++)
+              if (index == 100)
+                matches[0]
+              else if (index == 450)
+                matches[1]
+              else if (index == 800)
+                matches[2]
+              else
+                headingNode(level: 2, text: '小节 $index'),
+          ],
+        ),
+      ),
+    );
+    addTearDown(editor.dispose);
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+            GlobalMuiLocalizations.delegate,
+          ],
+          builder: (context, child) =>
+              MaterialUiCompatibilityBridge(child: child!),
+          home: Scaffold(
+            body: RichNoteOutline(editor: editor, onSelect: (_) {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final before = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(ValueKey('outline-toggle-${chapter.id}')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '目标');
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${chapter.id}')), findsOneWidget);
+    for (final node in matches) {
+      expect(find.byKey(ValueKey('outline-${node.id}')), findsOneWidget);
+    }
+    await tester.tap(find.byKey(const ValueKey('outline-clear-search')));
+    await tester.pumpAndSettle();
+    for (final node in matches) {
+      expect(find.byKey(ValueKey('outline-${node.id}')), findsNothing);
+    }
+    expect(jsonEncode(editor.document.toJson()), before);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'nested toggles keep their own outline branches and search path',
     (tester) async {

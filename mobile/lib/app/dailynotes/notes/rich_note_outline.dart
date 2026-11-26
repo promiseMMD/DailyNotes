@@ -344,21 +344,24 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
     final query = _query.trim().toLowerCase();
     final searching = query.isNotEmpty;
     final included = <int>{};
+    final hiddenByCollapse = <bool>[];
     for (var index = 0; index < headings.length; index++) {
+      final visibleParent = visibleParents[index];
+      hiddenByCollapse.add(
+        visibleParent != null &&
+            (hiddenByCollapse[visibleParent] ||
+                _collapsed.contains(headings[visibleParent].id)),
+      );
       if (!visible[index]) continue;
       final node = headings[index];
-      final ancestors = <int>[];
-      var parent = visibleParents[index];
-      while (parent != null) {
-        ancestors.add(parent);
-        parent = visibleParents[parent];
-      }
       if (searching) {
         if (label(node).toLowerCase().contains(query)) {
-          included.addAll(ancestors);
-          included.add(index);
+          int? ancestor = index;
+          while (ancestor != null && included.add(ancestor)) {
+            ancestor = visibleParents[ancestor];
+          }
         }
-      } else if (!ancestors.any((i) => _collapsed.contains(headings[i].id))) {
+      } else if (!hiddenByCollapse[index]) {
         included.add(index);
       }
     }

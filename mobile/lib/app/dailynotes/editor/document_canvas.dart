@@ -265,6 +265,7 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
           },
           characterShortcutEvents: [
             documentToggleEnter(_folds),
+            documentToggleFromMarker,
             ...af.standardCharacterShortcutEvents,
           ],
           commandShortcutEvents: [
