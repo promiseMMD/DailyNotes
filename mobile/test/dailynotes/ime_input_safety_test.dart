@@ -1,7 +1,11 @@
 import 'dart:async';
 
 import 'package:appflowy_editor/appflowy_editor.dart' as af;
-// The integration targets the vendored editor's actual input service.
+// These tests exercise the vendored editor's actual IME handlers.
+// ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/editor_component/service/ime/delta_input_on_delete_impl.dart';
+// ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/editor_component/service/ime/delta_input_on_replace_impl.dart';
 // ignore: implementation_imports
 import 'package:appflowy_editor/src/editor/editor_component/service/ime/non_delta_input_service.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +41,136 @@ void main() {
             ? TextRange(start: 1, end: text.length + 1)
             : TextRange.empty,
       );
+
+  testWidgets('IME replacement does not run shortcuts during composition', (
+    tester,
+  ) async {
+    final node = af.paragraphNode(text: 'ni');
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [node])),
+    );
+    editor.selection = af.Selection.single(path: [0], startOffset: 2);
+    var invoked = 0;
+    final shortcut = af.CharacterShortcutEvent(
+      key: 'test composition shortcut',
+      character: '你',
+      handler: (_) async {
+        invoked++;
+        return true;
+      },
+    );
+    await onReplace(
+      const TextEditingDeltaReplacement(
+        oldText: 'ni',
+        replacedRange: TextRange(start: 0, end: 2),
+        replacementText: '你',
+        selection: TextSelection.collapsed(offset: 1),
+        composing: TextRange(start: 0, end: 1),
+      ),
+      editor,
+      [shortcut],
+    );
+    expect(invoked, 0);
+    expect(node.delta!.toPlainText(), '你');
+    expect(editor.selection!.start.offset, 1);
+    editor.dispose();
+  });
+
+  testWidgets('committed selection replacement can still invoke a shortcut', (
+    tester,
+  ) async {
+    final node = af.paragraphNode(text: 'ni');
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [node])),
+    );
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 0,
+      endOffset: 2,
+    );
+    var invoked = 0;
+    final shortcut = af.CharacterShortcutEvent(
+      key: 'test committed shortcut',
+      character: '你',
+      handler: (_) async {
+        invoked++;
+        return true;
+      },
+    );
+    await onReplace(
+      const TextEditingDeltaReplacement(
+        oldText: 'ni',
+        replacedRange: TextRange(start: 0, end: 2),
+        replacementText: '你',
+        selection: TextSelection.collapsed(offset: 1),
+        composing: TextRange.empty,
+      ),
+      editor,
+      [shortcut],
+    );
+    expect(invoked, 1);
+    expect(node.delta!.toPlainText(), 'ni');
+    editor.dispose();
+  });
+
+  testWidgets('IME commit behind the caret does not run shortcuts', (
+    tester,
+  ) async {
+    final node = af.paragraphNode(text: 'ni');
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [node])),
+    );
+    editor.selection = af.Selection.single(path: [0], startOffset: 2);
+    var invoked = 0;
+    final shortcut = af.CharacterShortcutEvent(
+      key: 'test commit shortcut',
+      character: '你',
+      handler: (_) async {
+        invoked++;
+        return true;
+      },
+    );
+    await onReplace(
+      const TextEditingDeltaReplacement(
+        oldText: 'ni',
+        replacedRange: TextRange(start: 0, end: 2),
+        replacementText: '你',
+        selection: TextSelection.collapsed(offset: 1),
+        composing: TextRange.empty,
+      ),
+      editor,
+      [shortcut],
+    );
+    expect(invoked, 0);
+    expect(node.delta!.toPlainText(), '你');
+    expect(editor.selection!.start.offset, 1);
+    editor.dispose();
+  });
+
+  testWidgets('IME boundary Backspace keeps the standard fallback', (
+    tester,
+  ) async {
+    final heading = af.headingNode(level: 1, text: '标题');
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [heading])),
+    );
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await onDelete(
+      const TextEditingDeltaDeletion(
+        oldText: '标题',
+        deletedRange: TextRange(start: 0, end: 0),
+        selection: TextSelection.collapsed(offset: 0),
+        composing: TextRange.empty,
+      ),
+      editor,
+      commandShortcutEvents: [],
+    );
+    await tester.pump();
+    final converted = editor.document.root.children.single;
+    expect(converted.type, af.ParagraphBlockKeys.type);
+    expect(converted.delta!.toPlainText(), '标题');
+    editor.dispose();
+  });
 
   testWidgets('separate editors cannot cancel each other’s IME updates', (
     tester,

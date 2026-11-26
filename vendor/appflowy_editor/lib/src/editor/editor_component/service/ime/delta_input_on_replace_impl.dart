@@ -18,11 +18,21 @@ Future<void> onReplace(
   }
 
   if (selection.isSingle) {
-    final execution = await executeCharacterShortcutEvent(
-      editorState,
-      replacement.replacementText,
-      characterShortcutEvents,
-    );
+    // A replacement can be an intermediate IME composition. Running a
+    // structural shortcut then would consume text the IME has not committed.
+    // It can also replace a composition or autocorrect range behind a
+    // collapsed caret. Only a replacement of the actual selection is eligible.
+    final selected = selection.normalized;
+    final replacesSelection =
+        replacement.replacedRange.start == selected.start.offset &&
+            replacement.replacedRange.end == selected.end.offset;
+    final execution = replacement.composing.isCollapsed &&
+        replacesSelection &&
+        await executeCharacterShortcutEvent(
+          editorState,
+          replacement.replacementText,
+          characterShortcutEvents,
+        );
 
     if (execution) {
       return;
@@ -61,6 +71,17 @@ Future<void> onReplace(
       ..afterSelection = afterSelection;
     await editorState.apply(transaction);
   } else {
+    // Give structural shortcuts a chance to inspect the original selection
+    // before it is deleted. In particular, an editor may reject unsafe
+    // cross-block Enter operations that would otherwise move nested content.
+    if (replacement.composing.isCollapsed &&
+        await executeCharacterShortcutEvent(
+          editorState,
+          replacement.replacementText,
+          characterShortcutEvents,
+        )) {
+      return;
+    }
     await editorState.deleteSelection(selection);
     // insert the replacement
     final insertion = replacement.toInsertion();

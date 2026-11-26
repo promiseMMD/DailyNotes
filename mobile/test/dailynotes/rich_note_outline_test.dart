@@ -10,6 +10,7 @@ import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_mobile/app/dailynotes/data/daily_notes_store.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_toggle_model.dart';
 import 'package:moodiary_mobile/app/dailynotes/notes/rich_note_editor_page.dart';
 import 'package:moodiary_mobile/app/dailynotes/notes/rich_note_outline.dart';
 import 'package:moodiary_storage/moodiary_storage.dart';
@@ -234,6 +235,82 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     editor.dispose();
   });
+
+  testWidgets(
+    'nested toggles keep their own outline branches and search path',
+    (tester) async {
+      final chapter = headingNode(level: 1, text: '章节');
+      final nestedHeading = headingNode(level: 1, text: '深层目标');
+      final inner = documentToggleNode(
+        delta: Delta()..insert('内层折叠'),
+        children: [nestedHeading],
+      );
+      final inside = headingNode(level: 2, text: '折叠内小节');
+      final outer = documentToggleNode(
+        delta: Delta()..insert('外层折叠'),
+        children: [inner, inside],
+      );
+      final after = headingNode(level: 2, text: '折叠外小节');
+      final next = headingNode(level: 1, text: '下一章');
+      final editor = EditorState(
+        document: Document(
+          root: pageNode(children: [chapter, outer, after, next]),
+        ),
+      );
+      addTearDown(editor.dispose);
+      await tester.pumpWidget(
+        TranslationProvider(
+          child: MaterialApp(
+            theme: buildMuiTheme(brightness: Brightness.light),
+            localizationsDelegates: const [
+              AppFlowyEditorLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+              GlobalMuiLocalizations.delegate,
+            ],
+            builder: (context, child) =>
+                MaterialUiCompatibilityBridge(child: child!),
+            home: Scaffold(
+              body: RichNoteOutline(editor: editor, onSelect: (_) {}),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = jsonEncode(editor.document.toJson());
+      await tester.tap(find.byKey(ValueKey('outline-toggle-${chapter.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('outline-${nestedHeading.id}')), findsNothing);
+      expect(find.byKey(ValueKey('outline-${after.id}')), findsNothing);
+      expect(find.byKey(ValueKey('outline-${next.id}')), findsOneWidget);
+      await tester.tap(find.byKey(ValueKey('outline-toggle-${chapter.id}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('outline-show-toggles')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('outline-${outer.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('outline-${inner.id}')), findsOneWidget);
+      await tester.tap(find.byKey(ValueKey('outline-toggle-${inner.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('outline-${nestedHeading.id}')), findsNothing);
+      expect(find.byKey(ValueKey('outline-${inside.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('outline-${after.id}')), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '深层目标');
+      await tester.pumpAndSettle();
+      for (final node in [chapter, outer, inner, nestedHeading]) {
+        expect(find.byKey(ValueKey('outline-${node.id}')), findsOneWidget);
+      }
+      expect(find.byKey(ValueKey('outline-${inside.id}')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('outline-clear-search')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('outline-${nestedHeading.id}')), findsNothing);
+      await tester.tap(find.byKey(ValueKey('outline-toggle-${outer.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('outline-${inner.id}')), findsNothing);
+      expect(find.byKey(ValueKey('outline-${inside.id}')), findsNothing);
+      expect(find.byKey(ValueKey('outline-${after.id}')), findsOneWidget);
+      expect(jsonEncode(editor.document.toJson()), before);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('outline and note actions fit a narrow phone', (tester) async {
     final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());

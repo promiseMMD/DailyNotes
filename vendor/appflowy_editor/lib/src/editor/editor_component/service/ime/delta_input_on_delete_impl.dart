@@ -4,8 +4,9 @@ import 'package:flutter/services.dart';
 
 Future<void> onDelete(
   TextEditingDeltaDeletion deletion,
-  EditorState editorState,
-) async {
+  EditorState editorState, {
+  List<CommandShortcutEvent>? commandShortcutEvents,
+}) async {
   AppFlowyEditorLog.input.debug('onDelete: $deletion');
 
   final selection = editorState.selection;
@@ -40,9 +41,18 @@ Future<void> onDelete(
     }
   }
 
-  // use backspace command instead.
-  if (KeyEventResult.ignored ==
-      convertToParagraphCommand.execute(editorState)) {
+  // At a block boundary the software keyboard should use the same ordered
+  // backspace handlers as the hardware keyboard. Ordinary text deletion and
+  // composing updates above must continue through the IME path.
+  for (final shortcut in commandShortcutEvents ?? <CommandShortcutEvent>[]) {
+    if (!shortcut.command.split(',').any((key) => key.trim() == 'backspace')) {
+      continue;
+    }
+    if (shortcut.execute(editorState) != KeyEventResult.ignored) return;
+  }
+  // Preserve the existing fallback even for an incomplete custom list.
+  if (convertToParagraphCommand.execute(editorState) ==
+      KeyEventResult.ignored) {
     backspaceCommand.execute(editorState);
   }
 }

@@ -267,6 +267,10 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
             documentToggleEnter(_folds),
             ...af.standardCharacterShortcutEvents,
           ],
+          commandShortcutEvents: [
+            documentToggleHeadingBackspace,
+            ...af.standardCommandShortcutEvents,
+          ],
           focusNode: widget.focusNode,
           editorScrollController: widget.scrollController,
           editable: widget.editable,

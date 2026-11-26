@@ -282,9 +282,10 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   @override
   Widget build(BuildContext context) {
     final t = context.l10n.dailynotes;
-    final headings = _headings
-        .where((node) => _isHeading(node) || _showToggles)
-        .toList();
+    // Keep ordinary toggles in the structural model even when their rows are
+    // hidden. A heading inside one must not change the section of a heading
+    // that follows the toggle outside it.
+    final headings = _headings;
     String label(Node node) {
       final text = node.delta?.toPlainText().trim() ?? '';
       return text.isEmpty ? t.untitledHeading : text;
@@ -295,36 +296,62 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
       return raw is int ? raw.clamp(1, 6) : 1;
     }
 
-    final levels = <Node, int>{};
-    final precedingHeadings = <Node>[];
-    for (final node in headings) {
-      if (_isHeading(node)) {
-        final current = headingLevel(node);
-        while (precedingHeadings.isNotEmpty &&
-            levels[precedingHeadings.last]! >= current) {
-          precedingHeadings.removeLast();
-        }
-        levels[node] = current;
-        precedingHeadings.add(node);
-      } else {
-        levels[node] = precedingHeadings.isEmpty
-            ? 1
-            : (levels[precedingHeadings.last]! + 1).clamp(1, 6);
+    final nodeIndexes = <Node, int>{};
+    final scopedHeadings = <int?, List<int>>{};
+    final parents = <int?>[];
+    final visibleParents = <int?>[];
+    final levels = <int>[];
+    final visible = <bool>[];
+    final hasChildren = <bool>[];
+    for (var index = 0; index < headings.length; index++) {
+      final node = headings[index];
+      var structuralParent = node.parent;
+      while (structuralParent != null &&
+          !nodeIndexes.containsKey(structuralParent)) {
+        structuralParent = structuralParent.parent;
       }
+      final scope = nodeIndexes[structuralParent];
+      final stack = scopedHeadings.putIfAbsent(scope, () => []);
+      if (_isHeading(node)) {
+        while (stack.isNotEmpty &&
+            headingLevel(headings[stack.last]) >= headingLevel(node)) {
+          stack.removeLast();
+        }
+      }
+      final parent = stack.isEmpty ? scope : stack.last;
+      parents.add(parent);
+      final displayed = _isHeading(node) || _showToggles;
+      visible.add(displayed);
+      var displayedParent = parent;
+      while (displayedParent != null && !visible[displayedParent]) {
+        displayedParent = parents[displayedParent];
+      }
+      visibleParents.add(displayedParent);
+      final base = displayedParent == null ? 0 : levels[displayedParent];
+      levels.add(
+        (_isHeading(node) && headingLevel(node) > base
+                ? headingLevel(node)
+                : base + 1)
+            .clamp(1, 8),
+      );
+      hasChildren.add(false);
+      if (displayed && displayedParent != null) {
+        hasChildren[displayedParent] = true;
+      }
+      nodeIndexes[node] = index;
+      if (_isHeading(node)) stack.add(index);
     }
-    int level(Node node) => levels[node]!;
-
     final query = _query.trim().toLowerCase();
     final searching = query.isNotEmpty;
     final included = <int>{};
-    final ancestors = <int>[];
     for (var index = 0; index < headings.length; index++) {
+      if (!visible[index]) continue;
       final node = headings[index];
-      if (_isHeading(node)) {
-        while (ancestors.isNotEmpty &&
-            level(headings[ancestors.last]) >= level(node)) {
-          ancestors.removeLast();
-        }
+      final ancestors = <int>[];
+      var parent = visibleParents[index];
+      while (parent != null) {
+        ancestors.add(parent);
+        parent = visibleParents[parent];
       }
       if (searching) {
         if (label(node).toLowerCase().contains(query)) {
@@ -334,7 +361,6 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
       } else if (!ancestors.any((i) => _collapsed.contains(headings[i].id))) {
         included.add(index);
       }
-      if (_isHeading(node)) ancestors.add(index);
     }
     final filtered = [
       for (var index = 0; index < headings.length; index++)
@@ -401,7 +427,9 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
               child: filtered.isEmpty
                   ? Center(
                       child: Text(
-                        headings.isEmpty ? t.outlineEmpty : t.outlineNoMatch,
+                        !visible.contains(true)
+                            ? t.outlineEmpty
+                            : t.outlineNoMatch,
                       ),
                     )
                   : ListView.builder(
@@ -409,11 +437,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
                       itemBuilder: (context, index) {
                         final originalIndex = filtered[index];
                         final node = headings[originalIndex];
-                        final nodeLevel = level(node);
-                        final hasChildren =
-                            _isHeading(node) &&
-                            originalIndex + 1 < headings.length &&
-                            level(headings[originalIndex + 1]) > nodeLevel;
+                        final nodeLevel = levels[originalIndex];
                         final expanded =
                             searching || !_collapsed.contains(node.id);
                         return ListTile(
@@ -424,7 +448,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
                           ),
                           leading: SizedBox(
                             width: 40,
-                            child: hasChildren
+                            child: hasChildren[originalIndex]
                                 ? IconButton(
                                     key: ValueKey('outline-toggle-${node.id}'),
                                     tooltip: expanded

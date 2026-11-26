@@ -4,7 +4,17 @@
 import 'dart:convert';
 
 import 'package:appflowy_editor/appflowy_editor.dart' as af;
+// Exercise the same boundary handler used by the software keyboard.
+// ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/editor_component/service/ime/delta_input_on_delete_impl.dart';
+// ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/editor_component/service/ime/delta_input_on_replace_impl.dart';
+// ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/editor_component/service/ime/non_delta_input_service.dart';
+// ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/editor_component/service/keyboard_service_widget.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
@@ -83,6 +93,202 @@ void main() {
         throwsFormatException,
       );
     }
+  });
+
+  testWidgets('heading Backspace keeps the toggle subtree and can undo', (
+    tester,
+  ) async {
+    final root = documentToggleNode(
+      level: 2,
+      delta: af.Delta()..insert('标题', attributes: {'bold': true}),
+      children: [af.paragraphNode(text: '子内容')],
+    );
+    final child = root.children.single;
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [root])),
+    );
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    expect(
+      documentToggleHeadingBackspace.execute(editor),
+      KeyEventResult.handled,
+    );
+    await tester.pump();
+    expect(root.attributes[DocumentToggleKeys.level], isNull);
+    expect(root.children.single, same(child));
+    expect(root.delta!.toPlainText(), '标题');
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), before);
+    editor.selectionType = af.SelectionType.block;
+    expect(
+      documentToggleHeadingBackspace.execute(editor),
+      KeyEventResult.ignored,
+    );
+    editor.selectionType = null;
+    editor.editable = false;
+    expect(
+      documentToggleHeadingBackspace.execute(editor),
+      KeyEventResult.ignored,
+    );
+    expect(jsonEncode(editor.document.toJson()), before);
+    editor.dispose();
+  });
+
+  testWidgets('IME Backspace uses heading shortcut only at the boundary', (
+    tester,
+  ) async {
+    final root = documentToggleNode(
+      level: 1,
+      delta: af.Delta()..insert('abc'),
+      children: [af.paragraphNode(text: '子内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [root])),
+    );
+    final shortcuts = [
+      documentToggleHeadingBackspace,
+      ...af.standardCommandShortcutEvents,
+    ];
+    editor.selection = af.Selection.single(path: [0], startOffset: 1);
+    await onDelete(
+      const TextEditingDeltaDeletion(
+        oldText: 'abc',
+        deletedRange: TextRange(start: 0, end: 1),
+        selection: TextSelection.collapsed(offset: 0),
+        composing: TextRange.empty,
+      ),
+      editor,
+      commandShortcutEvents: shortcuts,
+    );
+    expect(root.delta!.toPlainText(), 'bc');
+    expect(root.attributes[DocumentToggleKeys.level], 1);
+    await onDelete(
+      const TextEditingDeltaDeletion(
+        oldText: 'bc',
+        deletedRange: TextRange(start: 0, end: 0),
+        selection: TextSelection.collapsed(offset: 0),
+        composing: TextRange.empty,
+      ),
+      editor,
+      commandShortcutEvents: shortcuts,
+    );
+    await tester.pump();
+    expect(root.attributes[DocumentToggleKeys.level], isNull);
+    expect(root.delta!.toPlainText(), 'bc');
+    expect(root.children.single.delta!.toPlainText(), '子内容');
+    editor.dispose();
+  });
+
+  testWidgets('canvas routes software and hardware Backspace to the heading', (
+    tester,
+  ) async {
+    final software = documentToggleNode(
+      level: 1,
+      delta: af.Delta()..insert('软件键盘'),
+      children: [af.paragraphNode(text: '软件子内容')],
+    );
+    final hardware = documentToggleNode(
+      level: 2,
+      delta: af.Delta()..insert('外接键盘'),
+      children: [af.paragraphNode(text: '外接子内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [software, hardware])),
+    );
+    final focus = FocusNode();
+    final scroll = af.EditorScrollController(editorState: editor);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+      focus.dispose();
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: DailyNotesDocumentCanvas(
+            editor: editor,
+            focusNode: focus,
+            scrollController: scroll,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    focus.requestFocus();
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.editingState?['text'], ' 软件键盘');
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '软件键盘',
+        selection: TextSelection.collapsed(offset: 0),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(software.attributes[DocumentToggleKeys.level], isNull);
+    expect(software.children.single.delta!.toPlainText(), '软件子内容');
+    final keyboard =
+        editor.service.keyboardServiceKey.currentState!
+            as KeyboardServiceWidgetState;
+    final input = keyboard.textInputService as NonDeltaTextInputService;
+    expect(input.currentTextEditingValue?.text, ' 软件键盘');
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: ' 新软件键盘',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(software.delta!.toPlainText(), '新软件键盘');
+    editor.selection = af.Selection.single(path: [1], startOffset: 0);
+    focus.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+    expect(hardware.attributes[DocumentToggleKeys.level], isNull);
+    expect(hardware.children.single.delta!.toPlainText(), '外接子内容');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('replacing selected toggle text with Enter keeps its children', (
+    tester,
+  ) async {
+    final root = documentToggleNode(
+      delta: af.Delta()..insert('abcd'),
+      children: [af.paragraphNode(text: '子内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [root])),
+    );
+    final folds = DocumentToggleController();
+    editor.selection = af.Selection.single(
+      path: [0],
+      startOffset: 1,
+      endOffset: 3,
+    );
+    await onReplace(
+      const TextEditingDeltaReplacement(
+        oldText: 'abcd',
+        replacedRange: TextRange(start: 1, end: 3),
+        replacementText: '\n',
+        selection: TextSelection.collapsed(offset: 2),
+        composing: TextRange.empty,
+      ),
+      editor,
+      [documentToggleEnter(folds)],
+    );
+    expect(root.delta!.toPlainText(), 'a');
+    expect(root.children.map((child) => child.delta!.toPlainText()), [
+      'd',
+      '子内容',
+    ]);
+    folds.dispose();
+    editor.dispose();
   });
 
   testWidgets(
@@ -239,6 +445,115 @@ void main() {
       editor.dispose();
     },
   );
+
+  testWidgets('IME cross-toggle replacement is stopped before deletion', (
+    tester,
+  ) async {
+    final root = documentToggleNode(
+      delta: af.Delta()..insert('标题'),
+      children: [af.paragraphNode(text: '子内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            root,
+            af.paragraphNode(text: '后文'),
+          ],
+        ),
+      ),
+    );
+    final folds = DocumentToggleController();
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection(
+      start: af.Position(path: [0], offset: 1),
+      end: af.Position(path: [1], offset: 1),
+    );
+    var selectionRefreshes = 0;
+    editor.selectionNotifier.addListener(() => selectionRefreshes++);
+    await onReplace(
+      const TextEditingDeltaReplacement(
+        oldText: '标题\n后文',
+        replacedRange: TextRange(start: 1, end: 4),
+        replacementText: '\n',
+        selection: TextSelection.collapsed(offset: 2),
+        composing: TextRange.empty,
+      ),
+      editor,
+      [documentToggleEnter(folds), ...af.standardCharacterShortcutEvents],
+    );
+    expect(jsonEncode(editor.document.toJson()), before);
+    expect(editor.undoManager.undoStack, isEmpty);
+    expect(selectionRefreshes, 1);
+    folds.dispose();
+    editor.dispose();
+  });
+
+  testWidgets('rejected cross-toggle Enter restores the IME buffer', (
+    tester,
+  ) async {
+    final root = documentToggleNode(
+      delta: af.Delta()..insert('标题'),
+      children: [af.paragraphNode(text: '子内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            root,
+            af.paragraphNode(text: '后文'),
+          ],
+        ),
+      ),
+    );
+    final focus = FocusNode();
+    final scroll = af.EditorScrollController(editorState: editor);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+      focus.dispose();
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: DailyNotesDocumentCanvas(
+            editor: editor,
+            focusNode: focus,
+            scrollController: scroll,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final original = jsonEncode(editor.document.toJson());
+    focus.requestFocus();
+    editor.selection = af.Selection(
+      start: af.Position(path: [0], offset: 1),
+      end: af.Position(path: [1], offset: 1),
+    );
+    await tester.pumpAndSettle();
+    final keyboard =
+        editor.service.keyboardServiceKey.currentState!
+            as KeyboardServiceWidgetState;
+    final input = keyboard.textInputService as NonDeltaTextInputService;
+    final before = input.currentTextEditingValue!;
+    final index = before.text.indexOf(RegExp(r'[^\s]'));
+    expect(index, greaterThan(0));
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: before.text.replaceRange(index, index + 1, '\n'),
+        selection: TextSelection.collapsed(offset: index + 1),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), original);
+    expect(input.currentTextEditingValue?.text, before.text);
+    expect(input.currentTextEditingValue?.selection, before.selection);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('plus menu creates toggle lists and three heading levels', (
     tester,

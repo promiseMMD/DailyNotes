@@ -450,6 +450,7 @@ class KeyboardServiceWidgetState extends State<KeyboardServiceWidget>
         await onDelete(
           deletion,
           editorState,
+          commandShortcutEvents: widget.commandShortcutEvents,
         );
         return true;
       },

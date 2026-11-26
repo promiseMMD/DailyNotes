@@ -34,6 +34,36 @@ class DocumentToggleController extends ChangeNotifier {
   }
 }
 
+/// AppFlowy's toggle-heading shortcut removes only the heading level at the
+/// start of its title. Keep the node and its subtree intact for undo.
+final documentToggleHeadingBackspace = af.CommandShortcutEvent(
+  key: 'dailynotes toggle heading backspace',
+  command: 'backspace',
+  getDescription: null,
+  handler: (editor) {
+    final selection = editor.selection;
+    if (!editor.editable ||
+        editor.isDisposed ||
+        editor.selectionType == af.SelectionType.block ||
+        selection == null ||
+        !selection.isCollapsed ||
+        selection.start.offset != 0) {
+      return KeyEventResult.ignored;
+    }
+    final node = editor.document.nodeAtPath(selection.start.path);
+    if (node == null ||
+        node.type != DocumentToggleKeys.type ||
+        node.attributes[DocumentToggleKeys.level] is! int) {
+      return KeyEventResult.ignored;
+    }
+    final transaction = editor.transaction
+      ..updateNode(node, {DocumentToggleKeys.level: null})
+      ..afterSelection = selection;
+    unawaited(editor.apply(transaction));
+    return KeyEventResult.handled;
+  },
+);
+
 af.CharacterShortcutEvent documentToggleEnter(
   DocumentToggleController folds,
 ) => af.CharacterShortcutEvent(
@@ -42,6 +72,16 @@ af.CharacterShortcutEvent documentToggleEnter(
   handler: (editor) async {
     final selection = editor.selection;
     if (selection == null) return false;
+    void restoreRejectedInput() {
+      // The IME may already have replaced its local selection. Notify the
+      // input service to reattach the unchanged document and selection.
+      if (!editor.isDisposed &&
+          editor.editable &&
+          editor.selection == selection) {
+        editor.selection = selection;
+      }
+    }
+
     if (!selection.isSingle) {
       try {
         for (final selectedNode in editor.getNodesInSelection(selection)) {
@@ -58,12 +98,14 @@ af.CharacterShortcutEvent documentToggleEnter(
                   ),
                 );
               }
+              restoreRejectedInput();
               return true;
             }
             ancestor = ancestor.parent;
           }
         }
       } catch (_) {
+        restoreRejectedInput();
         return true;
       }
       return false;
