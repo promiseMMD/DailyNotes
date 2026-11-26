@@ -753,6 +753,16 @@ class _Translations$dailynotes$en extends Translations$dailynotes$zh {
 	@override String get editorHeading1 => 'Heading 1';
 	@override String get editorHeading2 => 'Heading 2';
 	@override String get editorHeading3 => 'Heading 3';
+	@override String get editorToggle => 'Toggle list';
+	@override String get editorToggleHeading1 => 'Toggle heading 1';
+	@override String get editorToggleHeading2 => 'Toggle heading 2';
+	@override String get editorToggleHeading3 => 'Toggle heading 3';
+	@override String get toggleAddContent => 'Add content';
+	@override String get toggleExpand => 'Expand toggle content';
+	@override String get toggleCollapse => 'Collapse toggle content';
+	@override String get toggleSelectionInside => 'Move the cursor or selection outside the content before collapsing it.';
+	@override String get toggleComplexSelection => 'Adjust the selection before adding a line across toggle blocks.';
+	@override String get outlineShowToggles => 'Show toggle lists';
 	@override String get editorFont => 'Font';
 	@override String get editorFontDefault => 'Default font';
 	@override String get editorFontSans => 'Sans serif';

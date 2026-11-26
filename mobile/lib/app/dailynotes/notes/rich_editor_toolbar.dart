@@ -8,6 +8,7 @@ import 'package:moodiary_logging/moodiary_logging.dart';
 import 'package:mui/mui.dart';
 
 import '../editor/document_editor_back_controller.dart';
+import '../editor/document_toggle_model.dart';
 
 /// Mobile controls for the AppFlowy document. Business persistence remains in
 /// the owning page; no command here reports a local save or submits a draft.
@@ -264,6 +265,10 @@ enum _InsertBlock {
   quote,
   bullet,
   numbered,
+  toggle,
+  toggleH1,
+  toggleH2,
+  toggleH3,
   divider,
 }
 
@@ -957,6 +962,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       af.BulletedListBlockKeys.type,
       af.NumberedListBlockKeys.type,
       af.QuoteBlockKeys.type,
+      DocumentToggleKeys.type,
     };
     return nodes.isNotEmpty &&
         nodes.every(
@@ -970,6 +976,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     // AppFlowy's conversion replaces each selected node. Never replace an
     // ancestor and descendant in the same transaction.
     return nodes.isNotEmpty &&
+        nodes.every((node) => node.type != DocumentToggleKeys.type) &&
         nodes.every((node) => identical(node.parent, nodes.first.parent));
   }
 
@@ -1104,6 +1111,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
       _InsertBlock.quote => af.quoteNode(),
       _InsertBlock.bullet => af.bulletedListNode(),
       _InsertBlock.numbered => af.numberedListNode(),
+      _InsertBlock.toggle => documentToggleNode(),
+      _InsertBlock.toggleH1 => documentToggleNode(level: 1),
+      _InsertBlock.toggleH2 => documentToggleNode(level: 2),
+      _InsertBlock.toggleH3 => documentToggleNode(level: 3),
       _InsertBlock.divider => throw StateError('unreachable'),
     };
     final emptyParagraph =
@@ -1844,12 +1855,13 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         _textOnly(selected) &&
         (_formatSession == null || _formatValid(_formatSession!));
     final canBlock = canText && selected.isSingle;
+    final canConvertBlock = canBlock && _canConvert(selected);
     final actions = <_ToolbarAction>[
       _ToolbarAction(
         'todo',
         l10n.editor.toolbar.taskList,
         LucideIcons.listTodo,
-        !isRange && canBlock
+        !isRange && canConvertBlock
             ? () => _quick((s) => _convert(s, af.TodoListBlockKeys.type))
             : null,
       ),
@@ -1857,7 +1869,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         'bullet',
         l10n.editor.toolbar.bulletList,
         LucideIcons.list,
-        !isRange && canBlock
+        !isRange && canConvertBlock
             ? () => _quick((s) => _convert(s, af.BulletedListBlockKeys.type))
             : null,
       ),
@@ -1865,7 +1877,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         'numbered',
         l10n.editor.toolbar.orderedList,
         LucideIcons.listOrdered,
-        !isRange && canBlock
+        !isRange && canConvertBlock
             ? () => _quick((s) => _convert(s, af.NumberedListBlockKeys.type))
             : null,
       ),
@@ -2477,6 +2489,10 @@ class _InsertSheet extends StatelessWidget {
       (_InsertBlock.quote, e.quote, LucideIcons.quote),
       (_InsertBlock.bullet, e.bulletList, LucideIcons.list),
       (_InsertBlock.numbered, e.orderedList, LucideIcons.listOrdered),
+      (_InsertBlock.toggle, t.editorToggle, LucideIcons.chevronRight),
+      (_InsertBlock.toggleH1, t.editorToggleHeading1, LucideIcons.heading1),
+      (_InsertBlock.toggleH2, t.editorToggleHeading2, LucideIcons.heading2),
+      (_InsertBlock.toggleH3, t.editorToggleHeading3, LucideIcons.heading3),
       (_InsertBlock.divider, e.divider, LucideIcons.minus),
     ];
     return SizedBox(

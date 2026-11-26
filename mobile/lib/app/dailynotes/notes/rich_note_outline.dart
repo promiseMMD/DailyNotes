@@ -4,6 +4,8 @@ import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:mui/mui.dart';
 
+import '../editor/document_toggle_model.dart';
+
 class DocumentOutlineResult {
   const DocumentOutlineResult.target(Node this.target) : previous = false;
   const DocumentOutlineResult.previous() : target = null, previous = true;
@@ -194,6 +196,12 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   final _search = TextEditingController();
   final Set<String> _collapsed = {};
   List<Node> _headings = [];
+  bool _showToggles = false;
+
+  bool _isHeading(Node node) =>
+      node.type == HeadingBlockKeys.type ||
+      (node.type == DocumentToggleKeys.type &&
+          node.attributes[DocumentToggleKeys.level] is int);
 
   @override
   void initState() {
@@ -221,7 +229,10 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
             needsRescan = true;
             break;
           }
-          if (node.type == HeadingBlockKeys.type) needsRebuild = true;
+          if (node.type == HeadingBlockKeys.type ||
+              node.type == DocumentToggleKeys.type) {
+            needsRebuild = true;
+          }
         }
         if (needsRescan) {
           setState(() => _refreshHeadings(editor));
@@ -235,10 +246,15 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   }
 
   void _refreshHeadings(EditorState editor) {
-    _headings = NodeIterator(
-      document: editor.document,
-      startNode: editor.document.root,
-    ).toList().where((node) => node.type == HeadingBlockKeys.type).toList();
+    _headings =
+        NodeIterator(document: editor.document, startNode: editor.document.root)
+            .toList()
+            .where(
+              (node) =>
+                  node.type == HeadingBlockKeys.type ||
+                  node.type == DocumentToggleKeys.type,
+            )
+            .toList();
     final current = _headings.map((node) => node.id).toSet();
     _collapsed.removeWhere((id) => !current.contains(id));
   }
@@ -251,6 +267,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
       _query = '';
       _search.clear();
       _collapsed.clear();
+      _showToggles = false;
       _listen(widget.editor);
     }
   }
@@ -265,16 +282,37 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
   @override
   Widget build(BuildContext context) {
     final t = context.l10n.dailynotes;
-    final headings = _headings;
+    final headings = _headings
+        .where((node) => _isHeading(node) || _showToggles)
+        .toList();
     String label(Node node) {
       final text = node.delta?.toPlainText().trim() ?? '';
       return text.isEmpty ? t.untitledHeading : text;
     }
 
-    int level(Node node) {
+    int headingLevel(Node node) {
       final raw = node.attributes[HeadingBlockKeys.level];
       return raw is int ? raw.clamp(1, 6) : 1;
     }
+
+    final levels = <Node, int>{};
+    final precedingHeadings = <Node>[];
+    for (final node in headings) {
+      if (_isHeading(node)) {
+        final current = headingLevel(node);
+        while (precedingHeadings.isNotEmpty &&
+            levels[precedingHeadings.last]! >= current) {
+          precedingHeadings.removeLast();
+        }
+        levels[node] = current;
+        precedingHeadings.add(node);
+      } else {
+        levels[node] = precedingHeadings.isEmpty
+            ? 1
+            : (levels[precedingHeadings.last]! + 1).clamp(1, 6);
+      }
+    }
+    int level(Node node) => levels[node]!;
 
     final query = _query.trim().toLowerCase();
     final searching = query.isNotEmpty;
@@ -282,9 +320,11 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
     final ancestors = <int>[];
     for (var index = 0; index < headings.length; index++) {
       final node = headings[index];
-      while (ancestors.isNotEmpty &&
-          level(headings[ancestors.last]) >= level(node)) {
-        ancestors.removeLast();
+      if (_isHeading(node)) {
+        while (ancestors.isNotEmpty &&
+            level(headings[ancestors.last]) >= level(node)) {
+          ancestors.removeLast();
+        }
       }
       if (searching) {
         if (label(node).toLowerCase().contains(query)) {
@@ -294,7 +334,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
       } else if (!ancestors.any((i) => _collapsed.contains(headings[i].id))) {
         included.add(index);
       }
-      ancestors.add(index);
+      if (_isHeading(node)) ancestors.add(index);
     }
     final filtered = [
       for (var index = 0; index < headings.length; index++)
@@ -349,6 +389,14 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
                 ),
               ),
             ),
+            CheckboxListTile(
+              key: const ValueKey('outline-show-toggles'),
+              dense: true,
+              title: Text(t.outlineShowToggles),
+              value: _showToggles,
+              onChanged: (value) =>
+                  setState(() => _showToggles = value ?? false),
+            ),
             Expanded(
               child: filtered.isEmpty
                   ? Center(
@@ -363,6 +411,7 @@ class _RichNoteOutlineState extends State<RichNoteOutline> {
                         final node = headings[originalIndex];
                         final nodeLevel = level(node);
                         final hasChildren =
+                            _isHeading(node) &&
                             originalIndex + 1 < headings.length &&
                             level(headings[originalIndex + 1]) > nodeLevel;
                         final expanded =

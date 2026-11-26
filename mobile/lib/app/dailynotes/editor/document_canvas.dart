@@ -14,7 +14,10 @@ import 'document_bookmark_rebaser.dart';
 import 'document_bookmark_store.dart';
 import 'document_editor_back_controller.dart';
 import 'document_metadata_save_controller.dart';
+import 'document_outline_navigation.dart';
 import 'document_reading_position.dart';
+import 'document_toggle_block.dart';
+import 'document_toggle_model.dart';
 
 /// One mobile document surface for notes, diaries and long-record drafts.
 /// The owning page remains responsible for its own persistence lifecycle.
@@ -33,6 +36,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
     this.readingPositionIsSaved = false,
     this.readingPositionCanStore,
     this.metadataSaveController,
+    this.outlineNavigation,
   });
 
   final af.EditorState editor;
@@ -55,6 +59,7 @@ class DailyNotesDocumentCanvas extends StatefulWidget {
 
   /// Optional explicit save acknowledgement for pages that pop immediately.
   final DocumentMetadataSaveController? metadataSaveController;
+  final DocumentOutlineNavigation? outlineNavigation;
 
   @override
   State<DailyNotesDocumentCanvas> createState() =>
@@ -65,18 +70,32 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
   Future<({List<String> families, bool hasUnavailable})>? _loadingFonts;
   DocumentReadingPosition? _readingPosition;
   DocumentBookmarkRebaser? _bookmarkRebaser;
+  DocumentToggleController _folds = DocumentToggleController();
 
   @override
   void initState() {
     super.initState();
     _restoreDocumentFonts();
     _startReadingPosition();
+    widget.outlineNavigation?.attachFolds(widget.editor, _folds);
   }
 
   @override
   void didUpdateWidget(covariant DailyNotesDocumentCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.editor, widget.editor)) _restoreDocumentFonts();
+    if (!identical(oldWidget.editor, widget.editor)) {
+      oldWidget.outlineNavigation?.detachFolds(oldWidget.editor, _folds);
+      _folds.dispose();
+      _folds = DocumentToggleController();
+      widget.outlineNavigation?.attachFolds(widget.editor, _folds);
+      _restoreDocumentFonts();
+    } else if (!identical(
+      oldWidget.outlineNavigation,
+      widget.outlineNavigation,
+    )) {
+      oldWidget.outlineNavigation?.detachFolds(oldWidget.editor, _folds);
+      widget.outlineNavigation?.attachFolds(widget.editor, _folds);
+    }
     if (!identical(oldWidget.editor, widget.editor) ||
         !identical(oldWidget.scrollController, widget.scrollController) ||
         oldWidget.readingPositionIdentity != widget.readingPositionIdentity) {
@@ -162,6 +181,8 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
 
   @override
   void dispose() {
+    widget.outlineNavigation?.detachFolds(widget.editor, _folds);
+    _folds.dispose();
     _readingPosition?.dispose();
     _detachController(widget.metadataSaveController);
     _bookmarkRebaser?.dispose();
@@ -238,6 +259,14 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
         },
         child: af.AppFlowyEditor(
           editorState: widget.editor,
+          blockComponentBuilders: {
+            ...af.standardBlockComponentBuilderMap,
+            DocumentToggleKeys.type: DocumentToggleBuilder(_folds),
+          },
+          characterShortcutEvents: [
+            documentToggleEnter(_folds),
+            ...af.standardCharacterShortcutEvents,
+          ],
           focusNode: widget.focusNode,
           editorScrollController: widget.scrollController,
           editable: widget.editable,

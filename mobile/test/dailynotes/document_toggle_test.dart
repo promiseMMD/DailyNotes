@@ -1,0 +1,426 @@
+// The app still uses this bridge during its Material migration.
+// ignore_for_file: deprecated_member_use
+
+import 'dart:convert';
+
+import 'package:appflowy_editor/appflowy_editor.dart' as af;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:moodiary_data/moodiary_data.dart';
+import 'package:moodiary_di/moodiary_di.dart';
+import 'package:moodiary_i18n/moodiary_i18n.dart';
+import 'package:moodiary_mobile/app/dailynotes/data/daily_notes_store.dart';
+import 'package:moodiary_mobile/app/dailynotes/data/rich_document_guard.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_canvas.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_envelope.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_toggle_block.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_toggle_model.dart';
+import 'package:moodiary_mobile/app/dailynotes/notes/rich_note_editor_page.dart';
+import 'package:moodiary_storage/moodiary_storage.dart';
+import 'package:moodiary_storage/testing.dart';
+import 'package:mui/mui.dart';
+
+Widget _app(Widget child) => TranslationProvider(
+  child: MaterialApp(
+    theme: buildMuiTheme(brightness: Brightness.light),
+    localizationsDelegates: const [
+      af.AppFlowyEditorLocalizations.delegate,
+      ...GlobalMaterialLocalizations.delegates,
+      GlobalMuiLocalizations.delegate,
+    ],
+    builder: (context, child) => MaterialUiCompatibilityBridge(child: child!),
+    home: child,
+  ),
+);
+
+void main() {
+  setUpAll(() async {
+    await setupPluralResolvers();
+    await LocaleSettings.setLocale(AppLocale.zh);
+  });
+  setUp(() => getIt.registerSingleton<IKVStorage>(MemoryKVStorage()));
+  tearDown(() => getIt.reset());
+
+  test('toggle blocks preserve their rich content and reject invalid data', () {
+    final document = af.Document(
+      root: af.pageNode(
+        children: [
+          documentToggleNode(
+            level: 2,
+            collapsed: true,
+            delta: af.Delta()..insert('标题', attributes: {'bold': true}),
+            children: [af.paragraphNode(text: '子内容')],
+          ),
+        ],
+      ),
+    );
+    final json = jsonEncode(document.toJson());
+    expect(validateRichDocument(json), jsonDecode(json));
+    final envelope = DailyNotesDocumentEnvelope.encode(document);
+    final reopened = DailyNotesDocumentEnvelope.decode(envelope);
+    expect(jsonEncode(reopened.toJson()), json);
+    expect(DailyNotesDocumentEnvelope.plainText(reopened), '标题\n子内容');
+    reopened.dispose();
+    document.dispose();
+
+    for (final bad in <Map<String, Object>>[
+      {'delta': [], 'collapsed': 'no'},
+      {'delta': [], 'level': 7},
+      {'delta': [], 'level': '2'},
+      {'collapsed': false},
+    ]) {
+      expect(
+        () => validateRichDocument(
+          jsonEncode({
+            'document': {
+              'type': 'page',
+              'children': [
+                {'type': DocumentToggleKeys.type, 'data': bad},
+              ],
+            },
+          }),
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+
+  testWidgets(
+    'Enter inside an expanded toggle preserves its subtree and undo',
+    (tester) async {
+      final root = documentToggleNode(
+        delta: af.Delta()
+          ..insert('前文')
+          ..insert('后文', attributes: {'bold': true}),
+        children: [af.paragraphNode(text: '原子内容')],
+      );
+      final editor = af.EditorState(
+        document: af.Document(root: af.pageNode(children: [root])),
+      );
+      final folds = DocumentToggleController();
+      final before = jsonEncode(editor.document.toJson());
+      editor.selection = af.Selection.single(path: [0], startOffset: 2);
+      expect(await documentToggleEnter(folds).execute(editor), isTrue);
+      expect(root.delta!.toPlainText(), '前文');
+      expect(root.children.map((child) => child.delta!.toPlainText()), [
+        '后文',
+        '原子内容',
+      ]);
+      expect(
+        jsonEncode(root.children.first.delta!.toJson()),
+        contains('"bold":true'),
+      );
+      expect(editor.selection!.start.path, [0, 0]);
+      editor.undoManager.undo();
+      await tester.pump();
+      expect(jsonEncode(editor.document.toJson()), before);
+      folds.dispose();
+      editor.dispose();
+    },
+  );
+
+  testWidgets('Enter on a collapsed toggle keeps its existing children', (
+    tester,
+  ) async {
+    final root = documentToggleNode(
+      level: 2,
+      collapsed: true,
+      delta: af.Delta()..insert('标题尾部'),
+      children: [af.paragraphNode(text: '保留内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [root])),
+    );
+    final folds = DocumentToggleController();
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(path: [0], startOffset: 2);
+    expect(await documentToggleEnter(folds).execute(editor), isTrue);
+    expect(root.delta!.toPlainText(), '标题');
+    expect(root.children.single.delta!.toPlainText(), '保留内容');
+    final next = editor.document.root.children.last;
+    expect(next.delta!.toPlainText(), '尾部');
+    expect(next.attributes[DocumentToggleKeys.level], 2);
+    expect(next.attributes[DocumentToggleKeys.collapsed], isTrue);
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), before);
+    folds.dispose();
+    editor.dispose();
+  });
+
+  testWidgets(
+    'Enter replaces selected toggle text without moving its subtree',
+    (tester) async {
+      final root = documentToggleNode(
+        delta: af.Delta()
+          ..insert('ab', attributes: {'bold': true})
+          ..insert('cd')
+          ..insert('ef', attributes: {'italic': true}),
+        children: [af.paragraphNode(text: '原子内容')],
+      );
+      final editor = af.EditorState(
+        document: af.Document(root: af.pageNode(children: [root])),
+      );
+      final folds = DocumentToggleController();
+      final before = jsonEncode(editor.document.toJson());
+      editor.selection = af.Selection.single(
+        path: [0],
+        startOffset: 2,
+        endOffset: 4,
+      );
+      expect(await documentToggleEnter(folds).execute(editor), isTrue);
+      expect(root.delta!.toPlainText(), 'ab');
+      expect(root.children.map((child) => child.delta!.toPlainText()), [
+        'ef',
+        '原子内容',
+      ]);
+      expect(
+        jsonEncode(root.children.first.delta!.toJson()),
+        contains('"italic":true'),
+      );
+      editor.undoManager.undo();
+      await tester.pump();
+      expect(jsonEncode(editor.document.toJson()), before);
+      folds.dispose();
+      editor.dispose();
+    },
+  );
+
+  testWidgets('Enter before an empty folded title never deletes its children', (
+    tester,
+  ) async {
+    final root = documentToggleNode(
+      collapsed: true,
+      children: [af.paragraphNode(text: '保留内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [root])),
+    );
+    final folds = DocumentToggleController();
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection.single(path: [0], startOffset: 0);
+    expect(await documentToggleEnter(folds).execute(editor), isTrue);
+    expect(editor.document.root.children, hasLength(2));
+    expect(root.children.single.delta!.toPlainText(), '保留内容');
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), before);
+    folds.dispose();
+    editor.dispose();
+  });
+
+  test(
+    'cross-toggle Enter is stopped before changing document contents',
+    () async {
+      final root = documentToggleNode(
+        delta: af.Delta()..insert('标题'),
+        children: [af.paragraphNode(text: '子内容')],
+      );
+      final editor = af.EditorState(
+        document: af.Document(
+          root: af.pageNode(
+            children: [
+              root,
+              af.paragraphNode(text: '后文'),
+            ],
+          ),
+        ),
+      );
+      final folds = DocumentToggleController();
+      final before = jsonEncode(editor.document.toJson());
+      editor.selection = af.Selection(
+        start: af.Position(path: [0], offset: 1),
+        end: af.Position(path: [1], offset: 1),
+      );
+      expect(await documentToggleEnter(folds).execute(editor), isTrue);
+      expect(jsonEncode(editor.document.toJson()), before);
+      expect(editor.undoManager.undoStack.isEmpty, isTrue);
+      folds.dispose();
+      editor.dispose();
+    },
+  );
+
+  testWidgets('plus menu creates toggle lists and three heading levels', (
+    tester,
+  ) async {
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(children: [af.paragraphNode(text: '前文')]),
+      ),
+    );
+    final focus = FocusNode();
+    final scroll = af.EditorScrollController(editorState: editor);
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+      focus.dispose();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetViewInsets();
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: DailyNotesDocumentCanvas(
+            editor: editor,
+            focusNode: focus,
+            scrollController: scroll,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    focus.requestFocus();
+    editor.selection = af.Selection.single(path: [0], startOffset: 2);
+    await tester.pumpAndSettle();
+    for (final kind in ['toggle', 'toggleH1', 'toggleH2', 'toggleH3']) {
+      await tester.tap(find.byKey(const ValueKey('rich-toolbar-insert')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(ListView),
+        findsWidgets,
+        reason: 'opening $kind with selection ${editor.selection}',
+      );
+      final item = find.byKey(ValueKey('rich-insert-$kind'));
+      final list = find.byType(ListView).last;
+      await tester.scrollUntilVisible(
+        item,
+        160,
+        scrollable: find.descendant(
+          of: list,
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.ensureVisible(item);
+      await tester.pumpAndSettle();
+      await tester.tap(item);
+      await tester.pumpAndSettle();
+    }
+    final nodes = editor.document.root.children;
+    expect(nodes.first.delta!.toPlainText(), '前文');
+    expect(
+      nodes.skip(1).map((node) => node.type),
+      everyElement(DocumentToggleKeys.type),
+    );
+    expect(
+      nodes.skip(1).map((node) => node.attributes[DocumentToggleKeys.level]),
+      [null, 1, 2, 3],
+    );
+    final last = nodes.last;
+    await tester.tap(find.byKey(ValueKey('toggle-add-child-${last.id}')));
+    await tester.pumpAndSettle();
+    expect(last.children, hasLength(1));
+    expect(editor.selection!.start.path, [...last.path, 0]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('outline opens hidden headings without changing a locked note', (
+    tester,
+  ) async {
+    final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
+    final store = DailyNotesStore(db);
+    await store.open();
+    final document = af.Document(
+      root: af.pageNode(
+        children: [
+          documentToggleNode(
+            collapsed: true,
+            delta: af.Delta()..insert('折叠父级'),
+            children: [
+              af.headingNode(level: 2, text: '隐藏标题'),
+              documentToggleNode(
+                level: 3,
+                delta: af.Delta()
+                  ..insert(
+                    '折叠标题',
+                    attributes: {
+                      af.AppFlowyRichTextKeys.textColor: '0xffdb3636',
+                    },
+                  ),
+              ),
+              af.paragraphNode(text: '隐藏内容'),
+            ],
+          ),
+          af.paragraphNode(text: '结尾'),
+        ],
+      ),
+    );
+    final body = jsonEncode(document.toJson());
+    final note = await store.saveRichNote(
+      title: '测试',
+      plainText: '折叠父级\n隐藏标题\n折叠标题\n隐藏内容\n结尾',
+      documentJson: body,
+      documentVersion: 1,
+    );
+    document.dispose();
+    final pending = store.pendingOperationCount;
+    await tester.binding.setSurfaceSize(const Size(430, 700));
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      store.dispose();
+      await db.close();
+      await tester.binding.setSurfaceSize(null);
+    });
+    await tester.pumpWidget(_app(RichNoteEditorPage(store: store, note: note)));
+    await tester.pumpAndSettle();
+    final canvas = tester.widget<DailyNotesDocumentCanvas>(
+      find.byType(DailyNotesDocumentCanvas),
+    );
+    final root = canvas.editor.document.root.children.first;
+    final hidden = root.children.first;
+    final toggleHeading = root.children[1];
+    expect(hidden.key.currentContext, isNull);
+    await tester.tap(
+      find.byKey(const ValueKey('note-document-outline-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${root.id}')), findsNothing);
+    expect(find.byKey(ValueKey('outline-${hidden.id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('outline-${toggleHeading.id}')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('outline-show-toggles')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${root.id}')), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('outline-${hidden.id}')));
+    await tester.pumpAndSettle();
+    expect(hidden.key.currentContext, isNotNull);
+    expect(find.text(l10n.dailynotes.outlineUnavailable), findsNothing);
+    bool redTitle(InlineSpan span) {
+      if (span is! TextSpan) return false;
+      return ((span.text?.contains('折叠标题') ?? false) &&
+              span.style?.color == const Color(0xffdb3636)) ||
+          (span.children?.any(redTitle) ?? false);
+    }
+
+    expect(
+      tester
+          .widgetList<RichText>(
+            find.descendant(
+              of: find.byKey(toggleHeading.key),
+              matching: find.byType(RichText),
+            ),
+          )
+          .any((widget) => redTitle(widget.text)),
+      isTrue,
+    );
+    await tester.tap(find.byKey(ValueKey('toggle-block-${root.id}')));
+    await tester.pumpAndSettle();
+    expect(hidden.key.currentContext, isNull);
+    await tester.tap(find.byKey(ValueKey('toggle-block-${root.id}')));
+    await tester.pumpAndSettle();
+    expect(hidden.key.currentContext, isNotNull);
+    canvas.editor.selection = af.Selection.single(path: [0, 0], startOffset: 1);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('toggle-block-${root.id}')));
+    await tester.pumpAndSettle();
+    expect(hidden.key.currentContext, isNotNull);
+    expect(find.text(l10n.dailynotes.toggleSelectionInside), findsOneWidget);
+    expect(canvas.editable, isFalse);
+    expect(store.notes.single.documentJson, body);
+    expect(store.pendingOperationCount, pending);
+  });
+}

@@ -1,6 +1,8 @@
 import 'package:appflowy_editor/appflowy_editor.dart' as af;
 import 'package:mui/mui.dart';
 
+import 'document_toggle_block.dart';
+
 class _ReadingAnchor {
   const _ReadingAnchor(this.editor, this.node, this.alignment);
 
@@ -16,6 +18,21 @@ class DocumentOutlineNavigation {
   int _generation = 0;
   bool _disposed = false;
   _ReadingAnchor? _previous;
+  af.EditorState? _foldEditor;
+  DocumentToggleController? _folds;
+
+  void attachFolds(af.EditorState editor, DocumentToggleController folds) {
+    if (_disposed) return;
+    _foldEditor = editor;
+    _folds = folds;
+  }
+
+  void detachFolds(af.EditorState editor, DocumentToggleController folds) {
+    if (identical(_foldEditor, editor) && identical(_folds, folds)) {
+      _foldEditor = null;
+      _folds = null;
+    }
+  }
 
   /// A temporary point from this editor session, not a persistent bookmark.
   bool hasPrevious(af.EditorState editor) =>
@@ -25,6 +42,8 @@ class DocumentOutlineNavigation {
     _disposed = true;
     _generation++;
     _previous = null;
+    _foldEditor = null;
+    _folds = null;
   }
 
   _ReadingAnchor? _capture(
@@ -99,6 +118,12 @@ class DocumentOutlineNavigation {
       return false;
     }
     final previous = _capture(editor, scroll);
+    if (identical(_foldEditor, editor) &&
+        (_folds?.expandAncestors(target) ?? false)) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!current()) return null;
+      if (!targetIsCurrent()) return false;
+    }
     var targetContext = target.key.currentContext;
     if (targetContext == null || !targetContext.mounted) {
       // The document header is item zero; root document blocks start at one.

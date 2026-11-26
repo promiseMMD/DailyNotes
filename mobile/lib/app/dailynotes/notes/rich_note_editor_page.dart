@@ -993,6 +993,7 @@ class _RichNoteEditorPageState extends State<RichNoteEditorPage>
                     Expanded(
                       child: DailyNotesDocumentCanvas(
                         backController: _editorBack,
+                        outlineNavigation: _outlineNavigation,
                         editor: editor,
                         focusNode: _editorFocus,
                         scrollController: _scrollController!,

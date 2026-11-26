@@ -592,6 +592,7 @@ class _RichDiaryPageState extends State<RichDiaryPage>
                     Expanded(
                       child: DailyNotesDocumentCanvas(
                         backController: _editorBack,
+                        outlineNavigation: _outlineNavigation,
                         editor: editor,
                         focusNode: _focus,
                         scrollController: _scroll!,

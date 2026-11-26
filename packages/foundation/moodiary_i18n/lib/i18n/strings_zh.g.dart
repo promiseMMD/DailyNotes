@@ -2088,6 +2088,36 @@ class Translations$dailynotes$zh {
 	/// zh: '三级标题'
 	String get editorHeading3 => '三级标题';
 
+	/// zh: '折叠列表'
+	String get editorToggle => '折叠列表';
+
+	/// zh: '折叠一级标题'
+	String get editorToggleHeading1 => '折叠一级标题';
+
+	/// zh: '折叠二级标题'
+	String get editorToggleHeading2 => '折叠二级标题';
+
+	/// zh: '折叠三级标题'
+	String get editorToggleHeading3 => '折叠三级标题';
+
+	/// zh: '添加内容'
+	String get toggleAddContent => '添加内容';
+
+	/// zh: '展开折叠内容'
+	String get toggleExpand => '展开折叠内容';
+
+	/// zh: '折叠内容'
+	String get toggleCollapse => '折叠内容';
+
+	/// zh: '请先将光标或选区移出折叠内容。'
+	String get toggleSelectionInside => '请先将光标或选区移出折叠内容。';
+
+	/// zh: '暂不支持跨折叠区块直接换行，请先调整选区。'
+	String get toggleComplexSelection => '暂不支持跨折叠区块直接换行，请先调整选区。';
+
+	/// zh: '显示折叠列表'
+	String get outlineShowToggles => '显示折叠列表';
+
 	/// zh: '字体'
 	String get editorFont => '字体';
 

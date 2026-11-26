@@ -1259,6 +1259,7 @@ class _ModMonthComposerState extends State<ModMonthComposer>
                               absorbing: _locked,
                               child: DailyNotesDocumentCanvas(
                                 backController: _editorBack,
+                                outlineNavigation: _outlineNavigation,
                                 editor: _documentEditor!,
                                 focusNode: _documentFocus,
                                 scrollController: _documentScroll!,
