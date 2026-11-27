@@ -1046,18 +1046,21 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
 
   bool _canIndent() =>
       (widget.toggleNesting?.canIndent(widget.editor) ?? false) ||
-      af.isIndentable(widget.editor);
+      (!(widget.toggleNesting?.blocksUnsafeFallback(widget.editor) ?? false) &&
+          af.isIndentable(widget.editor));
 
   bool _canOutdent() =>
       (widget.toggleNesting?.canOutdent(widget.editor) ?? false) ||
-      af.isOutdentable(widget.editor);
+      (!(widget.toggleNesting?.blocksUnsafeFallback(widget.editor) ?? false) &&
+          af.isOutdentable(widget.editor));
 
   Future<void> _indent(af.Selection selection) async {
     if (widget.editor.selection != selection) return;
     final nesting = widget.toggleNesting;
     if (nesting != null && nesting.canIndent(widget.editor)) {
       await nesting.indent(widget.editor);
-    } else if (af.isIndentable(widget.editor)) {
+    } else if (!(nesting?.blocksUnsafeFallback(widget.editor) ?? false) &&
+        af.isIndentable(widget.editor)) {
       af.indentCommand.execute(widget.editor);
     }
   }
@@ -1067,7 +1070,8 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     final nesting = widget.toggleNesting;
     if (nesting != null && nesting.canOutdent(widget.editor)) {
       await nesting.outdent(widget.editor);
-    } else if (af.isOutdentable(widget.editor)) {
+    } else if (!(nesting?.blocksUnsafeFallback(widget.editor) ?? false) &&
+        af.isOutdentable(widget.editor)) {
       af.outdentCommand.execute(widget.editor);
     }
   }

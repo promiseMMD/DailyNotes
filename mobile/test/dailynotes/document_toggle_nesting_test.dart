@@ -11,6 +11,202 @@ import 'package:moodiary_mobile/app/dailynotes/editor/document_toggle_nesting.da
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('move sibling blocks together and preserve order and selection', (
+    tester,
+  ) async {
+    final existing = af.paragraphNode(text: '已有');
+    final parent = documentToggleNode(
+      collapsed: true,
+      delta: af.Delta()..insert('父级'),
+      children: [existing],
+    );
+    final child = af.paragraphNode(text: '段落子内容');
+    final paragraph = af.paragraphNode(
+      delta: af.Delta()..insert('段落', attributes: {'bold': true}),
+      children: [child],
+    );
+    final heading = af.headingNode(level: 2, text: '小节');
+    final toggle = documentToggleNode(
+      delta: af.Delta()..insert('折叠块'),
+      children: [af.paragraphNode(text: '折叠子内容')],
+    );
+    final tail = af.paragraphNode(text: '后文');
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(children: [parent, paragraph, heading, toggle, tail]),
+      ),
+    );
+    final folds = DocumentToggleController();
+    final nesting = DocumentToggleNesting(folds);
+    final before = jsonEncode(editor.document.toJson());
+    editor.selection = af.Selection(
+      start: af.Position(path: [3], offset: 2),
+      end: af.Position(path: [1], offset: 1),
+    );
+
+    expect(nesting.canIndent(editor), isTrue);
+    await nesting.indent(editor);
+    expect(editor.document.root.children, [parent, tail]);
+    expect(parent.children, [existing, paragraph, heading, toggle]);
+    expect(paragraph.children.single, same(child));
+    expect(folds.isCollapsed(parent), isFalse);
+    expect(editor.selection!.start.path, [0, 3]);
+    expect(editor.selection!.start.offset, 2);
+    expect(editor.selection!.end.path, [0, 1]);
+    expect(editor.selection!.end.offset, 1);
+    final saved = DailyNotesDocumentEnvelope.decode(
+      DailyNotesDocumentEnvelope.encode(editor.document),
+    );
+    expect(jsonEncode(saved.toJson()), jsonEncode(editor.document.toJson()));
+    saved.dispose();
+
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(jsonEncode(editor.document.toJson()), before);
+    expect(editor.document.root.children, [
+      parent,
+      paragraph,
+      heading,
+      toggle,
+      tail,
+    ]);
+    editor.undoManager.redo();
+    await tester.pump();
+    expect(parent.children, [existing, paragraph, heading, toggle]);
+    expect(nesting.canOutdent(editor), isTrue);
+    await nesting.outdent(editor);
+    expect(editor.document.root.children, [
+      parent,
+      paragraph,
+      heading,
+      toggle,
+      tail,
+    ]);
+    expect(parent.children, [existing]);
+    expect(editor.selection!.start.path, [3]);
+    expect(editor.selection!.end.path, [1]);
+    expect(editor.selection!.start.offset, 2);
+    expect(editor.selection!.end.offset, 1);
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(parent.children, [existing, paragraph, heading, toggle]);
+    editor.undoManager.redo();
+    await tester.pump();
+    expect(editor.document.root.children, [
+      parent,
+      paragraph,
+      heading,
+      toggle,
+      tail,
+    ]);
+    folds.dispose();
+    editor.dispose();
+  });
+
+  testWidgets('batch moves preserve paths inside a nested container', (
+    tester,
+  ) async {
+    final parent = documentToggleNode(delta: af.Delta()..insert('父级'));
+    final first = af.paragraphNode(text: '第一');
+    final second = af.todoListNode(checked: true, text: '第二');
+    final outer = af.paragraphNode(
+      text: '外层',
+      children: [parent, first, second],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [outer])),
+    );
+    final folds = DocumentToggleController();
+    final nesting = DocumentToggleNesting(folds);
+    editor.selection = af.Selection(
+      start: af.Position(path: [0, 1], offset: 1),
+      end: af.Position(path: [0, 2], offset: 2),
+    );
+    expect(nesting.canIndent(editor), isTrue);
+    await nesting.indent(editor);
+    expect(outer.children, [parent]);
+    expect(parent.children, [first, second]);
+    expect(editor.selection!.start.path, [0, 0, 0]);
+    expect(editor.selection!.end.path, [0, 0, 1]);
+    expect(nesting.canOutdent(editor), isTrue);
+    await nesting.outdent(editor);
+    expect(outer.children, [parent, first, second]);
+    expect(editor.selection!.start.path, [0, 1]);
+    expect(editor.selection!.end.path, [0, 2]);
+    editor.undoManager.undo();
+    await tester.pump();
+    expect(parent.children, [first, second]);
+    folds.dispose();
+    editor.dispose();
+  });
+
+  test(
+    'reject outdent of a middle range instead of reordering siblings',
+    () async {
+      final parent = documentToggleNode(
+        delta: af.Delta()..insert('父级'),
+        children: [
+          af.paragraphNode(text: '之前'),
+          documentToggleNode(delta: af.Delta()..insert('选中一')),
+          af.paragraphNode(text: '选中二'),
+          af.paragraphNode(text: '之后'),
+        ],
+      );
+      final editor = af.EditorState(
+        document: af.Document(root: af.pageNode(children: [parent])),
+      );
+      final folds = DocumentToggleController();
+      final nesting = DocumentToggleNesting(folds);
+      editor.selection = af.Selection(
+        start: af.Position(path: [0, 1], offset: 1),
+        end: af.Position(path: [0, 2], offset: 2),
+      );
+      final before = jsonEncode(editor.document.toJson());
+      expect(nesting.canOutdent(editor), isFalse);
+      expect(nesting.shortcuts().last.handler(editor), KeyEventResult.handled);
+      await nesting.outdent(editor);
+      expect(jsonEncode(editor.document.toJson()), before);
+      folds.dispose();
+      editor.dispose();
+    },
+  );
+
+  test('cross-level selections touching a toggle cannot use SDK fallback', () {
+    final parent = documentToggleNode(
+      delta: af.Delta()..insert('父级'),
+      children: [
+        af.paragraphNode(text: '前一个子块'),
+        af.paragraphNode(text: '选中子块'),
+      ],
+    );
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(
+          children: [
+            parent,
+            af.paragraphNode(text: '后文'),
+          ],
+        ),
+      ),
+    );
+    final folds = DocumentToggleController();
+    final nesting = DocumentToggleNesting(folds);
+    editor.selection = af.Selection(
+      start: af.Position(path: [0, 1], offset: 1),
+      end: af.Position(path: [1], offset: 1),
+    );
+    final before = jsonEncode(editor.document.toJson());
+    expect(nesting.canIndent(editor), isFalse);
+    expect(nesting.canOutdent(editor), isFalse);
+    expect(nesting.blocksUnsafeFallback(editor), isTrue);
+    expect(af.isIndentable(editor), isTrue);
+    expect(nesting.shortcuts().first.handler(editor), KeyEventResult.handled);
+    expect(nesting.shortcuts().last.handler(editor), KeyEventResult.handled);
+    expect(jsonEncode(editor.document.toJson()), before);
+    folds.dispose();
+    editor.dispose();
+  });
+
   final movableBlocks = <String, af.Node Function(af.Delta)>{
     'paragraph': (delta) => af.paragraphNode(
       delta: delta,
@@ -236,6 +432,48 @@ void main() {
         if (!nesting.canIndent(editor)) foundBoundary = true;
       } on FormatException {
         // Only test documents that can already be saved.
+      }
+      folds.dispose();
+      editor.dispose();
+      if (foundBoundary) break;
+    }
+    expect(foundBoundary, isTrue);
+  });
+
+  test('one too-deep subtree prevents the whole batch from moving', () async {
+    var foundBoundary = false;
+    for (var count = 20; count < 35; count++) {
+      af.Node child = af.paragraphNode(text: '末尾');
+      for (var i = 0; i < count; i++) {
+        child = af.paragraphNode(text: '层', children: [child]);
+      }
+      final parent = documentToggleNode(delta: af.Delta()..insert('父级'));
+      final shallow = af.paragraphNode(text: '浅层');
+      final deep = documentToggleNode(
+        delta: af.Delta()..insert('深层'),
+        children: [child],
+      );
+      final editor = af.EditorState(
+        document: af.Document(
+          root: af.pageNode(children: [parent, shallow, deep]),
+        ),
+      );
+      final folds = DocumentToggleController();
+      final nesting = DocumentToggleNesting(folds);
+      editor.selection = af.Selection(
+        start: af.Position(path: [1], offset: 1),
+        end: af.Position(path: [2], offset: 1),
+      );
+      try {
+        DailyNotesDocumentEnvelope.encode(editor.document);
+        if (!nesting.canIndent(editor)) {
+          final before = jsonEncode(editor.document.toJson());
+          await nesting.indent(editor);
+          expect(jsonEncode(editor.document.toJson()), before);
+          foundBoundary = true;
+        }
+      } on FormatException {
+        // The original document must still be serializable.
       }
       folds.dispose();
       editor.dispose();

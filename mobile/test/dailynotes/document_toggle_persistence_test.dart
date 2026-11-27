@@ -82,11 +82,10 @@ Future<void> _edit(WidgetTester tester) async {
     find.byType(DailyNotesDocumentCanvas),
   );
   canvas.focusNode.requestFocus();
-  canvas.editor.selection = af.Selection.single(path: [1], startOffset: 1);
-  await tester.pumpAndSettle();
-  await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-  await tester.pumpAndSettle();
-  canvas.editor.selection = af.Selection.single(path: [1], startOffset: 1);
+  canvas.editor.selection = af.Selection(
+    start: af.Position(path: [1], offset: 1),
+    end: af.Position(path: [2], offset: 2),
+  );
   await tester.pumpAndSettle();
   await tester.sendKeyEvent(LogicalKeyboardKey.tab);
   await tester.pumpAndSettle();

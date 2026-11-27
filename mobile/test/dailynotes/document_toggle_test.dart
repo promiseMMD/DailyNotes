@@ -558,6 +558,171 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Aa and keyboard move sibling selections into a toggle', (
+    tester,
+  ) async {
+    final parent = documentToggleNode(
+      collapsed: true,
+      delta: af.Delta()..insert('父级'),
+    );
+    final paragraph = af.paragraphNode(
+      delta: af.Delta()..insert('正文', attributes: {'bold': true}),
+    );
+    final heading = af.headingNode(level: 2, text: '小节');
+    final task = af.todoListNode(checked: true, text: '任务');
+    final editor = af.EditorState(
+      document: af.Document(
+        root: af.pageNode(children: [parent, paragraph, heading, task]),
+      ),
+    );
+    final focus = FocusNode();
+    final scroll = af.EditorScrollController(editorState: editor);
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+      focus.dispose();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetViewInsets();
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: DailyNotesDocumentCanvas(
+            editor: editor,
+            focusNode: focus,
+            scrollController: scroll,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    focus.requestFocus();
+    editor.selection = af.Selection(
+      start: af.Position(path: [1], offset: 1),
+      end: af.Position(path: [3], offset: 1),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    final indent = find.byKey(
+      ValueKey('rich-format-${l10n.editor.toolbar.indent}'),
+    );
+    await tester.ensureVisible(indent);
+    await tester.tap(indent);
+    await tester.pumpAndSettle();
+    expect(parent.children, [paragraph, heading, task]);
+    expect(editor.selection!.start.path, [0, 0]);
+    expect(editor.selection!.end.path, [0, 2]);
+    final outdent = find.byKey(
+      ValueKey('rich-format-${l10n.editor.toolbar.outdent}'),
+    );
+    await tester.ensureVisible(outdent);
+    await tester.tap(outdent);
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children, [parent, paragraph, heading, task]);
+    expect(editor.selection!.start.path, [1]);
+    expect(editor.selection!.end.path, [3]);
+    await tester.tap(find.byKey(const ValueKey('rich-format-done')));
+    await tester.pumpAndSettle();
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(parent.children, [paragraph, heading, task]);
+    expect(paragraph.key.currentContext, isNotNull);
+    expect(task.key.currentContext, isNotNull);
+    editor.undoManager.redo();
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children, [parent, paragraph, heading, task]);
+    focus.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(parent.children, [paragraph, heading, task]);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children, [parent, paragraph, heading, task]);
+    expect(paragraph.delta!.toJson(), [
+      {
+        'insert': '正文',
+        'attributes': {'bold': true},
+      },
+    ]);
+    expect(task.attributes[af.TodoListBlockKeys.checked], isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cross-level toggle selection disables unsafe indent', (
+    tester,
+  ) async {
+    final parent = documentToggleNode(
+      delta: af.Delta()..insert('父级'),
+      children: [
+        af.paragraphNode(text: '前一个子块'),
+        af.paragraphNode(text: '选中子块'),
+      ],
+    );
+    final tail = af.paragraphNode(text: '外部正文');
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [parent, tail])),
+    );
+    final focus = FocusNode();
+    final scroll = af.EditorScrollController(editorState: editor);
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+      focus.dispose();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetViewInsets();
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: DailyNotesDocumentCanvas(
+            editor: editor,
+            focusNode: focus,
+            scrollController: scroll,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    focus.requestFocus();
+    editor.selection = af.Selection(
+      start: af.Position(path: [0, 1], offset: 1),
+      end: af.Position(path: [1], offset: 1),
+    );
+    await tester.pumpAndSettle();
+    expect(af.isIndentable(editor), isTrue);
+    final before = jsonEncode(editor.document.toJson());
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    final indent = tester.widget<IconButton>(
+      find.byKey(ValueKey('rich-format-${l10n.editor.toolbar.indent}')),
+    );
+    expect(indent.onPressed, isNull);
+    await tester.tap(find.byKey(const ValueKey('rich-format-done')));
+    await tester.pumpAndSettle();
+    focus.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(jsonEncode(editor.document.toJson()), before);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('heading Backspace keeps the toggle subtree and can undo', (
     tester,
   ) async {
