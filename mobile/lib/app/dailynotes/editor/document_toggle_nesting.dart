@@ -7,7 +7,10 @@ import 'document_envelope.dart';
 import 'document_toggle_block.dart';
 import 'document_toggle_model.dart';
 
-/// Moves one toggle and its live subtree in a single undoable transaction.
+/// Moves one text block and its live subtree to or from a toggle.
+///
+/// Toggle blocks can also move among the editor's supported containers. Other
+/// blocks remain on the upstream indent path unless a toggle is involved.
 class DocumentToggleNesting {
   const DocumentToggleNesting(this.folds);
 
@@ -16,6 +19,16 @@ class DocumentToggleNesting {
   static const _containers = {
     DocumentToggleKeys.type,
     af.ParagraphBlockKeys.type,
+    af.BulletedListBlockKeys.type,
+    af.NumberedListBlockKeys.type,
+    af.TodoListBlockKeys.type,
+  };
+
+  static const _movable = {
+    DocumentToggleKeys.type,
+    af.ParagraphBlockKeys.type,
+    af.HeadingBlockKeys.type,
+    af.QuoteBlockKeys.type,
     af.BulletedListBlockKeys.type,
     af.NumberedListBlockKeys.type,
     af.TodoListBlockKeys.type,
@@ -37,7 +50,7 @@ class DocumentToggleNesting {
     final delta = node?.delta;
     final normalized = selection.normalized;
     if (node == null ||
-        node.type != DocumentToggleKeys.type ||
+        !_movable.contains(node.type) ||
         delta == null ||
         normalized.start.offset < 0 ||
         normalized.end.offset > delta.length) {
@@ -77,6 +90,8 @@ class DocumentToggleNesting {
     return node != null &&
         previous != null &&
         _containers.contains(previous.type) &&
+        (node.type == DocumentToggleKeys.type ||
+            previous.type == DocumentToggleKeys.type) &&
         _fitsAtDepth(node, node.path.length + 1);
   }
 
@@ -88,6 +103,8 @@ class DocumentToggleNesting {
         parent != null &&
         parent.path.isNotEmpty &&
         _containers.contains(parent.type) &&
+        (node.type == DocumentToggleKeys.type ||
+            parent.type == DocumentToggleKeys.type) &&
         grandparent != null &&
         (identical(grandparent, editor.document.root) ||
             _containers.contains(grandparent.type));
@@ -145,9 +162,16 @@ class DocumentToggleNesting {
     command: key,
     getDescription: null,
     handler: (editor) {
-      if (_selected(editor) == null) return KeyEventResult.ignored;
-      if (canMove(editor)) unawaited(move(editor));
-      return KeyEventResult.handled;
+      final node = _selected(editor);
+      if (node == null) return KeyEventResult.ignored;
+      if (canMove(editor)) {
+        unawaited(move(editor));
+        return KeyEventResult.handled;
+      }
+      // Leave ordinary list/paragraph shortcuts to the upstream editor.
+      return node.type == DocumentToggleKeys.type
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     },
   );
 }

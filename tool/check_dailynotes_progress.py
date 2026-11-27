@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROGRESS = ROOT / 'docs' / 'DEVELOPMENT_PROGRESS.md'
 SECTIONS = {
     'spec': '## 整份规范的证据建档进度',
-    'editor': '## 手机文本编辑器：已跟踪的 18 项验收点',
+    'editor': '## 手机文本编辑器：已跟踪的 19 项验收点',
     'outline': '## 文档目录与阅读位置：已跟踪的 12 项验收点',
     'bookmarks': '## 同篇手动书签：已跟踪的 10 项验收点',
     'clipboard': '## 剪贴板安全内核：已跟踪的 8 项验收点',

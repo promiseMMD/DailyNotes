@@ -1899,6 +1899,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         (_formatSession == null || _formatValid(_formatSession!));
     final canBlock = canText && selected.isSingle;
     final canConvertBlock = canBlock && _canConvert(selected);
+    final canToggleIndent =
+        widget.toggleNesting?.canIndent(widget.editor) ?? false;
+    final canToggleOutdent =
+        widget.toggleNesting?.canOutdent(widget.editor) ?? false;
     final actions = <_ToolbarAction>[
       _ToolbarAction(
         'todo',
@@ -1928,7 +1932,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         'outdent',
         l10n.editor.toolbar.outdent,
         LucideIcons.outdent,
-        !isRange && isList && canBlock && _canOutdent()
+        !isRange && (isList || canToggleOutdent) && canBlock && _canOutdent()
             ? () => _quick(_outdent, allowMovedSelection: true)
             : null,
       ),
@@ -1936,7 +1940,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         'indent',
         l10n.editor.toolbar.indent,
         LucideIcons.indent,
-        !isRange && isList && canBlock && _canIndent()
+        !isRange && (isList || canToggleIndent) && canBlock && _canIndent()
             ? () => _quick(_indent, allowMovedSelection: true)
             : null,
       ),
@@ -2026,7 +2030,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
     // accessible in More. Screens with top history actions omit duplicates.
     final quickCandidates = isRange
         ? <String>['bold', 'italic', 'underline', if (selected.isSingle) 'link']
-        : isList
+        : isList || canToggleIndent || canToggleOutdent
         ? <String>['outdent', 'indent', 'todo', 'bullet']
         : <String>['todo', 'bullet', 'numbered', 'bold'];
     final eligibleQuickIds = quickCandidates

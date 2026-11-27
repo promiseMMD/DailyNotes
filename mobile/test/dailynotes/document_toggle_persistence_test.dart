@@ -51,6 +51,10 @@ af.Document _document() => af.Document(
         delta: af.Delta()..insert('待嵌套'),
         children: [af.paragraphNode(text: '嵌套子内容')],
       ),
+      af.paragraphNode(
+        delta: af.Delta()..insert('带格式正文', attributes: {'bold': true}),
+        children: [af.paragraphNode(text: '正文子内容')],
+      ),
     ],
   ),
 );
@@ -82,8 +86,12 @@ Future<void> _edit(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.sendKeyEvent(LogicalKeyboardKey.tab);
   await tester.pumpAndSettle();
+  canvas.editor.selection = af.Selection.single(path: [1], startOffset: 1);
+  await tester.pumpAndSettle();
+  await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+  await tester.pumpAndSettle();
   expect(canvas.editor.document.root.children, hasLength(1));
-  expect(canvas.editor.document.root.children.first.children, hasLength(2));
+  expect(canvas.editor.document.root.children.first.children, hasLength(3));
   await tester.pump(const Duration(milliseconds: 800));
   await tester.pumpAndSettle();
 }
@@ -93,11 +101,21 @@ void _checkDocument(af.Document document) {
   expect(toggle.type, DocumentToggleKeys.type);
   expect(toggle.attributes[DocumentToggleKeys.level], 2);
   expect(toggle.delta!.toPlainText(), '修改折叠标题');
+  expect(toggle.children, hasLength(3));
   expect(toggle.children.first.delta!.toPlainText(), '已有内容');
-  final nested = toggle.children.last;
+  final nested = toggle.children[1];
   expect(nested.type, DocumentToggleKeys.type);
   expect(nested.delta!.toPlainText(), '待嵌套');
   expect(nested.children.single.delta!.toPlainText(), '嵌套子内容');
+  final paragraph = toggle.children.last;
+  expect(paragraph.type, af.ParagraphBlockKeys.type);
+  expect(paragraph.delta!.toJson(), [
+    {
+      'insert': '带格式正文',
+      'attributes': {'bold': true},
+    },
+  ]);
+  expect(paragraph.children.single.delta!.toPlainText(), '正文子内容');
 }
 
 void main() {
@@ -117,7 +135,7 @@ void main() {
     final document = _document();
     final note = await store.saveRichNote(
       title: '笔记',
-      plainText: '折叠标题\n已有内容\n正文',
+      plainText: '折叠标题\n已有内容\n待嵌套\n嵌套子内容\n带格式正文\n正文子内容',
       documentJson: jsonEncode(document.toJson()),
       documentVersion: 1,
     );

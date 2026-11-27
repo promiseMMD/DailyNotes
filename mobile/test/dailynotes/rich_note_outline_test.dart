@@ -10,7 +10,9 @@ import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_mobile/app/dailynotes/data/daily_notes_store.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_toggle_block.dart';
 import 'package:moodiary_mobile/app/dailynotes/editor/document_toggle_model.dart';
+import 'package:moodiary_mobile/app/dailynotes/editor/document_toggle_nesting.dart';
 import 'package:moodiary_mobile/app/dailynotes/notes/rich_note_editor_page.dart';
 import 'package:moodiary_mobile/app/dailynotes/notes/rich_note_outline.dart';
 import 'package:moodiary_storage/moodiary_storage.dart';
@@ -375,6 +377,65 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('outline follows a heading moved into a toggle and undo', (
+    tester,
+  ) async {
+    final parent = documentToggleNode(delta: Delta()..insert('折叠章节'));
+    final heading = headingNode(level: 2, text: '移动的标题');
+    final editor = EditorState(
+      document: Document(root: pageNode(children: [parent, heading])),
+    );
+    final folds = DocumentToggleController();
+    final nesting = DocumentToggleNesting(folds);
+    addTearDown(() {
+      folds.dispose();
+      editor.dispose();
+    });
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: buildMuiTheme(brightness: Brightness.light),
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+            GlobalMuiLocalizations.delegate,
+          ],
+          builder: (context, child) =>
+              MaterialUiCompatibilityBridge(child: child!),
+          home: Scaffold(
+            body: RichNoteOutline(editor: editor, onSelect: (_) {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('outline-show-toggles')));
+    await tester.pumpAndSettle();
+    editor.selection = Selection.single(path: [1], startOffset: 1);
+    await nesting.indent(editor);
+    await tester.pumpAndSettle();
+    expect(parent.children.single, same(heading));
+    expect(find.byKey(ValueKey('outline-${heading.id}')), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('outline-toggle-${parent.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${heading.id}')), findsNothing);
+
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${heading.id}')), findsOneWidget);
+    editor.undoManager.redo();
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${heading.id}')), findsNothing);
+    await tester.enterText(find.byType(TextField), '移动的标题');
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${parent.id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('outline-${heading.id}')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('outline-clear-search')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('outline-${heading.id}')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('outline and note actions fit a narrow phone', (tester) async {
     final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
