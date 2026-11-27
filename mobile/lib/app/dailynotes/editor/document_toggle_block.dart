@@ -9,17 +9,21 @@ import 'document_toggle_model.dart';
 /// Fold state is a presentation override, kept separate from stored content.
 class DocumentToggleController extends ChangeNotifier {
   final Expando<bool> _collapsed = Expando<bool>();
+  final Map<af.Node, bool> _trackedParents = {};
+  bool _disposed = false;
 
   bool isCollapsed(af.Node node) =>
       _collapsed[node] ?? node.attributes[DocumentToggleKeys.collapsed] == true;
 
   void setCollapsed(af.Node node, bool value) {
+    if (_disposed) return;
     if (isCollapsed(node) == value) return;
     _collapsed[node] = value;
     notifyListeners();
   }
 
   bool expandAncestors(af.Node node) {
+    if (_disposed) return false;
     var parent = node.parent;
     var changed = false;
     while (parent != null) {
@@ -31,6 +35,44 @@ class DocumentToggleController extends ChangeNotifier {
     }
     if (changed) notifyListeners();
     return changed;
+  }
+
+  /// Track only containers involved in moves. A transition to empty must be
+  /// collapsed before the renderer lays out the reparented child.
+  void trackParent(af.Node node) {
+    if (!_disposed) {
+      _trackedParents.putIfAbsent(node, () => node.children.isNotEmpty);
+    }
+  }
+
+  void reconcileTrackedParents() {
+    if (_disposed) return;
+    var changed = false;
+    final detached = <af.Node>[];
+    for (final entry in _trackedParents.entries) {
+      final node = entry.key;
+      if (node.parent == null) {
+        detached.add(node);
+        continue;
+      }
+      final hasChildren = node.children.isNotEmpty;
+      if (entry.value && !hasChildren && !isCollapsed(node)) {
+        _collapsed[node] = true;
+        changed = true;
+      }
+      _trackedParents[node] = hasChildren;
+    }
+    for (final node in detached) {
+      _trackedParents.remove(node);
+    }
+    if (changed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _trackedParents.clear();
+    super.dispose();
   }
 }
 

@@ -9,6 +9,7 @@ import 'package:mui/mui.dart';
 
 import '../editor/document_editor_back_controller.dart';
 import '../editor/document_toggle_model.dart';
+import '../editor/document_toggle_nesting.dart';
 
 /// Mobile controls for the AppFlowy document. Business persistence remains in
 /// the owning page; no command here reports a local save or submits a draft.
@@ -23,6 +24,7 @@ class RichEditorToolbar extends StatefulWidget {
     this.scrollController,
     this.showHistoryActionsInToolbar = true,
     this.backController,
+    this.toggleNesting,
   });
 
   final af.EditorState editor;
@@ -31,6 +33,7 @@ class RichEditorToolbar extends StatefulWidget {
   final bool editable;
   final bool showHistoryActionsInToolbar;
   final DocumentEditorBackController? backController;
+  final DocumentToggleNesting? toggleNesting;
   final Widget child;
 
   /// Loads usable user-imported font families for the formatting picker.
@@ -1041,11 +1044,46 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         selectionExtraInfo: {af.selectionExtraInfoDoNotAttachTextService: true},
       );
 
-  Future<void> _quick(Future<void> Function(af.Selection) command) async {
+  bool _canIndent() =>
+      (widget.toggleNesting?.canIndent(widget.editor) ?? false) ||
+      af.isIndentable(widget.editor);
+
+  bool _canOutdent() =>
+      (widget.toggleNesting?.canOutdent(widget.editor) ?? false) ||
+      af.isOutdentable(widget.editor);
+
+  Future<void> _indent(af.Selection selection) async {
+    if (widget.editor.selection != selection) return;
+    final nesting = widget.toggleNesting;
+    if (nesting != null && nesting.canIndent(widget.editor)) {
+      await nesting.indent(widget.editor);
+    } else if (af.isIndentable(widget.editor)) {
+      af.indentCommand.execute(widget.editor);
+    }
+  }
+
+  Future<void> _outdent(af.Selection selection) async {
+    if (widget.editor.selection != selection) return;
+    final nesting = widget.toggleNesting;
+    if (nesting != null && nesting.canOutdent(widget.editor)) {
+      await nesting.outdent(widget.editor);
+    } else if (af.isOutdentable(widget.editor)) {
+      af.outdentCommand.execute(widget.editor);
+    }
+  }
+
+  Future<void> _quick(
+    Future<void> Function(af.Selection) command, {
+    bool allowMovedSelection = false,
+  }) async {
     final session = _formatSession ?? _capture();
     if (session == null || _busy || !_textOnly(session.selection)) return;
     if (_formatSession != null && !_formatValid(session)) return;
-    await _runSession(session, command);
+    await _runSession(
+      session,
+      command,
+      allowMovedSelection: allowMovedSelection,
+    );
   }
 
   Future<void> _openInsert() async {
@@ -1788,6 +1826,10 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
                   align: _align,
                   scrollController: widget.scrollController,
                   canConvert: () => _canConvert(session.selection),
+                  canIndent: _canIndent,
+                  canOutdent: _canOutdent,
+                  indent: _indent,
+                  outdent: _outdent,
                   anchorBottom: _formatAnchorBottom,
                   anchorRevision: _formatAnchorRevision,
                   onClose: () => _closeFormatPanel(restoreKeyboard: true),
@@ -1849,6 +1891,7 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
           af.TodoListBlockKeys.type,
           af.BulletedListBlockKeys.type,
           af.NumberedListBlockKeys.type,
+          DocumentToggleKeys.type,
         }.contains(node.type);
     final canText =
         !_busy &&
@@ -1885,24 +1928,16 @@ class _RichEditorToolbarState extends State<RichEditorToolbar>
         'outdent',
         l10n.editor.toolbar.outdent,
         LucideIcons.outdent,
-        !isRange && isList && canBlock && af.isOutdentable(widget.editor)
-            ? () {
-                if (_editable && af.isOutdentable(widget.editor)) {
-                  af.outdentCommand.execute(widget.editor);
-                }
-              }
+        !isRange && isList && canBlock && _canOutdent()
+            ? () => _quick(_outdent, allowMovedSelection: true)
             : null,
       ),
       _ToolbarAction(
         'indent',
         l10n.editor.toolbar.indent,
         LucideIcons.indent,
-        !isRange && isList && canBlock && af.isIndentable(widget.editor)
-            ? () {
-                if (_editable && af.isIndentable(widget.editor)) {
-                  af.indentCommand.execute(widget.editor);
-                }
-              }
+        !isRange && isList && canBlock && _canIndent()
+            ? () => _quick(_indent, allowMovedSelection: true)
             : null,
       ),
       for (final (id, label, icon, attribute) in [
@@ -2684,6 +2719,10 @@ class _FormatSheet extends StatefulWidget {
     required this.align,
     required this.scrollController,
     required this.canConvert,
+    required this.canIndent,
+    required this.canOutdent,
+    required this.indent,
+    required this.outdent,
     required this.anchorBottom,
     required this.anchorRevision,
     required this.onClose,
@@ -2699,6 +2738,10 @@ class _FormatSheet extends StatefulWidget {
   final af.EditorScrollController? scrollController;
   final bool Function() valid;
   final bool Function() canConvert;
+  final bool Function() canIndent;
+  final bool Function() canOutdent;
+  final Future<void> Function(af.Selection) indent;
+  final Future<void> Function(af.Selection) outdent;
   final double? anchorBottom;
   final int anchorRevision;
   final VoidCallback onClose;
@@ -3336,23 +3379,15 @@ class _FormatSheetState extends State<_FormatSheet> {
                     _icon(
                       e.outdent,
                       LucideIcons.outdent,
-                      enabled && af.isOutdentable(widget.editor)
-                          ? () => _perform(
-                              (_) async =>
-                                  af.outdentCommand.execute(widget.editor),
-                              move: true,
-                            )
+                      enabled && widget.canOutdent()
+                          ? () => _perform(widget.outdent, move: true)
                           : null,
                     ),
                     _icon(
                       e.indent,
                       LucideIcons.indent,
-                      enabled && af.isIndentable(widget.editor)
-                          ? () => _perform(
-                              (_) async =>
-                                  af.indentCommand.execute(widget.editor),
-                              move: true,
-                            )
+                      enabled && widget.canIndent()
+                          ? () => _perform(widget.indent, move: true)
                           : null,
                     ),
                   ]),

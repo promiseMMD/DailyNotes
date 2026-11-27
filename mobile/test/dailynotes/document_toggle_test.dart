@@ -310,6 +310,125 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Aa indents and outdents a toggle without losing its children', (
+    tester,
+  ) async {
+    final first = documentToggleNode(
+      collapsed: true,
+      delta: af.Delta()..insert('父级'),
+    );
+    final second = documentToggleNode(
+      level: 2,
+      delta: af.Delta()..insert('章节'),
+      children: [af.paragraphNode(text: '子内容')],
+    );
+    final editor = af.EditorState(
+      document: af.Document(root: af.pageNode(children: [first, second])),
+    );
+    final focus = FocusNode();
+    final scroll = af.EditorScrollController(editorState: editor);
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+      editor.dispose();
+      focus.dispose();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetViewInsets();
+    });
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: DailyNotesDocumentCanvas(
+            editor: editor,
+            focusNode: focus,
+            scrollController: scroll,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    focus.requestFocus();
+    editor.selection = af.Selection.single(path: [1], startOffset: 1);
+    await tester.pumpAndSettle();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: ' 章节',
+        selection: TextSelection.collapsed(offset: 2),
+        composing: TextRange(start: 1, end: 2),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(editor.service.keyboardService!.isInputSettled, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.last, same(second));
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: ' 章节',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(editor.service.keyboardService!.isInputSettled, isTrue);
+    await tester.tap(find.byKey(const ValueKey('rich-toolbar-format')));
+    await tester.pumpAndSettle();
+    final indent = find.byKey(
+      ValueKey('rich-format-${l10n.editor.toolbar.indent}'),
+    );
+    await tester.ensureVisible(indent);
+    await tester.tap(indent);
+    await tester.pumpAndSettle();
+    expect(first.children.single, same(second));
+    expect(second.children.single.delta!.toPlainText(), '子内容');
+    expect(editor.selection!.start.path, [0, 0]);
+    expect(find.byKey(ValueKey('toggle-block-${second.id}')), findsOneWidget);
+    final outdent = find.byKey(
+      ValueKey('rich-format-${l10n.editor.toolbar.outdent}'),
+    );
+    await tester.ensureVisible(outdent);
+    await tester.tap(outdent);
+    await tester.pump();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 2),
+    );
+    expect(editor.document.root.children.last, same(second));
+    expect(second.children.single.delta!.toPlainText(), '子内容');
+    expect(editor.selection!.start.path, [1]);
+    expect(find.text(l10n.dailynotes.editorSelectionChanged), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('rich-format-done')));
+    await tester.pumpAndSettle();
+    editor.undoManager.undo();
+    await tester.pumpAndSettle();
+    expect(first.children.single, same(second));
+    expect(editor.selection!.start.path, [0, 0]);
+    expect(find.byKey(ValueKey('toggle-block-${second.id}')), findsOneWidget);
+    editor.undoManager.redo();
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.last, same(second));
+    expect(editor.selection!.start.path, [1]);
+    focus.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(first.children.single, same(second));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(editor.document.root.children.last, same(second));
+    expect(second.children.single.delta!.toPlainText(), '子内容');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('heading Backspace keeps the toggle subtree and can undo', (
     tester,
   ) async {

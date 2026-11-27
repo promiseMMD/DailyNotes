@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:appflowy_editor/appflowy_editor.dart' as af;
 import 'package:drift/native.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
@@ -46,7 +47,10 @@ af.Document _document() => af.Document(
         delta: af.Delta()..insert('折叠标题'),
         children: [af.headingNode(level: 3, text: '已有内容')],
       ),
-      af.paragraphNode(text: '正文'),
+      documentToggleNode(
+        delta: af.Delta()..insert('待嵌套'),
+        children: [af.paragraphNode(text: '嵌套子内容')],
+      ),
     ],
   ),
 );
@@ -70,6 +74,16 @@ Future<void> _edit(WidgetTester tester) async {
   await tester.tap(find.byTooltip(l10n.dailynotes.unlockEditing));
   await tester.pumpAndSettle();
   await _editor(tester).insertText(0, '修改', path: [0]);
+  final canvas = tester.widget<DailyNotesDocumentCanvas>(
+    find.byType(DailyNotesDocumentCanvas),
+  );
+  canvas.focusNode.requestFocus();
+  canvas.editor.selection = af.Selection.single(path: [1], startOffset: 1);
+  await tester.pumpAndSettle();
+  await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+  await tester.pumpAndSettle();
+  expect(canvas.editor.document.root.children, hasLength(1));
+  expect(canvas.editor.document.root.children.first.children, hasLength(2));
   await tester.pump(const Duration(milliseconds: 800));
   await tester.pumpAndSettle();
 }
@@ -79,7 +93,11 @@ void _checkDocument(af.Document document) {
   expect(toggle.type, DocumentToggleKeys.type);
   expect(toggle.attributes[DocumentToggleKeys.level], 2);
   expect(toggle.delta!.toPlainText(), '修改折叠标题');
-  expect(toggle.children.single.delta!.toPlainText(), '已有内容');
+  expect(toggle.children.first.delta!.toPlainText(), '已有内容');
+  final nested = toggle.children.last;
+  expect(nested.type, DocumentToggleKeys.type);
+  expect(nested.delta!.toPlainText(), '待嵌套');
+  expect(nested.children.single.delta!.toPlainText(), '嵌套子内容');
 }
 
 void main() {
@@ -90,7 +108,7 @@ void main() {
   setUp(() => getIt.registerSingleton<IKVStorage>(MemoryKVStorage()));
   tearDown(() => getIt.reset());
 
-  testWidgets('note autosaves and reopens a toggle heading and its children', (
+  testWidgets('note autosaves and reopens a nested toggle subtree', (
     tester,
   ) async {
     final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
@@ -130,7 +148,7 @@ void main() {
     _checkDocument(_editor(tester).document);
   });
 
-  testWidgets('diary autosaves and reopens a toggle heading and its children', (
+  testWidgets('diary autosaves and reopens a nested toggle subtree', (
     tester,
   ) async {
     final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());
@@ -175,7 +193,7 @@ void main() {
     _checkDocument(_editor(tester).document);
   });
 
-  testWidgets('long-record toggle edits commit only after explicit save', (
+  testWidgets('long-record nested toggle commits only after explicit save', (
     tester,
   ) async {
     final db = MoodiaryDatabase.forTesting(NativeDatabase.memory());

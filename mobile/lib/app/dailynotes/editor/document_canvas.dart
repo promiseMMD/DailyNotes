@@ -18,6 +18,7 @@ import 'document_outline_navigation.dart';
 import 'document_reading_position.dart';
 import 'document_toggle_block.dart';
 import 'document_toggle_model.dart';
+import 'document_toggle_nesting.dart';
 
 /// One mobile document surface for notes, diaries and long-record drafts.
 /// The owning page remains responsible for its own persistence lifecycle.
@@ -71,12 +72,15 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
   DocumentReadingPosition? _readingPosition;
   DocumentBookmarkRebaser? _bookmarkRebaser;
   DocumentToggleController _folds = DocumentToggleController();
+  StreamSubscription<dynamic>? _toggleTransactions;
 
   @override
   void initState() {
     super.initState();
     _restoreDocumentFonts();
     _startReadingPosition();
+    widget.editor.selectionNotifier.addListener(_revealSelection);
+    _listenToggleTransactions(widget.editor);
     widget.outlineNavigation?.attachFolds(widget.editor, _folds);
   }
 
@@ -84,9 +88,15 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
   void didUpdateWidget(covariant DailyNotesDocumentCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.editor, widget.editor)) {
+      if (!oldWidget.editor.isDisposed) {
+        oldWidget.editor.selectionNotifier.removeListener(_revealSelection);
+      }
+      unawaited(_toggleTransactions?.cancel());
       oldWidget.outlineNavigation?.detachFolds(oldWidget.editor, _folds);
       _folds.dispose();
       _folds = DocumentToggleController();
+      widget.editor.selectionNotifier.addListener(_revealSelection);
+      _listenToggleTransactions(widget.editor);
       widget.outlineNavigation?.attachFolds(widget.editor, _folds);
       _restoreDocumentFonts();
     } else if (!identical(
@@ -116,6 +126,25 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
       }
       if (widget.readingPositionIsSaved) _bookmarkRebaser?.documentSaved();
     }
+  }
+
+  void _revealSelection() {
+    if (widget.editor.isDisposed) return;
+    final selection = widget.editor.selection;
+    if (selection == null) return;
+    for (final position in [selection.start, selection.end]) {
+      final node = widget.editor.document.nodeAtPath(position.path);
+      if (node != null) _folds.expandAncestors(node);
+    }
+  }
+
+  void _listenToggleTransactions(af.EditorState editor) {
+    _toggleTransactions = editor.transactionStream.listen((event) {
+      if (event.$1 == af.TransactionTime.after &&
+          identical(widget.editor, editor)) {
+        _folds.reconcileTrackedParents();
+      }
+    });
   }
 
   void _startReadingPosition() {
@@ -181,6 +210,10 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
 
   @override
   void dispose() {
+    unawaited(_toggleTransactions?.cancel());
+    if (!widget.editor.isDisposed) {
+      widget.editor.selectionNotifier.removeListener(_revealSelection);
+    }
     widget.outlineNavigation?.detachFolds(widget.editor, _folds);
     _folds.dispose();
     _readingPosition?.dispose();
@@ -239,6 +272,7 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
   @override
   Widget build(BuildContext context) {
     final colors = context.theme.colors;
+    final toggleNesting = DocumentToggleNesting(_folds);
     const horizontalPadding = 20.0;
     return RichEditorToolbar(
       editor: widget.editor,
@@ -246,6 +280,7 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
       editable: widget.editable,
       showHistoryActionsInToolbar: widget.showHistoryActionsInToolbar,
       backController: widget.backController,
+      toggleNesting: toggleNesting,
       loadFonts: _loadFonts,
       scrollController: widget.scrollController,
       child: NotificationListener<ScrollStartNotification>(
@@ -270,6 +305,7 @@ class _DailyNotesDocumentCanvasState extends State<DailyNotesDocumentCanvas> {
           ],
           commandShortcutEvents: [
             documentToggleHeadingBackspace,
+            ...toggleNesting.shortcuts(),
             ...af.standardCommandShortcutEvents,
           ],
           focusNode: widget.focusNode,
